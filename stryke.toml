@@ -71,6 +71,7 @@ exports = [
     "office__replace_text",
     "office__doc_tables",
     "office__doc_blocks",
+    "office__doc_outline",
     "office__doc_links",
     "office__doc_stats",
     "office__doc_merge",

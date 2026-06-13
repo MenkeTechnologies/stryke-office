@@ -1351,6 +1351,32 @@ fn doc_find_and_slides_find() {
 }
 
 #[test]
+fn doc_outline_headings() {
+    let path = tmp("outline.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[
+                {{"kind":"heading","level":1,"text":"A"}},
+                {{"kind":"para","text":"x"}},
+                {{"kind":"heading","level":2,"text":"B"}},
+                {{"kind":"heading","level":1,"text":"C"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let o = call(office__doc_outline, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(o["count"], 3, "3 headings: {o}");
+    assert_eq!(o["outline"][0]["level"], 1, "A level: {o}");
+    assert_eq!(o["outline"][0]["text"], "A");
+    assert_eq!(o["outline"][1]["level"], 2, "B level: {o}");
+    assert_eq!(o["outline"][1]["text"], "B");
+    assert_eq!(o["outline"][2]["text"], "C", "C present: {o}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn doc_blocks_ordered_structural_read() {
     // docx: write headings/paras/table in order, recover the block sequence
     let dx = tmp("blocks.docx");
