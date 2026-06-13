@@ -1376,6 +1376,45 @@ fn op_records_write(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": path, "rows": records.len(), "fields": fields }))
 }
 
+/// Export a sheet to a JSON file as an array of header-keyed objects. opts:
+/// path, output (.json), sheet => name/index, pretty => bool (default true).
+/// Returns `{ ok, path, count }`.
+fn op_sheet_to_json(opts: Value) -> Result<Value> {
+    let output = req_str(&opts, "output")?.to_string();
+    let recs = op_sheet_records(opts.clone())?;
+    let records = recs.get("records").cloned().unwrap_or_else(|| json!([]));
+    let pretty = opts.get("pretty").and_then(Value::as_bool).unwrap_or(true);
+    let text = if pretty {
+        serde_json::to_string_pretty(&records)?
+    } else {
+        serde_json::to_string(&records)?
+    };
+    std::fs::write(&output, text)?;
+    Ok(
+        json!({ "ok": true, "path": output, "count": recs.get("count").cloned().unwrap_or(json!(0)) }),
+    )
+}
+
+/// Import a JSON file (array of objects) into a spreadsheet. opts: input (.json),
+/// output (sheet path), fields => explicit column order, sheet_name, format.
+/// Returns `{ ok, path, rows, fields }` (from records_write).
+fn op_json_to_sheet(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let text = std::fs::read_to_string(input)?;
+    let records: Value = serde_json::from_str(&text).map_err(|e| anyhow!("parse {input}: {e}"))?;
+    if !records.is_array() {
+        return Err(anyhow!("json must be an array of objects"));
+    }
+    let mut wopts = json!({ "path": output, "records": records });
+    for k in ["fields", "sheet_name", "format"] {
+        if let Some(v) = opts.get(k) {
+            wopts[k] = v.clone();
+        }
+    }
+    op_records_write(wopts)
+}
+
 /// Sort a sheet's data rows by a column, preserving the header. opts: path,
 /// output, by => column name or 0-based index (required), sheet => name/index
 /// (default first), header => bool (default true), descending => bool,
@@ -2582,6 +2621,8 @@ export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
+export!(office__sheet_to_json, op_sheet_to_json);
+export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
