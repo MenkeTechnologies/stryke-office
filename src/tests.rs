@@ -198,6 +198,34 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_transpose_swaps_axes() {
+    let path = tmp("trans.xlsx");
+    // 2 rows x 3 cols
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b","c"],[1,2,3]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("trans_out.xlsx");
+    let r = call(
+        office__sheet_transpose,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["rows"], 3, "3 rows after transpose: {r}");
+    assert_eq!(r["columns"], 2, "2 columns after transpose: {r}");
+    let rr = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rr["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "a", "first cell: {rr}");
+    assert_eq!(rows[0][1], 1.0, "transposed value: {rr}");
+    assert_eq!(rows[2][0], "c", "last row key: {rr}");
+    assert_eq!(rows[2][1], 3.0, "last row value: {rr}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_select_columns() {
     let path = tmp("sel.xlsx");
     let w = call(

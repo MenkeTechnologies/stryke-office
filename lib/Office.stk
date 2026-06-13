@@ -139,6 +139,13 @@ fn Office::sheet_select ($path, $columns, $output, %opts) {
         office__sheet_select(to_json({ path => $path, columns => $columns, output => $output, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Transpose a sheet — rows become columns and vice versa. opts: sheet =>
+## name/index, format => override. Returns { ok, path, rows, columns }.
+fn Office::sheet_transpose ($path, $output, %opts) {
+    Office::_decode("sheet_transpose",
+        office__sheet_transpose(to_json({ path => $path, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph
