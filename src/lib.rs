@@ -1143,8 +1143,11 @@ export!(office__img_grayscale, op_img_grayscale);
 
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
+include!("chart_svg.rs");
 
 export!(office__chart_render, op_chart_render);
+export!(office__chart_svg, op_chart_svg);
+export!(office__chart_save, op_chart_save);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

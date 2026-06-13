@@ -64,10 +64,8 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     let kind = opts.get("type").and_then(Value::as_str).unwrap_or("bar").to_string();
     let w = opts.get("width").and_then(Value::as_u64).unwrap_or(800).max(120) as u32;
     let h = opts.get("height").and_then(Value::as_u64).unwrap_or(600).max(120) as u32;
-    let series = opts
-        .get("series")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("missing series (expected array)"))?;
+    let empty_series: Vec<Value> = Vec::new();
+    let series = opts.get("series").and_then(Value::as_array).unwrap_or(&empty_series);
     let cats: Vec<String> = opts
         .get("categories")
         .and_then(Value::as_array)
@@ -89,6 +87,14 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     let pw = (r - l).max(1) as f64;
     let ph = (b - t).max(1) as f64;
 
+    if kind == "sankey" {
+        render_sankey(&mut img, &opts, w as f64, h as f64);
+        let handle = insert_image(DynamicImage::ImageRgba8(img));
+        return Ok(json!({"handle": handle, "width": w, "height": h, "type": kind}));
+    }
+    if opts.get("series").and_then(Value::as_array).is_none() {
+        return Err(anyhow!("missing series (expected array)"));
+    }
     if kind == "pie" || kind == "donut" || kind == "doughnut" {
         render_pie(&mut img, series, l, t, r, b, kind != "pie");
         let handle = insert_image(DynamicImage::ImageRgba8(img));
@@ -323,6 +329,79 @@ fn render_scatter(
         for (x, y) in series_points(s) {
             let px = l + (x - xmin) / (xmax - xmin) * pw;
             draw_filled_circle_mut(img, (px as i32, yp(y) as i32), 4, color);
+        }
+    }
+}
+
+/// Raster sankey: distinct sources left, targets right, straight quad bands
+/// proportional to value. (SVG output uses smooth bezier ribbons.)
+fn render_sankey(img: &mut RgbaImage, opts: &Value, w: f64, h: f64) {
+    let links = opts.get("links").and_then(Value::as_array).cloned().unwrap_or_default();
+    if links.is_empty() {
+        return;
+    }
+    let val = |lk: &Value| lk.get("value").and_then(Value::as_f64).unwrap_or(0.0);
+    let src = |lk: &Value| lk.get("source").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let tgt = |lk: &Value| lk.get("target").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let total: f64 = links.iter().map(&val).sum();
+    if total <= 0.0 {
+        return;
+    }
+    let mut sources: Vec<usize> = links.iter().map(&src).collect();
+    sources.sort_unstable();
+    sources.dedup();
+    let mut targets: Vec<usize> = links.iter().map(&tgt).collect();
+    targets.sort_unstable();
+    targets.dedup();
+    let (lx, rx) = (80.0, w - 100.0);
+    let (top, bot) = (50.0, h - 30.0);
+    let avail = bot - top;
+    let nodew = 16.0;
+    let band = |ids: &[usize], is_src: bool| {
+        let mut pos = std::collections::HashMap::new();
+        let mut y = top;
+        for &id in ids {
+            let sum: f64 = links.iter().filter(|lk| if is_src { src(lk) == id } else { tgt(lk) == id }).map(&val).sum();
+            let ht = sum / total * avail;
+            pos.insert(id, (y, ht));
+            y += ht + 8.0;
+        }
+        pos
+    };
+    let spos = band(&sources, true);
+    let tpos = band(&targets, false);
+    for (&_id, &(y, ht)) in spos.iter() {
+        draw_filled_rect_mut(img, Rect::at(lx as i32, y as i32).of_size(nodew as u32, ht.max(1.0) as u32), parse_color(Some(&Value::String("#4472c4".into()))));
+    }
+    for (&_id, &(y, ht)) in tpos.iter() {
+        draw_filled_rect_mut(img, Rect::at(rx as i32, y as i32).of_size(nodew as u32, ht.max(1.0) as u32), parse_color(Some(&Value::String("#ed7d31".into()))));
+    }
+    let mut soff: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
+    let mut toff: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
+    for (i, lk) in links.iter().enumerate() {
+        let bh = val(lk) / total * avail;
+        let (sy0, _) = *spos.get(&src(lk)).unwrap_or(&(top, 0.0));
+        let (ty0, _) = *tpos.get(&tgt(lk)).unwrap_or(&(top, 0.0));
+        let so = soff.entry(src(lk)).or_insert(0.0);
+        let sy = sy0 + *so;
+        *so += bh;
+        let to = toff.entry(tgt(lk)).or_insert(0.0);
+        let ty = ty0 + *to;
+        *to += bh;
+        let x0 = (lx + nodew) as i32;
+        let x1 = rx as i32;
+        let mut c = palette(i);
+        c.0[3] = 120;
+        let poly = vec![
+            Point::new(x0, sy as i32),
+            Point::new(x1, ty as i32),
+            Point::new(x1, (ty + bh) as i32),
+            Point::new(x0, (sy + bh) as i32),
+        ];
+        let mut p = poly;
+        p.dedup();
+        if p.len() >= 3 {
+            draw_polygon_mut(img, &p, c);
         }
     }
 }

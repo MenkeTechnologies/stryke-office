@@ -46,6 +46,8 @@ exports = [
     "office__img_invert",
     "office__img_grayscale",
     "office__chart_render",
+    "office__chart_svg",
+    "office__chart_save",
 ]
 
 [scripts]

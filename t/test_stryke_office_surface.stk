@@ -47,5 +47,7 @@ assert_ok exists &Office::img_grayscale, "Office::img_grayscale exists"
 
 # charting
 assert_ok exists &Office::chart_render, "Office::chart_render exists"
+assert_ok exists &Office::chart_svg, "Office::chart_svg exists"
+assert_ok exists &Office::chart_save, "Office::chart_save exists"
 
 test_run

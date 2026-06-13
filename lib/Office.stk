@@ -263,3 +263,24 @@ fn Office::chart_render ($type, $series, %opts) {
     }
     Office::_decode("chart_render", office__chart_render(to_json($r)))
 }
+
+## Render a chart to a vector SVG string (returns the markup), or write it
+## to %opts{path} if given. Same spec keys as chart_render.
+fn Office::chart_svg ($type, $series, %opts) {
+    var %r = %opts
+    $r{type} = $type
+    $r{series} = $series
+    val $o = Office::_decode("chart_svg", office__chart_svg(to_json(\%r)))
+    exists $o->{svg} ? $o->{svg} : $o
+}
+
+## Render a chart straight to a file, format chosen by $path extension:
+## .svg (vector), .pdf (chart embedded in a PDF), or any raster extension
+## (.png/.jpg/.tif/.bmp/.webp/.gif). Sankey takes nodes/links instead of
+## series. Spec opts: title, width, height, categories, bins, nodes, links.
+fn Office::chart_save ($type, $path, %opts) {
+    var %r = %opts
+    $r{type} = $type
+    $r{path} = $path
+    Office::_decode("chart_save", office__chart_save(to_json(\%r)))
+}

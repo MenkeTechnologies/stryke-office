@@ -642,6 +642,64 @@ fn chart_extra_types_render() {
 }
 
 #[test]
+fn chart_svg_vector_output() {
+    for kind in ["bar", "line", "pie", "scatter", "donut"] {
+        let series = if kind == "scatter" {
+            r#"[{"data":[[1,2],[3,4]]}]"#
+        } else {
+            r#"[{"name":"s","data":[5,9,3]}]"#
+        };
+        let v = call(
+            office__chart_svg,
+            &format!(r#"{{"type":"{kind}","series":{series},"categories":["a","b","c"]}}"#),
+        );
+        let svg = v["svg"].as_str().unwrap_or("");
+        assert!(
+            svg.starts_with("<svg"),
+            "{kind}: not svg: {}",
+            &svg[..svg.len().min(40)]
+        );
+        assert!(svg.ends_with("</svg>"), "{kind}: unterminated svg");
+    }
+}
+
+#[test]
+fn chart_save_dispatches_by_extension() {
+    let spec = r#""type":"bar","series":[{"name":"s","data":[3,6,9]}],"categories":["a","b","c"]"#;
+    for (ext, magic) in [("svg", "<svg"), ("png", "PNG"), ("pdf", "%PDF")] {
+        let path = tmp(&format!("save.{ext}"));
+        let v = call(
+            office__chart_save,
+            &format!(r#"{{{spec},"path":"{path}"}}"#),
+        );
+        assert_eq!(v["ok"], true, "{ext}: save failed: {v}");
+        let bytes = std::fs::read(&path).unwrap();
+        let head = String::from_utf8_lossy(&bytes[..bytes.len().min(8)]);
+        assert!(head.contains(magic), "{ext}: wrong magic: {head:?}");
+        std::fs::remove_file(&path).ok();
+    }
+}
+
+#[test]
+fn sankey_renders_raster_and_svg() {
+    let spec = r#""type":"sankey","nodes":[{"name":"A"},{"name":"B"},{"name":"X"},{"name":"Y"}],"links":[{"source":0,"target":2,"value":5},{"source":0,"target":3,"value":3},{"source":1,"target":2,"value":2}]"#;
+    // SVG
+    let v = call(office__chart_svg, &format!(r#"{{{spec}}}"#));
+    assert!(
+        v["svg"].as_str().unwrap_or("").contains("<path"),
+        "sankey svg has flow paths"
+    );
+    // Raster handle
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{{spec},"width":500,"height":300}}"#),
+    );
+    let h = c["handle"].as_u64().expect("sankey raster handle");
+    assert_eq!(c["width"], 500);
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn chart_missing_series_errors() {
     let v = call(office__chart_render, r#"{"type":"bar"}"#);
     assert!(

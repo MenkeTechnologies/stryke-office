@@ -204,8 +204,27 @@ for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
 ```
 
 Chart types: `bar`/`column`, `stacked`, `line`, `area`, `scatter` (`data` is
-`[[x,y],…]`), `pie`, `donut`, `histogram` (opt `bins`). opts: `title`, `width`
-(800), `height` (600), `categories`, per-series `color`. Rendered natively with `imageproc` + the vendored font — no plotters,
+`[[x,y],…]`), `pie`, `donut`, `histogram` (opt `bins`), `sankey`
+(`nodes`/`links` instead of series). opts: `title`, `width` (800), `height`
+(600), `categories`, per-series `color`.
+
+**Raster and vector output, any format.** Three entry points:
+- `chart_render(type, series, %opts)` → raster image handle (then `img_save`
+  to png/jpeg/tif/bmp/webp/gif, or process further).
+- `chart_svg(type, series, %opts)` → vector **SVG** markup (or write to
+  `path =>`).
+- `chart_save(type, path, %opts)` → write straight to a file, format by
+  extension: `.svg` (vector), `.pdf` (chart embedded in a PDF), or any raster
+  extension.
+
+```stryke
+Office::chart_save("line", "out.svg", series => $s, categories => \@c)   # vector
+Office::chart_save("bar",  "out.pdf", series => $s)                       # pdf
+Office::chart_save("pie",  "out.png", series => $s)                       # raster
+Office::chart_save("sankey", "flow.svg",
+    nodes => [{name=>"A"},{name=>"B"},{name=>"X"}],
+    links => [{source=>0,target=>2,value=>5},{source=>1,target=>2,value=>3}])
+``` Rendered natively with `imageproc` + the vendored font — no plotters,
 no system fonts, no external binaries. (The stryke core also has `*_svg` chart
 builtins for quick inline SVG; this renders raster charts you can save/embed
 in any format.)
