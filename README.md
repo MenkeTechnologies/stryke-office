@@ -1,2 +1,184 @@
-# stryke-office
-Office document import/export for stryke — Excel, Word, PowerPoint (OOXML). cdylib, loaded on use Office.
+```
+ ███████╗████████╗██████╗ ██╗   ██╗██╗  ██╗███████╗
+ ██╔════╝╚══██╔══╝██╔══██╗╚██╗ ██╔╝██║ ██╔╝██╔════╝
+ ███████╗   ██║   ██████╔╝ ╚████╔╝ █████╔╝ █████╗
+ ╚════██║   ██║   ██╔══██╗  ╚██╔╝  ██╔═██╗ ██╔══╝
+ ███████║   ██║   ██║  ██║   ██║   ██║  ██╗███████╗
+ ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝
+                  [ o f f i c e ]
+```
+
+[![CI](https://github.com/MenkeTechnologies/stryke-office/actions/workflows/ci.yml/badge.svg)](https://github.com/MenkeTechnologies/stryke-office/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![stryke](https://img.shields.io/badge/stryke-package-cyan.svg)](https://github.com/MenkeTechnologies/strykelang)
+
+### `[OFFICE DOCUMENT I/O FOR STRYKE // EXCEL + WORD + POWERPOINT + ODF + PDF]`
+
+> *"Read and write the whole office suite — no LibreOffice required."*
+
+Office document import/export for stryke. Read and write Excel/Calc
+(`xlsx`/`ods`), Word/Writer (`docx`/`odt`), PowerPoint/Impress
+(`pptx`/`odp`), and PDF — **entirely in native Rust**. There is no
+LibreOffice / `soffice` / pandoc subprocess; nothing external has to be
+installed. Opt-in package tier, kept out of the stryke core binary.
+
+### [`strykelang`](https://github.com/MenkeTechnologies/strykelang) &middot; [`MenkeTechnologiesMeta`](https://github.com/MenkeTechnologies/MenkeTechnologiesMeta) · [`stryke-polars`](https://github.com/MenkeTechnologies/stryke-polars) · [`stryke-demo`](https://github.com/MenkeTechnologies/stryke-demo)
+
+---
+
+## Table of Contents
+
+- [\[0x00\] Why this is a package, not a builtin](#0x00-why-this-is-a-package-not-a-builtin)
+- [\[0x01\] Install](#0x01-install)
+- [\[0x02\] Quick start](#0x02-quick-start)
+- [\[0x03\] Format matrix](#0x03-format-matrix)
+- [\[0x04\] API reference](#0x04-api-reference)
+- [\[0x05\] No external binaries](#0x05-no-external-binaries)
+- [\[0x06\] Tests](#0x06-tests)
+- [\[0x07\] Layout](#0x07-layout)
+- [\[0x08\] Roadmap](#0x08-roadmap)
+- [\[0xFF\] License](#0xff-license)
+
+---
+
+## [0x00] Why this is a package, not a builtin
+
+Office I/O drags in heavyweight format crates — spreadsheet, word-processor,
+presentation, and PDF engines. That belongs in an opt-in package, not the
+daily-driver core. `stryke-office` ships a thin stryke library plus a Rust
+cdylib (`libstryke_office.{dylib,so}`) dlopened in-process on first
+`use Office`. Everything is pure Rust and statically linked, so the cdylib
+is self-contained.
+
+## [0x01] Install
+
+From a release tarball:
+
+```sh
+s pkg install -g github.com/MenkeTechnologies/stryke-office
+```
+
+From a local checkout:
+
+```sh
+cd ~/projects/stryke-office
+cargo build --release
+s pkg install -g .            # cdylib lands in ~/.stryke/store/office@<version>/
+```
+
+Or `make install`.
+
+## [0x02] Quick start
+
+```stryke
+use Office
+
+# Spreadsheet: write xlsx, read it back, re-emit as ods
+Office::sheet_write("report.xlsx", [
+    { name => "Sales", rows => [["product", "units"], ["widget", 120]] },
+])
+val $sheets = Office::sheet_read("report.xlsx")
+Office::sheet_write("report.ods", $sheets)
+
+# Document: build a docx from structured blocks
+Office::doc_write("memo.docx", [
+    { kind => "heading", level => 1, text => "Quarterly Report" },
+    { kind => "para", text => "Revenue grew 18%." },
+])
+val @paragraphs = Office::doc_read("memo.docx")
+
+# Presentation: build a deck
+Office::slides_write("deck.pptx", [
+    { title => "Intro", body => ["point one", "point two"] },
+])
+
+# PDF: generate and extract text (self-contained, no font files)
+Office::pdf_write("out.pdf", ["Line one", "Line two"])
+val $info = Office::pdf_read("out.pdf")   # { pages => [...], text => "..." }
+```
+
+## [0x03] Format matrix
+
+| Kind | Formats | Read | Write |
+|---|---|---|---|
+| Spreadsheet | xlsx, ods, xls, csv | yes | xlsx, ods |
+| Document | docx, odt | yes | yes |
+| Presentation | pptx, odp | yes | yes |
+| PDF | pdf | text + pages | text |
+
+The output format is taken from the path extension; override with
+`format => "..."`.
+
+## [0x04] API reference
+
+| Function | Returns | Notes |
+|---|---|---|
+| `Office::version()` | string | package version |
+| `Office::sheet_read($path)` | arrayref of `{name, rows}` | numbers stay numbers, empty cells `undef` |
+| `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; `format` opt |
+| `Office::doc_read($path)` | list of paragraph strings | docx/odt |
+| `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |
+| `Office::slides_read($path)` | arrayref of `{text => [...]}` | pptx/odp |
+| `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
+| `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
+| `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
+
+## [0x05] No external binaries
+
+Every format is handled by a vendored Rust crate, statically linked into
+the cdylib:
+
+| Concern | Crate |
+|---|---|
+| spreadsheet read (xlsx/xls) | `calamine` |
+| spreadsheet read (ods) | native `zip` + `quick-xml` |
+| xlsx write | `rust_xlsxwriter` |
+| ods / odt / odp write | `lo_odf` (OpenDocument serializers) |
+| docx write | `docx-rs` |
+| docx / odt / pptx / odp read | native `zip` + `quick-xml` |
+| pptx write | native `zip` + hand-built OOXML |
+| pdf read + write | `lo_core` (self-contained, no font files) |
+
+There is deliberately no call to `soffice` / LibreOffice. That keeps the
+package self-contained and reproducible — `scp` the artifact and it runs.
+The trade-off: there is no generic render-conversion (e.g. `docx` → `pdf`
+laid out like Word would), which fundamentally needs a layout engine. You
+get structured read, structured write, and PDF generation from a content
+model.
+
+## [0x06] Tests
+
+```sh
+cargo test          # Rust round-trip + FFI-contract tests (write -> read back)
+s test t/           # stryke assertion suite (needs the cdylib installed)
+```
+
+Every writer is exercised end to end against its matching reader over a
+real temp file, so a passing test means the bytes on disk parse back.
+
+## [0x07] Layout
+
+```
+stryke-office/
+  Cargo.toml             # cdylib crate (format crates, all pure Rust)
+  src/lib.rs             # office__* exports + format handlers + tests
+  src/pptx_write.rs      # minimal OOXML PowerPoint writer
+  stryke.toml            # package manifest + [ffi] table
+  lib/Office.stk         # stryke wrapper (use Office)
+  examples/              # spreadsheet, document_and_pdf, presentation
+  t/                     # stryke assertion suites
+  tests/                 # docs/readme/polish lint gates
+  docs/                  # GitHub Pages content
+  Makefile
+```
+
+## [0x08] Roadmap
+
+- Cell styles / formulas on xlsx write; richer docx styling.
+- Images and tables in documents and slides.
+- Spreadsheet formula evaluation on read (values are already returned).
+- xls (legacy binary) write.
+
+## [0xFF] License
+
+MIT. See [LICENSE](LICENSE).

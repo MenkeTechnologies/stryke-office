@@ -1,0 +1,92 @@
+## lib/Office.stk — Office / OpenDocument / PDF import+export for stryke.
+##
+## Thin wrapper around the `stryke-office` cdylib's `office__*` exports,
+## dlopened in-process on first `use Office`. Every format is handled
+## natively in Rust — there is NO LibreOffice / soffice / pandoc subprocess.
+##
+## Supported (read + write):
+##   spreadsheets — xlsx, ods (+ xls/csv read)   via sheet_read / sheet_write
+##   documents    — docx, odt                    via doc_read / doc_write
+##   presentations— pptx, odp                    via slides_read / slides_write
+##   pdf          — read text + write text       via pdf_read / pdf_write
+##
+## Output format is chosen from the path extension; pass `format => "..."`
+## to override.
+
+package Office
+
+## Decode the cdylib's JSON return; die on `{error}` payload.
+fn Office::_decode ($name, $json) {
+    val $o = from_json $json
+    if (ref $o eq "HASH" && exists $o->{error}) {
+        die "Office::$name: $o->{error}"
+    }
+    $o
+}
+
+## Return the package version string.
+fn Office::version {
+    Office::_decode("pkg_version", office__pkg_version("{}"))->{version}
+}
+
+# ── spreadsheets ────────────────────────────────────────────────────
+
+## Read a spreadsheet (xlsx/ods/xls/csv). Returns an arrayref of sheets,
+## each { name => "...", rows => [[cell, ...], ...] }. Numeric cells come
+## back as numbers, empty cells as undef.
+fn Office::sheet_read ($path) {
+    Office::_decode("sheet_read", office__sheet_read(to_json({ path => $path })))->{sheets}
+}
+
+## Write a spreadsheet. $sheets is an arrayref of { name, rows => [[...]] }.
+## opts: format => "xlsx"|"ods" (default: from $path extension).
+fn Office::sheet_write ($path, $sheets, %opts) {
+    val $r = { path => $path, sheets => $sheets, format => $opts{format} }
+    Office::_decode("sheet_write", office__sheet_write(to_json($r)))
+}
+
+# ── documents ───────────────────────────────────────────────────────
+
+## Read a word-processing document (docx/odt). Returns a list of paragraph
+## strings.
+fn Office::doc_read ($path) {
+    val $o = Office::_decode("doc_read", office__doc_read(to_json({ path => $path })))
+    @{ $o->{paragraphs} }
+}
+
+## Write a document. $blocks is an arrayref of
+## { kind => "para"|"heading", level => N, text => "..." }.
+## opts: format => "docx"|"odt" (default: from $path extension).
+fn Office::doc_write ($path, $blocks, %opts) {
+    val $r = { path => $path, blocks => $blocks, format => $opts{format} }
+    Office::_decode("doc_write", office__doc_write(to_json($r)))
+}
+
+# ── presentations ───────────────────────────────────────────────────
+
+## Read a presentation (pptx/odp). Returns an arrayref of slides, each
+## { text => [line, ...] }.
+fn Office::slides_read ($path) {
+    Office::_decode("slides_read", office__slides_read(to_json({ path => $path })))->{slides}
+}
+
+## Write a presentation. $slides is an arrayref of
+## { title => "...", body => [line, ...] }.
+## opts: format => "pptx"|"odp" (default: from $path extension).
+fn Office::slides_write ($path, $slides, %opts) {
+    val $r = { path => $path, slides => $slides, format => $opts{format} }
+    Office::_decode("slides_write", office__slides_write(to_json($r)))
+}
+
+# ── pdf ─────────────────────────────────────────────────────────────
+
+## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.
+fn Office::pdf_read ($path) {
+    Office::_decode("pdf_read", office__pdf_read(to_json({ path => $path })))
+}
+
+## Write a text PDF (A4). $lines is an arrayref of strings, one per line.
+fn Office::pdf_write ($path, $lines) {
+    die "Office::pdf_write: lines must be arrayref" unless ref($lines) eq "ARRAY"
+    Office::_decode("pdf_write", office__pdf_write(to_json({ path => $path, lines => $lines })))
+}

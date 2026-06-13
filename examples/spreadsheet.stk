@@ -1,0 +1,29 @@
+#!/usr/bin/env stryke
+# examples/spreadsheet.stk — write an xlsx, read it back, re-emit as ods.
+# Run:   s examples/spreadsheet.stk
+
+use Office
+
+val $xlsx = "/tmp/office-example.xlsx"
+val $ods  = "/tmp/office-example.ods"
+
+# Write a workbook with one sheet.
+Office::sheet_write($xlsx, [
+    {
+        name => "Sales",
+        rows => [
+            ["product", "units", "price"],
+            ["widget", 120, 9.99],
+            ["gadget", 75, 14.50],
+        ],
+    },
+])
+p "wrote $xlsx"
+
+# Read it back.
+val $sheets = Office::sheet_read($xlsx)
+p "sheet '$sheets->[0]{name}' has " . scalar(@{ $sheets->[0]{rows} }) . " rows"
+
+# Convert xlsx -> ods by re-writing the same data.
+Office::sheet_write($ods, $sheets)
+p "converted to $ods"

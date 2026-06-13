@@ -1,0 +1,21 @@
+#!/usr/bin/env stryke
+# examples/presentation.stk — build a pptx deck and read it back.
+# Run:   s examples/presentation.stk
+
+use Office
+
+val $pptx = "/tmp/office-deck.pptx"
+
+Office::slides_write($pptx, [
+    { title => "stryke-office", body => ["Native document I/O", "No LibreOffice needed"] },
+    { title => "Formats", body => ["xlsx / ods", "docx / odt", "pptx / odp", "pdf"] },
+])
+p "wrote $pptx"
+
+val $slides = Office::slides_read($pptx)
+p "deck has " . scalar(@$slides) . " slides:"
+var $i = 0
+for val $slide (@$slides) {
+    $i++
+    p "  slide $i: " . join(" / ", @{ $slide->{text} })
+}

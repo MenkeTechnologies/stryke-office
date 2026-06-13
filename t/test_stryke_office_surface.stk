@@ -1,0 +1,19 @@
+## t/test_stryke_office_surface.stk — wrapper-completeness pin.
+##
+## Asserts every public `fn Office::name` declared in lib/Office.stk is
+## reachable via `use` at runtime. Permission-free — no files, no daemon.
+## Private helpers (`_` prefix) are implementation detail, not asserted.
+
+use Office
+
+assert_ok exists &Office::version, "Office::version exists"
+assert_ok exists &Office::sheet_read, "Office::sheet_read exists"
+assert_ok exists &Office::sheet_write, "Office::sheet_write exists"
+assert_ok exists &Office::doc_read, "Office::doc_read exists"
+assert_ok exists &Office::doc_write, "Office::doc_write exists"
+assert_ok exists &Office::slides_read, "Office::slides_read exists"
+assert_ok exists &Office::slides_write, "Office::slides_write exists"
+assert_ok exists &Office::pdf_read, "Office::pdf_read exists"
+assert_ok exists &Office::pdf_write, "Office::pdf_write exists"
+
+test_run

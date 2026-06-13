@@ -1,0 +1,31 @@
+#!/usr/bin/env stryke
+# examples/document_and_pdf.stk — generate a docx report and a PDF.
+# Run:   s examples/document_and_pdf.stk
+
+use Office
+
+# Build a Word document from structured blocks.
+val $docx = "/tmp/office-report.docx"
+Office::doc_write($docx, [
+    { kind => "heading", level => 1, text => "Quarterly Report" },
+    { kind => "para", text => "Revenue grew 18% quarter over quarter." },
+    { kind => "heading", level => 2, text => "Outlook" },
+    { kind => "para", text => "Pipeline remains strong into Q3." },
+])
+p "wrote $docx"
+
+# Read its paragraphs back out.
+for val $para (Office::doc_read($docx)) {
+    p "  | $para"
+}
+
+# Generate a text PDF (self-contained, no fonts on disk).
+val $pdf = "/tmp/office-report.pdf"
+Office::pdf_write($pdf, [
+    "Quarterly Report",
+    "",
+    "Revenue grew 18% quarter over quarter.",
+    "Pipeline remains strong into Q3.",
+])
+val $info = Office::pdf_read($pdf)
+p "wrote $pdf (" . scalar(@{ $info->{pages} }) . " page)"

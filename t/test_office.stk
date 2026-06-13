@@ -1,0 +1,69 @@
+## t/test_office.stk — round-trip assertions for the stryke `Office` package.
+##
+## Uses stryke's native test framework. Requires the cdylib installed
+## (`s pkg install -g .`) so `use Office` dlopens libstryke_office.
+## Every format is written then read back over a temp file — no external
+## tools are invoked.
+
+use Office
+
+val $dir = $ENV{TMPDIR} // "/tmp"
+val $tag = "stryke-office-stk-$$"
+
+# ── cdylib reachable ────────────────────────────────────────────────
+assert_ok Office::version(), "Office::version returns truthy (cdylib loaded)"
+
+# ── spreadsheet: xlsx round-trip ────────────────────────────────────
+val $xlsx = "$dir/$tag.xlsx"
+Office::sheet_write($xlsx, [{ name => "Data", rows => [["name", "qty"], ["widget", 3]] }])
+val $xs = Office::sheet_read($xlsx)
+assert_eq $xs->[0]{rows}[0][0], "name", "xlsx: header cell round-trips"
+assert_eq $xs->[0]{rows}[1][1], 3, "xlsx: numeric cell round-trips as number"
+unlink $xlsx
+
+# ── spreadsheet: ods round-trip ─────────────────────────────────────
+val $ods = "$dir/$tag.ods"
+Office::sheet_write($ods, [{ name => "S", rows => [["a", "b"], ["c", "d"]] }])
+val $os = Office::sheet_read($ods)
+assert_eq $os->[0]{rows}[1][1], "d", "ods: cell round-trips"
+unlink $ods
+
+# ── document: docx round-trip ───────────────────────────────────────
+val $docx = "$dir/$tag.docx"
+Office::doc_write($docx, [
+    { kind => "heading", level => 1, text => "Title" },
+    { kind => "para", text => "Hello world" },
+])
+val @dp = Office::doc_read($docx)
+assert_ok scalar(grep { /Hello world/ } @dp), "docx: body paragraph round-trips"
+unlink $docx
+
+# ── document: odt round-trip ────────────────────────────────────────
+val $odt = "$dir/$tag.odt"
+Office::doc_write($odt, [{ kind => "para", text => "odt body line" }])
+val @op = Office::doc_read($odt)
+assert_ok scalar(grep { /odt body line/ } @op), "odt: paragraph round-trips"
+unlink $odt
+
+# ── presentation: pptx round-trip ───────────────────────────────────
+val $pptx = "$dir/$tag.pptx"
+Office::slides_write($pptx, [{ title => "Slide One", body => ["bullet a"] }])
+val $ps = Office::slides_read($pptx)
+assert_ok scalar(grep { /Slide One/ } @{ $ps->[0]{text} }), "pptx: slide title round-trips"
+unlink $pptx
+
+# ── presentation: odp round-trip ────────────────────────────────────
+val $odp = "$dir/$tag.odp"
+Office::slides_write($odp, [{ title => "Intro", body => ["point one"] }])
+val $ops = Office::slides_read($odp)
+assert_ok scalar(grep { /Intro/ } @{ $ops->[0]{text} }), "odp: slide text round-trips"
+unlink $odp
+
+# ── pdf round-trip ──────────────────────────────────────────────────
+val $pdf = "$dir/$tag.pdf"
+Office::pdf_write($pdf, ["First line", "Second line"])
+val $pr = Office::pdf_read($pdf)
+assert_ok ($pr->{text} =~ /First line/), "pdf: written text extracts back"
+unlink $pdf
+
+test_run

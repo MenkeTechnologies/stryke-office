@@ -1,0 +1,30 @@
+[package]
+name = "stryke-office"
+version = "0.1.0"
+description = "Office document import/export for stryke. Read+write Excel/Calc (xlsx/ods), Word/Writer (docx/odt), PowerPoint/Impress (pptx/odp), and PDF — all native Rust, no LibreOffice/soffice subprocess. cdylib loaded on first `use Office`."
+authors = ["MenkeTechnologies"]
+license = "MIT"
+repository = "https://github.com/MenkeTechnologies/stryke-office"
+edition = "2026"
+
+[ffi]
+lib-name = "stryke_office"
+namespace = "Office"
+exports = [
+    "office__pkg_version",
+    "office__sheet_read",
+    "office__sheet_write",
+    "office__doc_read",
+    "office__doc_write",
+    "office__slides_read",
+    "office__slides_write",
+    "office__pdf_read",
+    "office__pdf_write",
+]
+
+[scripts]
+build = "cargo build --release"
+build-debug = "cargo build"
+clean = "cargo clean"
+test = "s test t/"
+install = "s pkg install -g ."
