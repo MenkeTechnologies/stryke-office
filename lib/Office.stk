@@ -190,6 +190,15 @@ fn Office::sheet_append ($path, %opts) {
         office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Fill blank cells. opts: method => "ffill" (default; carry the last non-blank
+## value down) | "value" (use a constant value => ...), by => column name/index
+## or arrayref (default: all columns), sheet, output (default: in place),
+## header => 0 if first row is data, format. Returns { ok, path, filled }.
+fn Office::sheet_fill ($path, %opts) {
+    Office::_decode("sheet_fill",
+        office__sheet_fill(to_json({ path => $path, method => $opts{method}, value => $opts{value}, by => $opts{by}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns
