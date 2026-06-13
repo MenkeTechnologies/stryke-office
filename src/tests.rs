@@ -2394,6 +2394,66 @@ fn pdf_form_fields_list_and_fill() {
 }
 
 #[test]
+fn pdf_outline_set_and_read() {
+    // a 3-page document
+    let path = tmp("outline.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{path}","elements":[
+                {{"type":"heading","level":1,"text":"One"}},{{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Two"}},{{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Three"}}
+            ]}}"#
+        ),
+    );
+    assert!(b["pages"].as_u64().unwrap() >= 3, "3 pages: {b}");
+
+    let out = tmp("outline-set.pdf");
+    let s = call(
+        office__pdf_set_outline,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","outline":[
+                {{"title":"Intro","page":1}},
+                {{"title":"Body","page":2,"bold":true,"children":[
+                    {{"title":"Detail","page":3}}
+                ]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(s["ok"], true, "{s}");
+    assert_eq!(s["count"], 3, "three bookmarks total: {s}");
+
+    let r = call(office__pdf_outline, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(r["count"], 3, "{r}");
+    let top = r["outline"].as_array().unwrap();
+    assert_eq!(top.len(), 2, "two top-level: {r}");
+    assert_eq!(top[0]["title"], "Intro");
+    assert_eq!(top[0]["page"], 1);
+    assert_eq!(top[1]["title"], "Body");
+    assert_eq!(top[1]["page"], 2);
+    let kids = top[1]["children"].as_array().expect("nested children");
+    assert_eq!(kids.len(), 1);
+    assert_eq!(kids[0]["title"], "Detail");
+    assert_eq!(kids[0]["page"], 3, "child dest resolves to page 3: {r}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn pdf_outline_empty_when_none() {
+    let path = tmp("noout.pdf");
+    call(
+        office__pdf_write,
+        &format!(r#"{{"path":"{path}","lines":["x"]}}"#),
+    );
+    let r = call(office__pdf_outline, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 0, "{r}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn pdf_form_no_acroform() {
     // a plain PDF has no form -> empty list, and fill errors
     let path = tmp("plain.pdf");

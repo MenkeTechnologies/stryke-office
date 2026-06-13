@@ -1522,6 +1522,11 @@ include!("pdf_form.rs");
 export!(office__pdf_form_fields, op_pdf_form_fields);
 export!(office__pdf_fill_form, op_pdf_fill_form);
 
+// PDF document outline (bookmarks): read + write
+include!("pdf_outline.rs");
+export!(office__pdf_outline, op_pdf_outline);
+export!(office__pdf_set_outline, op_pdf_set_outline);
+
 // document metadata (core/app properties) read + write across all formats
 include!("meta_ops.rs");
 export!(office__meta_read, op_meta_read);
