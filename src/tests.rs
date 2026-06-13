@@ -198,6 +198,44 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_records_round_trip() {
+    let path = tmp("rec.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["a",1],["b",2]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // read as records
+    let r = call(office__sheet_records, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "two records: {r}");
+    assert_eq!(r["fields"][0], "name", "field 0: {r}");
+    assert_eq!(r["records"][0]["name"], "a", "rec0 name: {r}");
+    assert_eq!(r["records"][1]["qty"], 2.0, "rec1 qty numeric: {r}");
+
+    // write records back out, then re-read — values survive
+    let out = tmp("rec_out.xlsx");
+    let records = r["records"].clone();
+    let ww = call(
+        office__records_write,
+        &format!(
+            r#"{{"path":"{out}","records":{}}}"#,
+            serde_json::to_string(&records).unwrap()
+        ),
+    );
+    assert_eq!(ww["ok"], true, "records_write: {ww}");
+    assert_eq!(ww["rows"], 2, "wrote 2 rows: {ww}");
+    let r2 = call(office__sheet_records, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(r2["records"][0]["name"], "a", "round-trip name: {r2}");
+    assert_eq!(r2["records"][1]["qty"], 2.0, "round-trip qty: {r2}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn ods_write_then_read_round_trips() {
     let path = tmp("rt.ods");
     let w = call(

@@ -87,6 +87,23 @@ fn Office::sheet_find ($path, $query, %opts) {
         office__sheet_find(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case}, whole => $opts{whole}, sheet => $opts{sheet} })))
 }
 
+## Read a sheet as records — the first row is field names, each later row an
+## object keyed by them. opts: sheet => name or 0-based index. Returns
+## { fields, count, records => [{ field => value }] }.
+fn Office::sheet_records ($path, %opts) {
+    Office::_decode("sheet_records",
+        office__sheet_records(to_json({ path => $path, sheet => $opts{sheet} })))
+}
+
+## Write records (an arrayref of hashes) to a spreadsheet: a header row of field
+## names plus one row per record. opts: fields => explicit column order
+## (default: keys in first-seen order), sheet_name => "Sheet1", format =>
+## override (target ext converts). Returns { ok, path, rows, fields }.
+fn Office::records_write ($path, $records, %opts) {
+    Office::_decode("records_write",
+        office__records_write(to_json({ path => $path, records => $records, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph
