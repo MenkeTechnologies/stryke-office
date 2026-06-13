@@ -377,8 +377,8 @@ fn xlsx_format(o: &serde_json::Map<String, Value>) -> Option<rust_xlsxwriter::Fo
     used.then_some(f)
 }
 
-fn quad(v: &Value, key: &str) -> Option<[u32; 4]> {
-    let a = v.get(key)?.as_array()?;
+fn quad_arr(v: &Value) -> Option<[u32; 4]> {
+    let a = v.as_array()?;
     if a.len() < 4 {
         return None;
     }
@@ -388,6 +388,10 @@ fn quad(v: &Value, key: &str) -> Option<[u32; 4]> {
         a[2].as_u64()? as u32,
         a[3].as_u64()? as u32,
     ])
+}
+
+fn quad(v: &Value, key: &str) -> Option<[u32; 4]> {
+    quad_arr(v.get(key)?)
 }
 
 /// Write xlsx from raw sheet objects, honouring sheet-level structure:
@@ -497,8 +501,59 @@ fn write_xlsx(path: &str, sheets: &[Value]) -> Result<()> {
         if let Some(t) = quad(s, "table") {
             ws.add_table(t[0], t[1] as u16, t[2], t[3] as u16, &Table::new())?;
         }
+        write_xlsx_charts(ws, &name, s)?;
     }
     wb.save(path)?;
+    Ok(())
+}
+
+/// Insert charts declared on a sheet:
+/// `charts:[{type, at:[row,col], title?, series:[{values:[r1,c1,r2,c2],
+///           categories?:[...], name?}]}]`. Series ranges reference this sheet.
+fn write_xlsx_charts(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value) -> Result<()> {
+    use rust_xlsxwriter::{Chart, ChartType};
+    let Some(charts) = s.get("charts").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for ch in charts {
+        let ctype = match ch.get("type").and_then(Value::as_str).unwrap_or("column") {
+            "bar" => ChartType::Bar,
+            "line" => ChartType::Line,
+            "pie" => ChartType::Pie,
+            "scatter" => ChartType::Scatter,
+            "area" => ChartType::Area,
+            "doughnut" => ChartType::Doughnut,
+            _ => ChartType::Column,
+        };
+        let mut chart = Chart::new(ctype);
+        if let Some(t) = ch.get("title").and_then(Value::as_str) {
+            chart.title().set_name(t);
+        }
+        if let Some(series) = ch.get("series").and_then(Value::as_array) {
+            for sv in series {
+                let ser = chart.add_series();
+                if let Some(v) = sv.get("values").and_then(quad_arr) {
+                    ser.set_values((sheet, v[0], v[1] as u16, v[2], v[3] as u16));
+                }
+                if let Some(c) = sv.get("categories").and_then(quad_arr) {
+                    ser.set_categories((sheet, c[0], c[1] as u16, c[2], c[3] as u16));
+                }
+                if let Some(nm) = sv.get("name").and_then(Value::as_str) {
+                    ser.set_name(nm);
+                }
+            }
+        }
+        let at = ch.get("at").and_then(Value::as_array);
+        let row = at
+            .and_then(|a| a.first())
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as u32;
+        let col = at
+            .and_then(|a| a.get(1))
+            .and_then(Value::as_u64)
+            .unwrap_or(5) as u16;
+        ws.insert_chart(row, col, &chart)?;
+    }
     Ok(())
 }
 
@@ -890,7 +945,10 @@ fn op_slides_read(opts: Value) -> Result<Value> {
 }
 
 /// A slide spec: {title?: string, body?: [string]}.
-fn json_slides(opts: &Value) -> Result<Vec<(String, Vec<String>)>> {
+/// A slide spec: title + body items (each a string or `{text, bold, italic,
+/// size, color}`). Body items stay raw so the pptx writer can apply run
+/// formatting; the ODF writer flattens them to plain text.
+fn json_slides(opts: &Value) -> Result<Vec<(String, Vec<Value>)>> {
     let arr = opts
         .get("slides")
         .and_then(Value::as_array)
@@ -906,14 +964,22 @@ fn json_slides(opts: &Value) -> Result<Vec<(String, Vec<String>)>> {
             let body = s
                 .get("body")
                 .and_then(Value::as_array)
-                .map(|a| a.iter().map(cell_to_string).collect())
+                .cloned()
                 .unwrap_or_default();
             (title, body)
         })
         .collect())
 }
 
-fn write_odp(path: &str, slides: &[(String, Vec<String>)]) -> Result<()> {
+/// Plain text of a slide body item (string or `{text}`).
+fn slide_item_text(v: &Value) -> String {
+    match v {
+        Value::Object(o) => cell_to_string(o.get("text").unwrap_or(&Value::Null)),
+        other => cell_to_string(other),
+    }
+}
+
+fn write_odp(path: &str, slides: &[(String, Vec<Value>)]) -> Result<()> {
     use lo_core::geometry::Rect;
     use lo_core::impress::{Slide, SlideElement, TextBox};
     use lo_core::style::TextBoxStyle;
@@ -930,7 +996,8 @@ fn write_odp(path: &str, slides: &[(String, Vec<String>)]) -> Result<()> {
             if !text.is_empty() {
                 text.push('\n');
             }
-            text.push_str(&body.join("\n"));
+            let lines: Vec<String> = body.iter().map(slide_item_text).collect();
+            text.push_str(&lines.join("\n"));
         }
         slide.elements.push(SlideElement::TextBox(TextBox {
             frame: Rect::new(

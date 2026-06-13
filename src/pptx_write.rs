@@ -79,16 +79,42 @@ fn pptx_presentation_rels(n: usize) -> String {
     s
 }
 
-fn pptx_slide(title: &str, body: &[String]) -> String {
-    let mut paras = format!(
-        "<a:p><a:r><a:rPr lang=\"en-US\" sz=\"2800\" b=\"1\"/><a:t>{}</a:t></a:r></a:p>",
-        xml_escape(title)
-    );
-    for line in body {
-        paras.push_str(&format!(
-            "<a:p><a:r><a:rPr lang=\"en-US\" sz=\"1800\"/><a:t>{}</a:t></a:r></a:p>",
-            xml_escape(line)
-        ));
+/// One DrawingML paragraph for a slide body item. A string uses defaults; an
+/// object `{text, bold, italic, size (pt), color}` sets run properties.
+/// `default_pt` is the fallback size (pptx `sz` is hundredths of a point).
+fn pptx_para(item: &Value, default_pt: u32) -> String {
+    let (text, bold, italic, size_pt, color) = match item {
+        Value::Object(o) => (
+            cell_to_string(o.get("text").unwrap_or(&Value::Null)),
+            o.get("bold").and_then(Value::as_bool).unwrap_or(false),
+            o.get("italic").and_then(Value::as_bool).unwrap_or(false),
+            o.get("size").and_then(Value::as_f64).map(|s| s as u32).unwrap_or(default_pt),
+            o.get("color").and_then(Value::as_str).map(|c| c.trim_start_matches('#').to_string()),
+        ),
+        other => (cell_to_string(other), false, false, default_pt, None),
+    };
+    let mut rpr = format!("sz=\"{}\"", size_pt * 100);
+    if bold {
+        rpr.push_str(" b=\"1\"");
+    }
+    if italic {
+        rpr.push_str(" i=\"1\"");
+    }
+    let fill = color
+        .map(|c| format!("<a:solidFill><a:srgbClr val=\"{c}\"/></a:solidFill>"))
+        .unwrap_or_default();
+    format!(
+        "<a:p><a:r><a:rPr lang=\"en-US\" {rpr}>{fill}</a:rPr><a:t>{}</a:t></a:r></a:p>",
+        xml_escape(&text)
+    )
+}
+
+fn pptx_slide(title: &str, body: &[Value]) -> String {
+    let mut paras = pptx_para(&Value::String(title.to_string()), 28);
+    // Title paragraph is bold by convention.
+    paras = paras.replacen("sz=\"2800\"", "sz=\"2800\" b=\"1\"", 1);
+    for item in body {
+        paras.push_str(&pptx_para(item, 18));
     }
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -186,7 +212,7 @@ fn pptx_theme() -> &'static str {
 "#
 }
 
-fn write_pptx(path: &str, slides: &[(String, Vec<String>)]) -> Result<()> {
+fn write_pptx(path: &str, slides: &[(String, Vec<Value>)]) -> Result<()> {
     use zip::write::SimpleFileOptions;
     let n = slides.len().max(1);
     let mut zw = zip::ZipWriter::new(Cursor::new(Vec::new()));

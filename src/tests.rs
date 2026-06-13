@@ -419,6 +419,30 @@ fn xlsx_worksheet_table() {
 }
 
 #[test]
+fn xlsx_chart_writes_valid_file() {
+    let path = tmp("chart.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{
+                "name":"D",
+                "rows":[["Q","Sales"],["Q1",100],["Q2",150],["Q3",120]],
+                "charts":[{{"type":"column","at":[0,3],"title":"Sales",
+                    "series":[{{"name":"Sales","categories":[1,0,3,0],"values":[1,1,3,1]}}]}}]
+            }}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "chart write failed: {w}");
+    // File must be valid + data intact (calamine ignores the chart object).
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(
+        r["sheets"][0]["rows"][1][1], 100.0,
+        "chart-sheet data preserved"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn docx_table_and_pagebreak_round_trip() {
     let path = tmp("table.docx");
     let w = call(
@@ -447,6 +471,38 @@ fn docx_table_and_pagebreak_round_trip() {
     assert!(
         joined.contains("After the break"),
         "post-break para present: {joined}"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn pptx_rich_body_runs_round_trip() {
+    let path = tmp("rich.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r##"{{"path":"{path}","slides":[{{"title":"Deck","body":[
+                {{"text":"Big red point","bold":true,"size":24,"color":"#FF0000"}},
+                "plain bullet"
+            ]}}]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "rich pptx write failed: {w}");
+    let r = call(office__slides_read, &format!(r#"{{"path":"{path}"}}"#));
+    let joined = r["slides"][0]["text"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t.as_str().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("|");
+    assert!(
+        joined.contains("Big red point"),
+        "styled run text present: {joined}"
+    );
+    assert!(
+        joined.contains("plain bullet"),
+        "plain run present: {joined}"
     );
     std::fs::remove_file(&path).ok();
 }
