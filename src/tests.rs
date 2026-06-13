@@ -2165,6 +2165,50 @@ fn pdf_chunk_fixed_size() {
 }
 
 #[test]
+fn pdf_split_ranges_extracts() {
+    // 5-page source with distinct page text
+    let src = tmp("ranges.pdf");
+    let mut els = String::new();
+    for (i, name) in ["P1", "P2", "P3", "P4", "P5"].iter().enumerate() {
+        if i > 0 {
+            els.push_str(r#"{"type":"pagebreak"},"#);
+        }
+        els.push_str(&format!(
+            r#"{{"type":"heading","level":1,"text":"{name}"}}"#
+        ));
+        if i < 4 {
+            els.push(',');
+        }
+    }
+    let b = call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{els}]}}"#),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let dir = tmp("ranges_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__pdf_split_ranges,
+        &format!(r#"{{"path":"{src}","ranges":[[1,2],[4,5]],"dir":"{dir}","prefix":"r"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two range files: {r}");
+    let i1 = call(office__pdf_info, &format!(r#"{{"path":"{dir}/r-1.pdf"}}"#));
+    assert_eq!(i1["pages"], 2, "range 1 = 2 pages: {i1}");
+    // second range is pages 4-5
+    let t2 = call(office__pdf_read, &format!(r#"{{"path":"{dir}/r-2.pdf"}}"#));
+    let txt = t2["text"].as_str().unwrap_or("");
+    assert!(
+        txt.contains("P4") && txt.contains("P5"),
+        "range 2 holds P4/P5: {txt:?}"
+    );
+    assert!(!txt.contains("P1"), "range 2 excludes P1: {txt:?}");
+
+    std::fs::remove_file(&src).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(
