@@ -296,6 +296,34 @@ for my $im (@{ $r->{images} }) {
 Works on **xlsx/docx/pptx**, **ods/odt/odp**, and **pdf**. Each entry is
 `{ name, handle, width, height, path? }` (`path` present when `dir` is given).
 
+### Template filling (text search/replace)
+
+`replace_text` fills `{{placeholder}}`-style templates across a document's
+run-text parts. The hard part is OOXML: Word/Excel/PowerPoint routinely split a
+single placeholder across several runs (`{{na` + `me}}`), so a per-node replace
+misses it. This coalesces the runs **per paragraph** — join, replace, write the
+result back into the first run — so a placeholder matches even when it was
+fragmented. Paragraphs with no match are passed through untouched.
+
+```perl
+# fill an invoice template in place
+Office::replace_text("invoice.docx", {
+    "{{customer}}" => "Acme Corp",
+    "{{total}}"    => "\$4,200.00",
+    "{{date}}"     => "2026-06-13",
+});
+
+# or render to a new file
+my $r = Office::replace_text("deck.pptx", { "{{quarter}}" => "Q2" },
+    output => "deck-q2.pptx");
+# $r->{replaced} == number of substitutions made
+```
+
+Covers **docx/pptx/xlsx** (document body, headers/footers, slides, notes,
+shared + inline strings) and **ods/odt/odp** (content + styles). Replacements
+are given as `{find => replacement}` or an ordered `replacements => [{find,
+replace}]` list.
+
 ### Charting (data → image handle → any format)
 
 `Office::chart_render` rasterizes a chart and returns an **image handle**, so
@@ -548,6 +576,7 @@ stryke-office/
   src/barcode.rs         # QR + 1D barcode generation (-> image handle)
   src/meta_ops.rs        # document metadata read/write (OOXML/ODF/PDF)
   src/extract.rs         # embedded media extraction (-> image handles)
+  src/textops.rs         # template text search/replace (run-coalescing)
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
   stryke.toml            # package manifest + [ffi] table

@@ -66,4 +66,7 @@ assert_ok exists &Office::meta_write, "Office::meta_write exists"
 # media extraction
 assert_ok exists &Office::extract_images, "Office::extract_images exists"
 
+# text replace / templating
+assert_ok exists &Office::replace_text, "Office::replace_text exists"
+
 test_run
