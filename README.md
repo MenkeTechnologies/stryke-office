@@ -274,6 +274,28 @@ Canonical keys: `title`, `author`, `subject`, `keywords`, `description`,
 `modified`. Each maps onto the right element/dict-key per format; keys a format
 doesn't support are ignored.
 
+### Embedded media extraction (document → image handles)
+
+Office files keep their pictures as discrete parts — OOXML in `*/media/`, ODF in
+`Pictures/`, PDF as image XObjects. `extract_images` pulls each one out and
+**decodes it into a live image handle**, so extracted media flows straight into
+the image surface (resize, convert, re-save). PDF JPEG (DCTDecode) streams are
+lifted verbatim; raw device-RGB/Gray bitmaps are reconstructed.
+
+```perl
+# pull every picture out of a deck, write the originals to ./out, and make
+# a 128px thumbnail of each
+my $r = Office::extract_images("deck.pptx", dir => "out");
+for my $im (@{ $r->{images} }) {
+    Office::img_thumbnail($im->{handle}, 128);
+    Office::img_save($im->{handle}, "out/thumb-$im->{name}");
+}
+# $r->{count} extracted, $r->{skipped} recognized-but-undecodable (e.g. JPEG2000)
+```
+
+Works on **xlsx/docx/pptx**, **ods/odt/odp**, and **pdf**. Each entry is
+`{ name, handle, width, height, path? }` (`path` present when `dir` is given).
+
 ### Charting (data → image handle → any format)
 
 `Office::chart_render` rasterizes a chart and returns an **image handle**, so
@@ -525,6 +547,7 @@ stryke-office/
   src/chart_svg.rs       # vector (SVG/PDF) chart renderer
   src/barcode.rs         # QR + 1D barcode generation (-> image handle)
   src/meta_ops.rs        # document metadata read/write (OOXML/ODF/PDF)
+  src/extract.rs         # embedded media extraction (-> image handles)
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
   stryke.toml            # package manifest + [ffi] table

@@ -29,6 +29,7 @@ exports = [
     "office__pdf_page_numbers",
     "office__meta_read",
     "office__meta_write",
+    "office__extract_images",
     "office__img_open",
     "office__img_new",
     "office__img_save",

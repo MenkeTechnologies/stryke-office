@@ -63,4 +63,7 @@ assert_ok exists &Office::barcode_1d, "Office::barcode_1d exists"
 assert_ok exists &Office::meta_read, "Office::meta_read exists"
 assert_ok exists &Office::meta_write, "Office::meta_write exists"
 
+# media extraction
+assert_ok exists &Office::extract_images, "Office::extract_images exists"
+
 test_run

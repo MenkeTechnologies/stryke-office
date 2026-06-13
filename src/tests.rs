@@ -2177,6 +2177,100 @@ fn meta_ods_round_trips() {
 }
 
 #[test]
+fn extract_images_from_pdf() {
+    // build a PDF embedding a rendered chart (DCTDecode JPEG XObject)
+    let chart = call(
+        office__chart_render,
+        r#"{"type":"bar","width":200,"height":150,"categories":["a","b"],"series":[{"data":[3,7]}]}"#,
+    );
+    let ch = chart["handle"].as_u64().unwrap();
+    let path = tmp("imgs.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{path}","elements":[{{"type":"image","handle":{ch},"width":180,"height":135}}]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "{b}");
+
+    let r = call(office__extract_images, &format!(r#"{{"path":"{path}"}}"#));
+    assert!(
+        r["count"].as_u64().unwrap_or(0) >= 1,
+        "extracted at least one: {r}"
+    );
+    let first = &r["images"][0];
+    let h = first["handle"].as_u64().expect("extracted handle");
+    assert!(
+        first["width"].as_u64().unwrap() > 0,
+        "decoded dims: {first}"
+    );
+    // the extracted handle is a live image: re-save it
+    let out = tmp("extracted.png");
+    let s = call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{out}"}}"#),
+    );
+    assert_eq!(s["ok"], true, "{s}");
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn extract_images_from_docx_to_dir() {
+    // make a real PNG, embed it in a docx, then extract it back out to a dir
+    let png = tmp("logo.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":32,"height":24,"color":[0,128,255,255]}"#,
+    );
+    let nh = n["handle"].as_u64().unwrap();
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{nh},"path":"{png}"}}"#),
+    );
+
+    let docx = tmp("withimg.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{docx}","blocks":[{{"kind":"para","text":"see logo"}},{{"kind":"image","path":"{png}","width":32,"height":24}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx write: {w}");
+
+    let dir = tmp("extracted_dir");
+    let r = call(
+        office__extract_images,
+        &format!(r#"{{"path":"{docx}","dir":"{dir}"}}"#),
+    );
+    assert!(
+        r["count"].as_u64().unwrap_or(0) >= 1,
+        "media extracted: {r}"
+    );
+    let saved = r["images"][0]["path"].as_str().expect("saved path");
+    assert!(
+        std::path::Path::new(saved).exists(),
+        "file written: {saved}"
+    );
+    std::fs::remove_file(&png).ok();
+    std::fs::remove_file(&docx).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn extract_images_unsupported_format() {
+    let path = tmp("x.txt");
+    std::fs::write(&path, "x").ok();
+    let r = call(office__extract_images, &format!(r#"{{"path":"{path}"}}"#));
+    assert!(
+        err_of(&r).contains("unsupported format"),
+        "got: {}",
+        err_of(&r)
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn meta_unsupported_format_errors() {
     let path = tmp("meta.txt");
     std::fs::write(&path, "x").ok();
