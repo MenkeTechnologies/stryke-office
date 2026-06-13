@@ -146,6 +146,15 @@ fn Office::sheet_transpose ($path, $output, %opts) {
         office__sheet_transpose(to_json({ path => $path, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
+## arrayref of them (default: whole row), keep => "first" (default) | "last",
+## sheet, header => 0 if first row is data, format => override. Returns
+## { ok, path, kept, removed }.
+fn Office::sheet_dedupe ($path, $output, %opts) {
+    Office::_decode("sheet_dedupe",
+        office__sheet_dedupe(to_json({ path => $path, output => $output, by => $opts{by}, keep => $opts{keep}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

@@ -198,6 +198,64 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_dedupe_rows() {
+    let path = tmp("dedup.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","qty"],
+                ["a",1],
+                ["b",2],
+                ["a",1],
+                ["a",3]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // whole-row dedupe: the duplicate a/1 drops -> 3 kept
+    let wr = tmp("dedup_row.xlsx");
+    let r = call(
+        office__sheet_dedupe,
+        &format!(r#"{{"path":"{path}","output":"{wr}"}}"#),
+    );
+    assert_eq!(r["kept"], 3, "whole-row kept 3: {r}");
+    assert_eq!(r["removed"], 1, "removed 1: {r}");
+
+    // by name, keep first -> a(1), b(2)
+    let bf = tmp("dedup_bf.xlsx");
+    let r2 = call(
+        office__sheet_dedupe,
+        &format!(r#"{{"path":"{path}","by":"name","output":"{bf}"}}"#),
+    );
+    assert_eq!(r2["kept"], 2, "by-name kept 2: {r2}");
+    let rb = call(office__sheet_read, &format!(r#"{{"path":"{bf}"}}"#));
+    assert_eq!(rb["sheets"][0]["rows"][1][1], 1.0, "keep first qty=1: {rb}");
+
+    // by name, keep last -> a(3), b(2)
+    let bl = tmp("dedup_bl.xlsx");
+    let r3 = call(
+        office__sheet_dedupe,
+        &format!(r#"{{"path":"{path}","by":"name","keep":"last","output":"{bl}"}}"#),
+    );
+    assert_eq!(r3["kept"], 2, "keep-last kept 2: {r3}");
+    let rl = call(office__sheet_read, &format!(r#"{{"path":"{bl}"}}"#));
+    let rows = rl["sheets"][0]["rows"].as_array().unwrap();
+    let a_qty = rows
+        .iter()
+        .skip(1)
+        .find(|r| r[0] == "a")
+        .map(|r| r[1].clone())
+        .unwrap();
+    assert_eq!(a_qty, 3.0, "keep last a qty=3: {rl}");
+
+    for f in [&path, &wr, &bf, &bl] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_transpose_swaps_axes() {
     let path = tmp("trans.xlsx");
     // 2 rows x 3 cols
