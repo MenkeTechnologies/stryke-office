@@ -1569,6 +1569,9 @@ export!(office__img_fisheye, op_img_fisheye);
 export!(office__img_kaleidoscope, op_img_kaleidoscope);
 export!(office__img_spritesheet, op_img_spritesheet);
 export!(office__img_seam_carve, op_img_seam_carve);
+export!(office__img_dither, op_img_dither);
+export!(office__img_quantize, op_img_quantize);
+export!(office__img_favicon, op_img_favicon);
 
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
