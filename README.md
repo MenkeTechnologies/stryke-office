@@ -190,7 +190,19 @@ Office::sheet_write("s.xlsx", [{
                      markers => 1, high => 1, low => 1 }],   # in-cell mini chart
     group_rows => [[1,2]], group_columns => [[0,3]],          # outline grouping
     hide_rows => [5], hide_columns => [6], autofit => 1,
-}], defined_names => [{ name => "Region", formula => "=S!\$A\$1" }])
+    rows => [[{ rich => [{ text => "Hot ", color => "#FF0000", bold => 1 },
+                          { text => "cell" }] }]],          # multi-format cell
+}],
+    defined_names => [{ name => "Region", formula => "=S!\$A\$1" }],
+    properties => { title => "Q Report", author => "jane", company => "MenkeTech" })
+
+# docx styled table cells: bg, span (merge), width (dxa), valign
+Office::doc_write("t.docx", [
+    { kind => "table", rows => [
+        [{ text => "Header", bold => 1, bg => "#D9E1F2", span => 2, valign => "center" }],
+        [{ text => "A", width => 2400 }, { text => "B" }],
+    ] },
+])
 
 # read formula strings alongside values
 val $sheets = Office::sheet_read("s.xlsx", formulas => 1)

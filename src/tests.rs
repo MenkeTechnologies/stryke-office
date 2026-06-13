@@ -1213,6 +1213,46 @@ fn xlsx_sparklines_grouping_hide_autofit() {
 }
 
 #[test]
+fn xlsx_properties_and_rich_strings() {
+    let path = tmp("props.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r##"{{"path":"{path}",
+                "properties":{{"title":"Q Report","author":"jane","company":"MenkeTech","subject":"sales"}},
+                "sheets":[{{"name":"S","rows":[
+                    [{{"rich":[{{"text":"Hello "}},{{"text":"World","bold":true,"color":"#FF0000"}}]}}]
+                ]}}]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "properties/rich write failed: {w}");
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["sheets"][0]["rows"][0][0], "Hello World", "rich string concatenates on read");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn docx_styled_table_round_trips() {
+    let path = tmp("styled_table.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r##"{{"path":"{path}","blocks":[
+                {{"kind":"table","rows":[
+                    [{{"text":"Header","bold":true,"bg":"#D9E1F2","span":2,"valign":"center"}}],
+                    [{{"text":"A","width":2400}},{{"text":"B"}}]
+                ]}}
+            ]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "styled table write failed: {w}");
+    let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
+    let joined: String = r["paragraphs"].as_array().unwrap().iter().filter_map(|p| p.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(joined.contains("Header") && joined.contains("A"), "styled table cells round-trip: {joined:?}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn xlsx_formula_write_then_read() {
     let path = tmp("formula.xlsx");
     let w = call(
