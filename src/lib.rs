@@ -90,6 +90,51 @@ fn zip_entry_names(bytes: &[u8]) -> Result<Vec<String>> {
         .collect())
 }
 
+/// In an OOXML `.rels` part, return the `Target` of the first `Relationship`
+/// whose `Type` ends with `type_suffix` (e.g. `"notesSlide"`, `"hyperlink"`).
+fn rels_relationship_target(rels_xml: &[u8], type_suffix: &str) -> Option<String> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(rels_xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Empty(e)) | Ok(Event::Start(e)) if e.name().as_ref() == b"Relationship" => {
+                if attr(&e, b"Type")
+                    .map(|t| t.ends_with(type_suffix))
+                    .unwrap_or(false)
+                {
+                    return attr(&e, b"Target");
+                }
+            }
+            Ok(Event::Eof) | Err(_) => return None,
+            _ => {}
+        }
+        buf.clear();
+    }
+}
+
+/// Resolve a relationship `Target` (which may be `../`-relative or root-absolute
+/// `/...`) against the directory of the part that referenced it, into a
+/// zip-entry path (e.g. base `ppt/slides`, target `../notesSlides/n1.xml` →
+/// `ppt/notesSlides/n1.xml`).
+fn resolve_zip_path(base_dir: &str, target: &str) -> String {
+    let mut parts: Vec<&str> = if let Some(abs) = target.strip_prefix('/') {
+        return abs.to_string();
+    } else {
+        base_dir.split('/').filter(|s| !s.is_empty()).collect()
+    };
+    for seg in target.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            s => parts.push(s),
+        }
+    }
+    parts.join("/")
+}
+
 /// Extract the text of each paragraph-level element. `para_tags` are the
 /// fully-qualified element names that delimit a paragraph (e.g. `w:p`,
 /// `text:p`, `a:p`); all text nodes nested inside one are concatenated.
@@ -1307,6 +1352,66 @@ fn split_draw_pages(xml: &[u8]) -> Vec<Vec<u8>> {
     pages
 }
 
+/// The zip path of a pptx slide's speaker-notes part, resolved through the
+/// slide's `.rels` (`ppt/slides/_rels/slideN.xml.rels`). `None` if the slide
+/// has no notes relationship.
+fn pptx_notes_part(bytes: &[u8], slide_name: &str) -> Option<String> {
+    let (dir, file) = slide_name.rsplit_once('/')?;
+    let rels = read_zip_entry(bytes, &format!("{dir}/_rels/{file}.rels")).ok()?;
+    let target = rels_relationship_target(&rels, "notesSlide")?;
+    Some(resolve_zip_path(dir, &target))
+}
+
+/// Split an odp `draw:page`'s `text:p` paragraphs into (slide text, notes text)
+/// by whether each sits inside a `presentation:notes` subtree. Also keeps the
+/// slide's own text free of notes — extracting `text:p` over the whole page
+/// would otherwise fold the notes into the slide body.
+fn odp_text_and_notes(page: &[u8]) -> (Vec<String>, Vec<String>) {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(page);
+    let mut buf = Vec::new();
+    let (mut main, mut notes) = (Vec::new(), Vec::new());
+    let mut in_notes = 0i32;
+    let mut in_para = false;
+    let mut cur = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => match e.name().as_ref() {
+                b"presentation:notes" => in_notes += 1,
+                b"text:p" => {
+                    in_para = true;
+                    cur.clear();
+                }
+                _ => {}
+            },
+            Ok(Event::Text(e)) => {
+                if in_para {
+                    if let Ok(t) = e.xml10_content() {
+                        cur.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"text:p" if in_para => {
+                    in_para = false;
+                    let s = std::mem::take(&mut cur);
+                    if in_notes > 0 {
+                        notes.push(s);
+                    } else {
+                        main.push(s);
+                    }
+                }
+                b"presentation:notes" => in_notes -= 1,
+                _ => {}
+            },
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    (main, notes)
+}
+
 fn op_slides_read(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let bytes = std::fs::read(path)?;
@@ -1321,14 +1426,18 @@ fn op_slides_read(opts: Value) -> Result<Value> {
             for n in names {
                 let xml = read_zip_entry(&bytes, &n)?;
                 let text = extract_paragraphs(&xml, &["a:p"]);
-                slides.push(json!({ "text": text }));
+                let notes = pptx_notes_part(&bytes, &n)
+                    .and_then(|p| read_zip_entry(&bytes, &p).ok())
+                    .map(|nx| extract_paragraphs(&nx, &["a:p"]))
+                    .unwrap_or_default();
+                slides.push(json!({ "text": text, "notes": notes }));
             }
         }
         "odp" => {
             let xml = read_zip_entry(&bytes, "content.xml")?;
             for page in split_draw_pages(&xml) {
-                let text = extract_paragraphs(&page, &["text:p"]);
-                slides.push(json!({ "text": text }));
+                let (text, notes) = odp_text_and_notes(&page);
+                slides.push(json!({ "text": text, "notes": notes }));
             }
         }
         other => return Err(anyhow!("unsupported presentation read format: {other}")),

@@ -147,7 +147,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |
-| `Office::slides_read($path)` | arrayref of `{text => [...]}` | pptx/odp |
+| `Office::slides_read($path)` | arrayref of `{text => [...], notes => [...]}` | pptx/odp; `notes` = speaker notes |
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
@@ -662,7 +662,8 @@ stryke-office/
 
 ## [0x08] Roadmap
 
-- PowerPoint speaker notes + images on slides (notesMaster/notesSlide OOXML).
+- PowerPoint speaker-notes *write* + images on slides (notesMaster/notesSlide
+  OOXML); notes *read* is done (`slides_read` → `notes`).
 - Spreadsheet formula *evaluation* on read (formula **strings** already read
   via `formulas => 1`; values are computed by the writing app).
 - Per-run styling on ODF (ods/odt) write — blocked on `lo_odf` exposing it.
