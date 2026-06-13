@@ -60,6 +60,10 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "funnel" => svg_funnel(&mut s, series, &cats, l, t, r, b, labels),
         "gauge" => svg_gauge(&mut s, opts, l, t, r, b),
         "heatmap" => svg_heatmap(&mut s, opts, &cats, l, t, r, b),
+        "treemap" => svg_treemap(&mut s, series, &cats, l, t, r, b),
+        "polar" => svg_polar(&mut s, series, &cats, l, t, r, b),
+        "bullet" => svg_bullet(&mut s, series, l, t, r, b),
+        "pareto" => svg_pareto(&mut s, series, &cats, l, t, r, b),
         _ => special = false,
     }
 
@@ -96,6 +100,13 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
                 ymin = ymin.min(cum);
                 ymax = ymax.max(cum);
             }
+        } else if kind == "stacked_area" {
+            let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+            ymin = ymin.min(0.0);
+            for ci in 0..ncat {
+                let col: f64 = series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0)).sum();
+                ymax = ymax.max(col);
+            }
         } else {
             for ser in series {
                 for v in series_nums(ser) {
@@ -126,6 +137,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         match kind {
             "line" => svg_line_area(&mut s, series, l, pw, &yp, b, false),
             "area" => svg_line_area(&mut s, series, l, pw, &yp, b, true),
+            "stacked_area" => svg_stacked_area(&mut s, series, l, pw, &yp),
             "step" => svg_step(&mut s, series, l, pw, &yp),
             "scatter" => svg_scatter(&mut s, series, l, pw, xmin, xmax, &yp),
             "bubble" => svg_bubble(&mut s, series, l, pw, xmin, xmax, &yp),
@@ -137,6 +149,16 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
             "candlestick" => svg_ohlc(&mut s, series, l, pw, &yp, true),
             "boxplot" => svg_boxplot(&mut s, series, l, pw, &yp),
             _ => svg_bars(&mut s, series, &cats, l, pw, &yp, false, labels),
+        }
+        // optional least-squares trendline over scatter points
+        if scatter && opts.get("trendline").and_then(Value::as_bool) == Some(true) {
+            for (si, ser) in series.iter().enumerate() {
+                if let Some((m, c)) = linfit(&series_points(ser)) {
+                    let col = svg_palette(si);
+                    let px = |x: f64| l + (x - xmin) / (xmax - xmin) * pw;
+                    let _ = write!(s, r##"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{col}" stroke-width="1.5" stroke-dasharray="5,4"/>"##, px(xmin), yp(m * xmin + c), px(xmax), yp(m * xmax + c));
+                }
+            }
         }
         // category labels
         if !cats.is_empty() && !scatter {
@@ -431,6 +453,152 @@ fn svg_heatmap(s: &mut String, opts: &Value, cats: &[String], l: f64, t: f64, r:
     for (ci, c) in cats.iter().enumerate().take(nc) {
         let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" fill="#1e1e1e">{}</text>"##, l + ci as f64 * cw + cw * 0.2, b + 14.0, xml_escape(c));
     }
+}
+
+/// Stacked area (vector).
+fn svg_stacked_area(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64) {
+    let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let xat = |i: usize| l + if ncat > 1 { i as f64 / (ncat - 1) as f64 * pw } else { pw / 2.0 };
+    let mut cum = vec![0.0f64; ncat];
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let data = series_nums(ser);
+        let mut pts = String::new();
+        for ci in 0..ncat {
+            let v = data.get(ci).copied().unwrap_or(0.0);
+            let _ = write!(pts, "{:.1},{:.1} ", xat(ci), yp(cum[ci] + v));
+        }
+        for ci in (0..ncat).rev() {
+            let _ = write!(pts, "{:.1},{:.1} ", xat(ci), yp(cum[ci]));
+        }
+        let _ = write!(s, r##"<polygon points="{pts}" fill="{col}" fill-opacity="0.6"/>"##);
+        for ci in 0..ncat {
+            cum[ci] += data.get(ci).copied().unwrap_or(0.0);
+        }
+    }
+}
+
+/// Treemap (vector) — shares the area-correct layout with the raster path.
+fn svg_treemap(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let mut items: Vec<(usize, f64)> = data.iter().enumerate().map(|(i, &v)| (i, v.max(0.0))).collect();
+    items.retain(|&(_, v)| v > 0.0);
+    if items.is_empty() {
+        return;
+    }
+    items.sort_by(|a, c| c.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut placed: Vec<(usize, (f64, f64, f64, f64))> = Vec::new();
+    treemap_layout(&items, (l, t, r - l, b - t), &mut placed);
+    for (idx, (x, y, w, h)) in placed {
+        let _ = write!(s, r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="{}" stroke="#ffffff"/>"##, x + 1.0, y + 1.0, (w - 2.0).max(1.0), (h - 2.0).max(1.0), svg_palette(idx));
+        if let Some(name) = cats.get(idx) {
+            if w > 24.0 && h > 14.0 {
+                let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" fill="#1e1e1e">{}</text>"##, x + 4.0, y + 14.0, xml_escape(name));
+            }
+        }
+    }
+}
+
+/// Polar / rose chart (vector).
+fn svg_polar(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let maxv = data.iter().cloned().fold(f64::EPSILON, f64::max);
+    let (cx, cy) = ((l + r) / 2.0, (t + b) / 2.0);
+    let radius = ((r - l).min(b - t) / 2.0 - 20.0).max(20.0);
+    for ring in 1..=4 {
+        let _ = write!(s, r##"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="none" stroke="#d2d2d2"/>"##, radius * ring as f64 / 4.0);
+    }
+    let step = std::f64::consts::TAU / n as f64;
+    for (i, &v) in data.iter().enumerate() {
+        let a0 = -std::f64::consts::FRAC_PI_2 + i as f64 * step;
+        let a1 = a0 + step * 0.9;
+        let rr = v / maxv * radius;
+        let (x0, y0) = (cx + rr * a0.cos(), cy + rr * a0.sin());
+        let (x1, y1) = (cx + rr * a1.cos(), cy + rr * a1.sin());
+        let large = if step * 0.9 > std::f64::consts::PI { 1 } else { 0 };
+        let _ = write!(s, r##"<path d="M {cx:.1},{cy:.1} L {x0:.1},{y0:.1} A {rr:.1},{rr:.1} 0 {large},1 {x1:.1},{y1:.1} Z" fill="{}"/>"##, svg_palette(i));
+        if let Some(c) = cats.get(i) {
+            let am = (a0 + a1) / 2.0;
+            let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" text-anchor="middle" fill="#1e1e1e">{}</text>"##, cx + (radius + 8.0) * am.cos(), cy + (radius + 8.0) * am.sin(), xml_escape(c));
+        }
+    }
+}
+
+/// Bullet graphs (vector).
+fn svg_bullet(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let n = series.len().max(1);
+    let row_h = ((b - t) / n as f64).max(12.0);
+    for (si, ser) in series.iter().enumerate() {
+        let value = ser.get("value").and_then(Value::as_f64).or_else(|| series_nums(ser).first().copied()).unwrap_or(0.0);
+        let target = ser.get("target").and_then(Value::as_f64);
+        let ranges: Vec<f64> = ser.get("ranges").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+        let scale_max = ranges.iter().cloned().fold(value.max(target.unwrap_or(0.0)), f64::max).max(f64::EPSILON);
+        let y0 = t + si as f64 * row_h + 4.0;
+        let bh = (row_h - 10.0).max(6.0);
+        let px = |v: f64| l + v / scale_max * (r - l);
+        let mut prev = 0.0;
+        for (ri, &rmax) in ranges.iter().enumerate() {
+            let shade = (220 - ri as i32 * 40).clamp(120, 220);
+            let _ = write!(s, r##"<rect x="{:.1}" y="{y0:.1}" width="{:.1}" height="{bh:.1}" fill="rgb({shade},{shade},{shade})"/>"##, px(prev), (px(rmax) - px(prev)).max(1.0));
+            prev = rmax;
+        }
+        if ranges.is_empty() {
+            let _ = write!(s, r##"<rect x="{l:.1}" y="{y0:.1}" width="{:.1}" height="{bh:.1}" fill="#d2d2d2"/>"##, r - l);
+        }
+        let mbh = (bh / 2.0).max(3.0);
+        let _ = write!(s, r##"<rect x="{l:.1}" y="{:.1}" width="{:.1}" height="{mbh:.1}" fill="{}"/>"##, y0 + (bh - mbh) / 2.0, (px(value) - l).max(1.0), svg_palette(si));
+        if let Some(tg) = target {
+            let _ = write!(s, r##"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="#141414" stroke-width="2"/>"##, px(tg), y0 - 2.0, px(tg), y0 + bh + 2.0);
+        }
+        if let Some(name) = ser.get("name").and_then(Value::as_str) {
+            let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="11" fill="#1e1e1e">{}</text>"##, y0 - 3.0, xml_escape(name));
+        }
+    }
+}
+
+/// Pareto (vector): sorted bars (left axis) + cumulative-% line (right axis).
+fn svg_pareto(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let mut pairs: Vec<(String, f64)> = data
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| (cats.get(i).cloned().unwrap_or_else(|| format!("{}", i + 1)), v))
+        .collect();
+    pairs.sort_by(|a, c| c.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let total: f64 = pairs.iter().map(|(_, v)| v).sum();
+    if total <= 0.0 {
+        return;
+    }
+    let maxv = pairs.iter().map(|(_, v)| *v).fold(f64::EPSILON, f64::max);
+    let (pw, ph) = (r - l, b - t);
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/><line x1="{r}" y1="{t}" x2="{r}" y2="{b}" stroke="#1e1e1e"/>"##);
+    for i in 0..=5 {
+        let y = b - (i as f64 / 5.0) * ph;
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(maxv * i as f64 / 5.0)));
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}%</text>"##, r + 2.0, y + 4.0, i * 20);
+    }
+    let slot = pw / pairs.len().max(1) as f64;
+    let bw = slot * 0.7;
+    let mut cum = 0.0;
+    let mut pts = String::new();
+    for (i, (name, v)) in pairs.iter().enumerate() {
+        let x = l + i as f64 * slot + slot * 0.15;
+        let bh = v / maxv * ph;
+        let _ = write!(s, r##"<rect x="{x:.1}" y="{:.1}" width="{bw:.1}" height="{:.1}" fill="{}"/>"##, b - bh, bh.max(0.0), svg_palette(0));
+        cum += v;
+        let cy = b - (cum / total) * ph;
+        let _ = write!(pts, "{:.1},{cy:.1} ", x + bw / 2.0);
+        let _ = write!(s, r##"<text x="{x:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(name));
+    }
+    let _ = write!(s, r##"<polyline points="{pts}" fill="none" stroke="#c03a2b" stroke-width="2"/>"##);
 }
 
 fn svg_line_area(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, b: f64, fill: bool) {

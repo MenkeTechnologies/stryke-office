@@ -228,16 +228,20 @@ for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
 }
 ```
 
-Chart types: `bar`/`column`, `stacked`, `line`, `area`, `step`, `combo`
-(per-series `kind => "line"` overlays a line on bars), `scatter` (`data` is
-`[[x,y],…]`), `bubble` (`[[x,y,size],…]`), `pie`, `donut`, `histogram` (opt
-`bins`), `radar`, `sankey` (`nodes`/`links` instead of series), `waterfall`
-(deltas → cumulative), `ohlc`/`candlestick` (`data` is `[[open,high,low,close],…]`),
+Chart types: `bar`/`column`, `stacked`, `line`, `area`, `stacked_area`,
+`step`, `combo` (per-series `kind => "line"` overlays a line on bars),
+`scatter` (`data` is `[[x,y],…]`; opt `trendline => 1` adds a least-squares
+line), `bubble` (`[[x,y,size],…]`), `pie`, `donut`, `histogram` (opt `bins`),
+`radar`, `sankey` (`nodes`/`links` instead of series), `waterfall` (deltas →
+cumulative), `ohlc`/`candlestick` (`data` is `[[open,high,low,close],…]`),
 `boxplot` (raw `data` → min/q1/median/q3/max), `funnel`, `gauge` (`value` +
 `max`, no series), `heatmap` (`matrix => [[..],..]` or series-of-rows, no
-series required). opts: `title`, `width` (800), `height` (600), `categories`,
-per-series `color`, `legend => 0` to suppress, `labels => 1` for data labels,
-`x_label`, `y_label`. Every type renders identically in raster **and** SVG.
+series required), `treemap` (area-proportional), `polar`/rose, `bullet`
+(per-series `{name, value, target, ranges}`), `pareto` (sorted bars +
+cumulative-% line). opts: `title`, `width` (800), `height` (600),
+`categories`, per-series `color`, `legend => 0` to suppress, `labels => 1` for
+data labels, `x_label`, `y_label`. Every type renders identically in raster
+**and** SVG.
 
 **Raster and vector output, any format.** Three entry points:
 - `chart_render(type, series, %opts)` → raster image handle (then `img_save`

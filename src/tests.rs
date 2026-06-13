@@ -1000,6 +1000,40 @@ fn chart_new_types_render_raster_and_svg() {
 }
 
 #[test]
+fn chart_incr20_types_render_raster_and_svg() {
+    // treemap / polar / pareto / stacked_area use a flat series
+    let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
+    for kind in ["treemap", "polar", "pareto", "stacked_area"] {
+        let c = call(
+            office__chart_render,
+            &format!(r#"{{"type":"{kind}","width":420,"height":320,"categories":["a","b","c","d","e"],"series":{series}}}"#),
+        );
+        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        let v = call(
+            office__chart_svg,
+            &format!(r#"{{"type":"{kind}","categories":["a","b","c","d","e"],"series":{series}}}"#),
+        );
+        let svg = v["svg"].as_str().unwrap_or("");
+        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{kind} svg malformed");
+    }
+    // bullet graph: per-series value/target/ranges
+    let bullet = r#"[{"name":"Rev","value":270,"target":250,"ranges":[150,220,300]},{"name":"Cost","value":180,"target":200,"ranges":[120,200,260]}]"#;
+    let cb = call(office__chart_render, &format!(r#"{{"type":"bullet","series":{bullet}}}"#));
+    let hb = cb["handle"].as_u64().expect("bullet raster handle");
+    call(office__img_close, &format!(r#"{{"handle":{hb}}}"#));
+    let vb = call(office__chart_svg, &format!(r#"{{"type":"bullet","series":{bullet}}}"#));
+    assert!(vb["svg"].as_str().unwrap_or("").contains("<rect"), "bullet svg bars");
+
+    // scatter trendline overlay emits a dashed regression line in SVG
+    let st = call(
+        office__chart_svg,
+        r#"{"type":"scatter","series":[{"data":[[1,2],[2,3.1],[3,3.9],[4,5.2],[5,6.1]]}],"trendline":true}"#,
+    );
+    assert!(st["svg"].as_str().unwrap_or("").contains("stroke-dasharray"), "trendline dashed line present");
+}
+
+#[test]
 fn chart_legend_and_labels_emit() {
     // legend swatches + value labels appear in the SVG
     let v = call(

@@ -203,6 +203,22 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         }
         "gauge" => render_gauge(&mut img, &fnt, &opts, l, t, r, b, black),
         "heatmap" => render_heatmap(&mut img, &fnt, &opts, &cats, l, t, r, b, black),
+        "treemap" => {
+            require_series(&opts)?;
+            render_treemap(&mut img, &fnt, series, &cats, l, t, r, b, black)
+        }
+        "polar" => {
+            require_series(&opts)?;
+            render_polar(&mut img, &fnt, series, &cats, l, t, r, b, black, grid)
+        }
+        "bullet" => {
+            require_series(&opts)?;
+            render_bullet(&mut img, &fnt, series, l, t, r, b, black, grid)
+        }
+        "pareto" => {
+            require_series(&opts)?;
+            render_pareto(&mut img, &fnt, series, &cats, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -243,6 +259,13 @@ fn op_chart_render(opts: Value) -> Result<Value> {
                 ymin = ymin.min(cum);
                 ymax = ymax.max(cum);
             }
+        } else if kind == "stacked_area" {
+            let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+            ymin = ymin.min(0.0);
+            for ci in 0..ncat {
+                let col: f64 = series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0)).sum();
+                ymax = ymax.max(col);
+            }
         } else {
             for s in series {
                 for v in series_nums(s) {
@@ -271,6 +294,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         match kind.as_str() {
             "line" => render_line_area(&mut img, series, l, r, b, ymin, ymax, false),
             "area" => render_line_area(&mut img, series, l, r, b, ymin, ymax, true),
+            "stacked_area" => render_stacked_area(&mut img, series, l, r, b, ymin, ymax),
             "step" => render_step(&mut img, series, l, r, b, ymin, ymax),
             "scatter" => render_scatter(&mut img, series, l as f64, pw, xmin, xmax, yp),
             "bubble" => render_bubble(&mut img, series, l as f64, pw, xmin, xmax, yp),
@@ -284,6 +308,19 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             "candlestick" => render_ohlc(&mut img, series, l, pw, b, &yp, true),
             "boxplot" => render_boxplot(&mut img, series, l, pw, b, &yp),
             _ => render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black, false, labels),
+        }
+        // optional least-squares trendline over scatter points
+        if scatter && opts.get("trendline").and_then(Value::as_bool) == Some(true) {
+            for (si, s) in series.iter().enumerate() {
+                let pts = series_points(s);
+                if let Some((m, c)) = linfit(&pts) {
+                    let color = series_color(s, si);
+                    let x0 = xmin;
+                    let x1 = xmax;
+                    let px = |x: f64| l as f64 + (x - xmin) / (xmax - xmin) * pw;
+                    draw_line_segment_mut(&mut img, (px(x0) as f32, yp(m * x0 + c)), (px(x1) as f32, yp(m * x1 + c)), color);
+                }
+            }
         }
         // category labels under the x axis for the bar-family
         if matches!(kind.as_str(), "waterfall" | "combo" | "ohlc" | "candlestick" | "boxplot") {
@@ -1017,5 +1054,238 @@ fn render_heatmap(img: &mut RgbaImage, fnt: &FontRef, opts: &Value, cats: &[Stri
     for (ci, cat) in cats.iter().enumerate().take(nc) {
         let x = l as f64 + ci as f64 * cw + cw * 0.2;
         draw_text_mut(img, black, x as i32, b + 6, PxScale::from(11.0), fnt, cat);
+    }
+}
+
+/// Least-squares fit of `points` → `(slope, intercept)`, or None if
+/// degenerate.
+fn linfit(points: &[(f64, f64)]) -> Option<(f64, f64)> {
+    let n = points.len() as f64;
+    if n < 2.0 {
+        return None;
+    }
+    let (sx, sy) = points.iter().fold((0.0, 0.0), |(ax, ay), &(x, y)| (ax + x, ay + y));
+    let (sxx, sxy) = points.iter().fold((0.0, 0.0), |(axx, axy), &(x, y)| (axx + x * x, axy + x * y));
+    let denom = n * sxx - sx * sx;
+    if denom.abs() < f64::EPSILON {
+        return None;
+    }
+    let m = (n * sxy - sx * sy) / denom;
+    Some((m, (sy - m * sx) / n))
+}
+
+/// Stacked area: each series' band is filled on top of the cumulative sum.
+fn render_stacked_area(img: &mut RgbaImage, series: &[Value], l: i32, r: i32, b: i32, ymin: f64, ymax: f64) {
+    let pw = (r - l).max(1) as f64;
+    let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let xat = |i: usize| l as f64 + if ncat > 1 { i as f64 / (ncat - 1) as f64 * pw } else { pw / 2.0 };
+    let yv = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * (b as f64 - 44.0).max(1.0)) as f32;
+    let mut cum = vec![0.0f64; ncat];
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        let data = series_nums(s);
+        let mut poly: Vec<Point<i32>> = Vec::new();
+        // top edge (cum + value) left→right
+        for ci in 0..ncat {
+            let v = data.get(ci).copied().unwrap_or(0.0);
+            poly.push(Point::new(xat(ci) as i32, yv(cum[ci] + v) as i32));
+        }
+        // bottom edge (cum) right→left
+        for ci in (0..ncat).rev() {
+            poly.push(Point::new(xat(ci) as i32, yv(cum[ci]) as i32));
+        }
+        poly.dedup();
+        if poly.len() >= 3 && poly.first() != poly.last() {
+            let mut fc = color;
+            fc.0[3] = 150;
+            draw_polygon_mut(img, &poly, fc);
+        }
+        for ci in 0..ncat {
+            cum[ci] += data.get(ci).copied().unwrap_or(0.0);
+        }
+    }
+}
+
+/// Squarish treemap of the first series via area-correct recursive binary
+/// split (sorted desc, halved by cumulative value, split along the long axis).
+#[allow(clippy::too_many_arguments)]
+fn render_treemap(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let mut items: Vec<(usize, f64)> = data.iter().enumerate().map(|(i, &v)| (i, v.max(0.0))).collect();
+    items.retain(|&(_, v)| v > 0.0);
+    if items.is_empty() {
+        return;
+    }
+    items.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let rect = (l as f64, t as f64, (r - l) as f64, (b - t) as f64);
+    let mut placed: Vec<(usize, (f64, f64, f64, f64))> = Vec::new();
+    treemap_layout(&items, rect, &mut placed);
+    for (idx, (x, y, w, h)) in placed {
+        draw_filled_rect_mut(img, Rect::at(x as i32 + 1, y as i32 + 1).of_size((w as u32).saturating_sub(2).max(1), (h as u32).saturating_sub(2).max(1)), palette(idx));
+        if let Some(name) = cats.get(idx) {
+            if w > 24.0 && h > 14.0 {
+                draw_text_mut(img, black, x as i32 + 4, y as i32 + 4, PxScale::from(11.0), fnt, name);
+            }
+        }
+    }
+}
+
+fn treemap_layout(items: &[(usize, f64)], rect: (f64, f64, f64, f64), out: &mut Vec<(usize, (f64, f64, f64, f64))>) {
+    if items.len() == 1 {
+        out.push((items[0].0, rect));
+        return;
+    }
+    let total: f64 = items.iter().map(|&(_, v)| v).sum();
+    let half = total / 2.0;
+    let (mut acc, mut i) = (0.0, 0usize);
+    while i < items.len() - 1 && acc + items[i].1 < half {
+        acc += items[i].1;
+        i += 1;
+    }
+    let (a, c) = items.split_at(i + 1);
+    let suma: f64 = a.iter().map(|&(_, v)| v).sum();
+    let frac = if total > 0.0 { suma / total } else { 0.5 };
+    let (x, y, w, h) = rect;
+    let (ra, rc) = if w >= h {
+        ((x, y, w * frac, h), (x + w * frac, y, w * (1.0 - frac), h))
+    } else {
+        ((x, y, w, h * frac), (x, y + h * frac, w, h * (1.0 - frac)))
+    };
+    treemap_layout(a, ra, out);
+    treemap_layout(c, rc, out);
+}
+
+/// Polar / rose chart: equal-angle wedges, radius proportional to value.
+#[allow(clippy::too_many_arguments)]
+fn render_polar(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>, grid: Rgba<u8>) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let maxv = data.iter().cloned().fold(f64::EPSILON, f64::max);
+    let cx = (l + r) / 2;
+    let cy = (t + b) / 2;
+    let radius = ((r - l).min(b - t) / 2 - 20).max(20) as f64;
+    for ring in 1..=4 {
+        draw_hollow_circle_safe(img, cx, cy, (radius * ring as f64 / 4.0) as i32, grid);
+    }
+    let step = std::f64::consts::TAU / n as f64;
+    for (i, &v) in data.iter().enumerate() {
+        let a0 = -std::f64::consts::FRAC_PI_2 + i as f64 * step;
+        let a1 = a0 + step * 0.9;
+        let rr = v / maxv * radius;
+        let steps = 10;
+        let mut poly: Vec<Point<i32>> = vec![Point::new(cx, cy)];
+        for k in 0..=steps {
+            let a = a0 + (a1 - a0) * k as f64 / steps as f64;
+            poly.push(Point::new(cx + (rr * a.cos()) as i32, cy + (rr * a.sin()) as i32));
+        }
+        poly.dedup();
+        if poly.len() >= 3 {
+            draw_polygon_mut(img, &poly, palette(i));
+        }
+        if let Some(c) = cats.get(i) {
+            let am = (a0 + a1) / 2.0;
+            draw_text_mut(img, black, cx + ((radius + 6.0) * am.cos()) as i32 - 8, cy + ((radius + 6.0) * am.sin()) as i32 - 6, PxScale::from(11.0), fnt, c);
+        }
+    }
+}
+
+/// `draw_hollow_circle_mut` panics on r<=0; guard it.
+fn draw_hollow_circle_safe(img: &mut RgbaImage, cx: i32, cy: i32, r: i32, color: Rgba<u8>) {
+    use imageproc::drawing::draw_hollow_circle_mut;
+    if r > 0 {
+        draw_hollow_circle_mut(img, (cx, cy), r, color);
+    }
+}
+
+/// Bullet graphs: one horizontal bullet per series — qualitative range bands,
+/// a measure bar, and a target tick. Series: `{name, data:[value]|value,
+/// target, ranges:[r1,r2,...]}`.
+#[allow(clippy::too_many_arguments)]
+fn render_bullet(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>, grid: Rgba<u8>) {
+    let n = series.len().max(1);
+    let row_h = ((b - t) / n as i32).max(12);
+    for (si, s) in series.iter().enumerate() {
+        let value = s.get("value").and_then(Value::as_f64).or_else(|| series_nums(s).first().copied()).unwrap_or(0.0);
+        let target = s.get("target").and_then(Value::as_f64);
+        let ranges: Vec<f64> = s.get("ranges").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+        let scale_max = ranges.iter().cloned().fold(value.max(target.unwrap_or(0.0)), f64::max).max(f64::EPSILON);
+        let y0 = t + si as i32 * row_h + 4;
+        let bh = (row_h - 10).max(6);
+        let px = |v: f64| l as f64 + v / scale_max * (r - l) as f64;
+        // range bands light→dark
+        let mut prev = 0.0;
+        for (ri, &rmax) in ranges.iter().enumerate() {
+            let shade = (220 - ri as i32 * 40).clamp(120, 220) as u8;
+            draw_filled_rect_mut(img, Rect::at(px(prev) as i32, y0).of_size((px(rmax) - px(prev)).max(1.0) as u32, bh as u32), Rgba([shade, shade, shade, 255]));
+            prev = rmax;
+        }
+        if ranges.is_empty() {
+            draw_filled_rect_mut(img, Rect::at(l, y0).of_size((r - l) as u32, bh as u32), grid);
+        }
+        // measure bar (thinner, centered)
+        let mbh = (bh / 2).max(3);
+        draw_filled_rect_mut(img, Rect::at(l, y0 + (bh - mbh) / 2).of_size((px(value) - l as f64).max(1.0) as u32, mbh as u32), palette(si));
+        // target tick
+        if let Some(tg) = target {
+            let tx = px(tg) as f32;
+            draw_line_segment_mut(img, (tx, y0 as f32 - 2.0), (tx, (y0 + bh) as f32 + 2.0), Rgba([20, 20, 20, 255]));
+        }
+        if let Some(name) = s.get("name").and_then(Value::as_str) {
+            draw_text_mut(img, black, l, y0 - 2, PxScale::from(11.0), fnt, name);
+        }
+    }
+}
+
+/// Pareto: bars sorted descending (left axis) + cumulative-percent line
+/// (right axis 0–100%).
+#[allow(clippy::too_many_arguments)]
+fn render_pareto(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>, grid: Rgba<u8>) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let mut pairs: Vec<(String, f64)> = data
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| (cats.get(i).cloned().unwrap_or_else(|| format!("{}", i + 1)), v))
+        .collect();
+    pairs.sort_by(|a, c| c.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let total: f64 = pairs.iter().map(|(_, v)| v).sum();
+    if total <= 0.0 {
+        return;
+    }
+    let maxv = pairs.iter().map(|(_, v)| *v).fold(f64::EPSILON, f64::max);
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    draw_line_segment_mut(img, (r as f32, t as f32), (r as f32, b as f32), black);
+    let pw = (r - l) as f64;
+    let ph = (b - t) as f64;
+    let slot = pw / pairs.len().max(1) as f64;
+    let barw = (slot * 0.7) as u32;
+    // left-axis gridlines / labels
+    for i in 0..=5 {
+        let y = b as f32 - (i as f32 / 5.0) * ph as f32;
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(11.0), fnt, &fmt_num(maxv * i as f64 / 5.0));
+        draw_text_mut(img, black, r + 2, y as i32 - 6, PxScale::from(11.0), fnt, &format!("{}%", i * 20));
+    }
+    let mut cum = 0.0;
+    let mut prev: Option<(f32, f32)> = None;
+    for (i, (name, v)) in pairs.iter().enumerate() {
+        let x = l as f64 + i as f64 * slot + slot * 0.15;
+        let bh = v / maxv * ph;
+        draw_filled_rect_mut(img, Rect::at(x as i32, (b as f64 - bh) as i32).of_size(barw.max(1), bh.max(1.0) as u32), palette(0));
+        cum += v;
+        let cy = b as f32 - (cum / total) as f32 * ph as f32;
+        let cxp = (x + barw as f64 / 2.0) as f32;
+        draw_filled_circle_mut(img, (cxp as i32, cy as i32), 3, Rgba([0xc0, 0x3a, 0x2b, 255]));
+        if let Some((px_, py_)) = prev {
+            draw_line_segment_mut(img, (px_, py_), (cxp, cy), Rgba([0xc0, 0x3a, 0x2b, 255]));
+        }
+        prev = Some((cxp, cy));
+        draw_text_mut(img, black, x as i32, b + 6, PxScale::from(11.0), fnt, name);
     }
 }

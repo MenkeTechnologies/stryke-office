@@ -509,10 +509,13 @@ fn Office::img_from_base64 ($base64) {
 # self-contained — no plotters, no system fonts, no external binaries.
 
 ## Render a chart to a raster image handle. $type is one of:
-##   bar | column | stacked | line | area | step | combo | scatter | bubble |
-##   pie | donut | radar | histogram | sankey | waterfall | ohlc |
-##   candlestick | boxplot | funnel | gauge | heatmap
+##   bar | column | stacked | line | area | stacked_area | step | combo |
+##   scatter | bubble | pie | donut | radar | histogram | sankey | waterfall |
+##   ohlc | candlestick | boxplot | funnel | gauge | heatmap | treemap |
+##   polar | bullet | pareto
 ## $series: arrayref of { name, data => [n, ...], color?, kind? }.
+##   bullet series => { name, value, target, ranges => [r1,r2,...] };
+##   scatter accepts trendline => 1 to overlay a least-squares line.
 ##   scatter data => [[x, y], ...]; bubble => [[x, y, size], ...];
 ##   ohlc/candlestick => [[open, high, low, close], ...];
 ##   boxplot data => raw numbers (min/q1/median/q3/max computed);
