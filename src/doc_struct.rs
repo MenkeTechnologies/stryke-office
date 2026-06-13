@@ -414,6 +414,39 @@ fn op_doc_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "blocks": n }))
 }
 
+/// Append blocks to an existing document. opts: path, blocks => [doc_write
+/// blocks], output (default: in place), page_break => bool (insert a break
+/// before the appended content), format. The existing content is read into the
+/// block model, so the target format follows the output extension. Returns
+/// `{ ok, path, blocks, added }`.
+fn op_doc_append(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let add = opts
+        .get("blocks")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing blocks (expected array)"))?;
+
+    let mut blocks = doc_blocks_or_paras(path)?;
+    if opts.get("page_break").and_then(Value::as_bool).unwrap_or(false) {
+        blocks.push(json!({ "kind": "pagebreak" }));
+    }
+    let added = add.len();
+    blocks.extend(add.iter().cloned());
+    let total = blocks.len();
+
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "blocks": total, "added": added }))
+}
+
 // ── full-text search (documents + presentations) ──────────────────────────────
 
 /// Search a document's paragraphs (docx/odt/html/md/rtf/txt) or pdf lines.

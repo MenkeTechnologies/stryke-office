@@ -69,6 +69,7 @@ exports = [
     "office__doc_links",
     "office__doc_stats",
     "office__doc_merge",
+    "office__doc_append",
     "office__doc_wordfreq",
     "office__doc_find",
     "office__slides_find",
