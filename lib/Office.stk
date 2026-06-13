@@ -54,11 +54,14 @@ fn Office::doc_read ($path) {
     @{ $o->{paragraphs} }
 }
 
-## Write a document. $blocks is an arrayref of
-## { kind => "para"|"heading", level => N, text => "..." }.
-## opts: format => "docx"|"odt" (default: from $path extension).
+## Write a document. $blocks is an arrayref of blocks:
+##   { kind => "para"|"heading", level, align, text }  (or runs => [{text, bold, ...}])
+##   { kind => "table", rows => [[cell, ...]] }
+##   { kind => "image", path => "...", width, height }   # px (docx)
+##   { kind => "pagebreak" }
+## opts: format => "docx"|"odt", page_size => [w, h] (twips, docx).
 fn Office::doc_write ($path, $blocks, %opts) {
-    val $r = { path => $path, blocks => $blocks, format => $opts{format} }
+    val $r = { path => $path, blocks => $blocks, format => $opts{format}, page_size => $opts{page_size} }
     Office::_decode("doc_write", office__doc_write(to_json($r)))
 }
 

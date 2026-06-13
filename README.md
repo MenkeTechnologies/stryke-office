@@ -157,6 +157,30 @@ Office::doc_write("r.docx", [
 ODF (ods/odt) and PDF are written unstyled — the `lo_odf`/`lo_core` serializers
 don't expose per-run styling (a documented crate limitation, not faked).
 
+### Structure (sheets + documents)
+
+```stryke
+# xlsx sheet-level structure
+Office::sheet_write("s.xlsx", [{
+    name => "S",
+    rows => [["Title", "x"], [{ link => "https://x.com", v => "site" }, "y"]],
+    merges      => [[0,0,0,1]],          # merge A1:B1
+    cols        => [{ col => 0, width => 24 }],
+    row_heights => [{ row => 0, height => 30 }],
+    freeze      => [1, 0],               # freeze top row
+    autofilter  => [0,0,2,1],
+    table       => [0,0,2,1],            # styled worksheet table
+}])
+
+# docx structure: tables, inline images, page breaks, page setup
+Office::doc_write("d.docx", [
+    { kind => "table", rows => [["Name","Qty"], ["Widget","3"]] },
+    { kind => "image", path => "logo.png", width => 80, height => 80 },
+    { kind => "pagebreak" },
+    { kind => "para", text => "Next page" },
+], page_size => [11906, 16838])          # A4 in twips
+```
+
 ### Images (handle-based, like a PIL `Image`)
 
 | Function | Returns | Notes |

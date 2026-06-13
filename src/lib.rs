@@ -377,17 +377,125 @@ fn xlsx_format(o: &serde_json::Map<String, Value>) -> Option<rust_xlsxwriter::Fo
     used.then_some(f)
 }
 
-fn write_xlsx(path: &str, sheets: &[(String, Vec<Vec<Value>>)]) -> Result<()> {
-    use rust_xlsxwriter::Workbook;
+fn quad(v: &Value, key: &str) -> Option<[u32; 4]> {
+    let a = v.get(key)?.as_array()?;
+    if a.len() < 4 {
+        return None;
+    }
+    Some([
+        a[0].as_u64()? as u32,
+        a[1].as_u64()? as u32,
+        a[2].as_u64()? as u32,
+        a[3].as_u64()? as u32,
+    ])
+}
+
+/// Write xlsx from raw sheet objects, honouring sheet-level structure:
+/// `{name, rows, merges:[[r1,c1,r2,c2]], cols:[{col,width}],
+///   row_heights:[{row,height}], freeze:[row,col], autofilter:[r1,c1,r2,c2],
+///   table:[r1,c1,r2,c2]}`. Cells may be scalars, rich objects, or
+/// `{link, v}` hyperlinks.
+fn write_xlsx(path: &str, sheets: &[Value]) -> Result<()> {
+    use rust_xlsxwriter::{Format, Table, Workbook};
     let mut wb = Workbook::new();
-    for (name, rows) in sheets {
+    for (i, s) in sheets.iter().enumerate() {
+        let name = s
+            .get("name")
+            .and_then(Value::as_str)
+            .map(String::from)
+            .unwrap_or_else(|| format!("Sheet{}", i + 1));
+        let empty = Vec::new();
+        let rows = s.get("rows").and_then(Value::as_array).unwrap_or(&empty);
         let ws = wb.add_worksheet();
-        ws.set_name(name)?;
+        ws.set_name(&name)?;
+
+        // Merged ranges: skip per-cell writes inside them; merge_range writes
+        // the top-left value.
+        let merges: Vec<[u32; 4]> = s
+            .get("merges")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|m| {
+                        let q = m.as_array()?;
+                        Some([
+                            q.first()?.as_u64()? as u32,
+                            q.get(1)?.as_u64()? as u32,
+                            q.get(2)?.as_u64()? as u32,
+                            q.get(3)?.as_u64()? as u32,
+                        ])
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let in_merge = |r: u32, c: u32| {
+            merges
+                .iter()
+                .any(|m| r >= m[0] && r <= m[2] && c >= m[1] && c <= m[3])
+        };
+
         for (r, row) in rows.iter().enumerate() {
-            for (c, cell) in row.iter().enumerate() {
-                let (r, c) = (r as u32, c as u16);
-                write_xlsx_cell(ws, r, c, cell)?;
+            if let Some(cells) = row.as_array() {
+                for (c, cell) in cells.iter().enumerate() {
+                    let (r, c) = (r as u32, c as u16);
+                    if in_merge(r, c as u32) {
+                        continue;
+                    }
+                    write_xlsx_cell(ws, r, c, cell)?;
+                }
             }
+        }
+
+        for m in &merges {
+            let text = rows
+                .get(m[0] as usize)
+                .and_then(|r| r.as_array())
+                .and_then(|cells| cells.get(m[1] as usize))
+                .map(|cell| match cell {
+                    Value::Object(o) => cell_to_string(
+                        o.get("v")
+                            .or_else(|| o.get("value"))
+                            .unwrap_or(&Value::Null),
+                    ),
+                    other => cell_to_string(other),
+                })
+                .unwrap_or_default();
+            ws.merge_range(m[0], m[1] as u16, m[2], m[3] as u16, &text, &Format::new())?;
+        }
+
+        if let Some(cols) = s.get("cols").and_then(Value::as_array) {
+            for c in cols {
+                if let (Some(col), Some(w)) = (
+                    c.get("col").and_then(Value::as_u64),
+                    c.get("width").and_then(Value::as_f64),
+                ) {
+                    ws.set_column_width(col as u16, w)?;
+                }
+            }
+        }
+        if let Some(rhs) = s.get("row_heights").and_then(Value::as_array) {
+            for rh in rhs {
+                if let (Some(row), Some(h)) = (
+                    rh.get("row").and_then(Value::as_u64),
+                    rh.get("height").and_then(Value::as_f64),
+                ) {
+                    ws.set_row_height(row as u32, h)?;
+                }
+            }
+        }
+        if let Some(f) = s.get("freeze").and_then(Value::as_array) {
+            if let (Some(row), Some(col)) = (
+                f.first().and_then(Value::as_u64),
+                f.get(1).and_then(Value::as_u64),
+            ) {
+                ws.set_freeze_panes(row as u32, col as u16)?;
+            }
+        }
+        if let Some(a) = quad(s, "autofilter") {
+            ws.autofilter(a[0], a[1] as u16, a[2], a[3] as u16)?;
+        }
+        if let Some(t) = quad(s, "table") {
+            ws.add_table(t[0], t[1] as u16, t[2], t[3] as u16, &Table::new())?;
         }
     }
     wb.save(path)?;
@@ -411,8 +519,28 @@ fn write_xlsx_cell(
             ws.write_number(r, c, n.as_f64().unwrap_or(0.0))?;
         }
         Value::Object(o) => {
+            if let Some(link) = o.get("link").and_then(Value::as_str) {
+                let url = rust_xlsxwriter::Url::new(link);
+                match o
+                    .get("v")
+                    .or_else(|| o.get("value"))
+                    .and_then(Value::as_str)
+                {
+                    Some(text) => {
+                        ws.write_url_with_text(r, c, url, text)?;
+                    }
+                    None => {
+                        ws.write_url(r, c, url)?;
+                    }
+                }
+                return Ok(());
+            }
             let fmt = xlsx_format(o);
-            if let Some(formula) = o.get("f").or_else(|| o.get("formula")).and_then(Value::as_str) {
+            if let Some(formula) = o
+                .get("f")
+                .or_else(|| o.get("formula"))
+                .and_then(Value::as_str)
+            {
                 match &fmt {
                     Some(f) => {
                         ws.write_formula_with_format(r, c, formula, f)?;
@@ -422,7 +550,10 @@ fn write_xlsx_cell(
                     }
                 }
             } else {
-                let v = o.get("v").or_else(|| o.get("value")).unwrap_or(&Value::Null);
+                let v = o
+                    .get("v")
+                    .or_else(|| o.get("value"))
+                    .unwrap_or(&Value::Null);
                 match (v, &fmt) {
                     (Value::Number(n), Some(f)) => {
                         ws.write_number_with_format(r, c, n.as_f64().unwrap_or(0.0), f)?;
@@ -477,13 +608,23 @@ fn write_ods(path: &str, sheets: &[(String, Vec<Vec<Value>>)]) -> Result<()> {
 
 fn op_sheet_write(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?.to_string();
-    let sheets = json_sheets(&opts)?;
-    match target_ext(&opts, &path).as_str() {
-        "xlsx" => write_xlsx(&path, &sheets)?,
-        "ods" => write_ods(&path, &sheets)?,
+    let n = match target_ext(&opts, &path).as_str() {
+        "xlsx" => {
+            let raw = opts
+                .get("sheets")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("missing sheets (expected array)"))?;
+            write_xlsx(&path, raw)?;
+            raw.len()
+        }
+        "ods" => {
+            let sheets = json_sheets(&opts)?;
+            write_ods(&path, &sheets)?;
+            sheets.len()
+        }
         other => return Err(anyhow!("unsupported spreadsheet write format: {other}")),
-    }
-    Ok(json!({"ok": true, "path": path, "sheets": sheets.len()}))
+    };
+    Ok(json!({"ok": true, "path": path, "sheets": n}))
 }
 
 // ── word processing ──────────────────────────────────────────────────────────
@@ -522,7 +663,10 @@ fn block_plain_text(b: &Value) -> String {
             .collect::<Vec<_>>()
             .join("")
     } else {
-        b.get("text").and_then(Value::as_str).unwrap_or("").to_string()
+        b.get("text")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
     }
 }
 
@@ -568,29 +712,93 @@ fn docx_align(a: &str) -> docx_rs::AlignmentType {
     }
 }
 
-/// Write docx with rich runs + paragraph alignment. A block is
-/// `{kind: "para"|"heading", level?, align?, text? | runs?: [{text, styling}]}`.
-fn write_docx(path: &str, blocks: &[Value]) -> Result<()> {
-    use docx_rs::{Docx, Paragraph};
-    let mut docx = Docx::new();
-    for b in blocks {
-        let kind = b.get("kind").and_then(Value::as_str).unwrap_or("para");
-        let mut p = Paragraph::new();
-        if let Some(runs) = b.get("runs").and_then(Value::as_array) {
-            for rj in runs {
-                p = p.add_run(docx_run(rj));
+/// Build a docx Paragraph from a value: styled `runs`, a single `{text,...}`,
+/// or a bare scalar.
+fn docx_para(v: &Value) -> docx_rs::Paragraph {
+    use docx_rs::{Paragraph, Run};
+    let mut p = Paragraph::new();
+    match v {
+        Value::Object(o) if o.contains_key("runs") => {
+            if let Some(runs) = o.get("runs").and_then(Value::as_array) {
+                for rj in runs {
+                    p = p.add_run(docx_run(rj));
+                }
             }
-        } else {
-            p = p.add_run(docx_run(b));
         }
-        if kind == "heading" {
-            let level = b.get("level").and_then(Value::as_u64).unwrap_or(1).clamp(1, 9);
-            p = p.style(&format!("Heading{level}"));
+        Value::Object(_) => p = p.add_run(docx_run(v)),
+        other => p = p.add_run(Run::new().add_text(cell_to_string(other))),
+    }
+    if let Some(a) = v.get("align").and_then(Value::as_str) {
+        p = p.align(docx_align(a));
+    }
+    p
+}
+
+/// Write docx with rich runs + alignment, plus tables, inline images, page
+/// breaks, and page setup. Blocks:
+///   `{kind:"para"|"heading", level?, align?, text?|runs?}`
+///   `{kind:"table", rows:[[cell,...]]}`  (cell = text or `{text|runs,...}`)
+///   `{kind:"image", path, width?, height?}`  (px)
+///   `{kind:"pagebreak"}`
+/// Doc opts: `page_size:[w,h]` (twips).
+fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
+    use docx_rs::{BreakType, Docx, Paragraph, Pic, Run, Table, TableCell, TableRow};
+    let mut docx = Docx::new();
+    if let Some(ps) = opts.get("page_size").and_then(Value::as_array) {
+        if let (Some(w), Some(h)) = (
+            ps.first().and_then(Value::as_u64),
+            ps.get(1).and_then(Value::as_u64),
+        ) {
+            docx = docx.page_size(w as u32, h as u32);
         }
-        if let Some(a) = b.get("align").and_then(Value::as_str) {
-            p = p.align(docx_align(a));
+    }
+    for b in blocks {
+        match b.get("kind").and_then(Value::as_str).unwrap_or("para") {
+            "table" => {
+                let mut trows = Vec::new();
+                if let Some(rows) = b.get("rows").and_then(Value::as_array) {
+                    for row in rows {
+                        let mut cells = Vec::new();
+                        if let Some(rc) = row.as_array() {
+                            for cell in rc {
+                                cells.push(TableCell::new().add_paragraph(docx_para(cell)));
+                            }
+                        }
+                        trows.push(TableRow::new(cells));
+                    }
+                }
+                docx = docx.add_table(Table::new(trows));
+            }
+            "image" => {
+                let img_path = req_str(b, "path")?;
+                let bytes = std::fs::read(img_path)?;
+                let mut pic = Pic::new(&bytes);
+                if let (Some(w), Some(h)) = (
+                    b.get("width").and_then(Value::as_u64),
+                    b.get("height").and_then(Value::as_u64),
+                ) {
+                    // px -> EMU (914400 EMU/inch at 96 dpi = 9525 EMU/px)
+                    pic = pic.size(w as u32 * 9525, h as u32 * 9525);
+                }
+                docx = docx.add_paragraph(Paragraph::new().add_run(Run::new().add_image(pic)));
+            }
+            "pagebreak" => {
+                docx = docx
+                    .add_paragraph(Paragraph::new().add_run(Run::new().add_break(BreakType::Page)));
+            }
+            kind => {
+                let mut p = docx_para(b);
+                if kind == "heading" {
+                    let level = b
+                        .get("level")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(1)
+                        .clamp(1, 9);
+                    p = p.style(&format!("Heading{level}"));
+                }
+                docx = docx.add_paragraph(p);
+            }
         }
-        docx = docx.add_paragraph(p);
     }
     let file = std::fs::File::create(path)?;
     docx.build().pack(file)?;
@@ -619,7 +827,7 @@ fn op_doc_write(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?.to_string();
     let blocks = blocks_of(&opts)?;
     match target_ext(&opts, &path).as_str() {
-        "docx" => write_docx(&path, &blocks)?,
+        "docx" => write_docx(&path, &blocks, &opts)?,
         "odt" => write_odt(&path, &blocks)?,
         other => return Err(anyhow!("unsupported document write format: {other}")),
     }

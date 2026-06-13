@@ -336,8 +336,14 @@ fn xlsx_rich_cells_and_formula_round_trip() {
     assert_eq!(w["ok"], true, "rich xlsx write failed: {w}");
     // Values must survive (formatting is write-only; calamine returns values).
     let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
-    assert_eq!(r["sheets"][0]["rows"][0][0], "Header", "styled text value preserved");
-    assert_eq!(r["sheets"][0]["rows"][1][0], 42.0, "formatted number preserved");
+    assert_eq!(
+        r["sheets"][0]["rows"][0][0], "Header",
+        "styled text value preserved"
+    );
+    assert_eq!(
+        r["sheets"][0]["rows"][1][0], 42.0,
+        "formatted number preserved"
+    );
     std::fs::remove_file(&path).ok();
 }
 
@@ -364,8 +370,127 @@ fn docx_rich_runs_and_align_round_trip() {
         .map(|p| p.as_str().unwrap_or(""))
         .collect::<Vec<_>>()
         .join("");
-    assert!(joined.contains("Bold and italic"), "rich runs concatenate: {joined}");
+    assert!(
+        joined.contains("Bold and italic"),
+        "rich runs concatenate: {joined}"
+    );
     std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn xlsx_structure_merge_cols_freeze_hyperlink() {
+    let path = tmp("struct.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{
+                "name":"S",
+                "rows":[["Title","x"],[{{"link":"https://example.com","v":"site"}},"y"]],
+                "merges":[[0,0,0,1]],
+                "cols":[{{"col":0,"width":24}}],
+                "row_heights":[{{"row":0,"height":30}}],
+                "freeze":[1,0],
+                "autofilter":[1,0,1,1]
+            }}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "structured xlsx write failed: {w}");
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(
+        r["sheets"][0]["rows"][0][0], "Title",
+        "merged top-left value preserved"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn xlsx_worksheet_table() {
+    let path = tmp("table.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"T","rows":[["h1","h2"],["a","b"],["c","d"]],"table":[0,0,2,1]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "worksheet-table write failed: {w}");
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["sheets"][0]["rows"][1][0], "a", "table data preserved");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn docx_table_and_pagebreak_round_trip() {
+    let path = tmp("table.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[
+                {{"kind":"table","rows":[["Name","Qty"],["Widget","3"]]}},
+                {{"kind":"pagebreak"}},
+                {{"kind":"para","text":"After the break"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx table+pagebreak write failed: {w}");
+    let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
+    let joined = r["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("|");
+    assert!(
+        joined.contains("Widget"),
+        "table cell text present: {joined}"
+    );
+    assert!(
+        joined.contains("After the break"),
+        "post-break para present: {joined}"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn docx_inline_image() {
+    let png = tmp("inline.png");
+    let docx = tmp("withimg.docx");
+    // Make a small PNG to embed.
+    let n = call(
+        office__img_new,
+        r#"{"width":40,"height":40,"color":[0,128,0,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{png}"}}"#),
+    );
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{docx}","blocks":[
+                {{"kind":"para","text":"Logo:"}},
+                {{"kind":"image","path":"{png}","width":40,"height":40}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx inline image write failed: {w}");
+    // Reopen: must parse without error and keep the caption paragraph.
+    let r = call(office__doc_read, &format!(r#"{{"path":"{docx}"}}"#));
+    let joined = r["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("|");
+    assert!(
+        joined.contains("Logo:"),
+        "caption preserved alongside image: {joined}"
+    );
+    std::fs::remove_file(&png).ok();
+    std::fs::remove_file(&docx).ok();
 }
 
 #[test]
