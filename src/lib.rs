@@ -1582,6 +1582,11 @@ export!(office__img_dither, op_img_dither);
 export!(office__img_quantize, op_img_quantize);
 export!(office__img_favicon, op_img_favicon);
 
+// barcode + QR-code generation (-> image handle, composes with image surface)
+include!("barcode.rs");
+export!(office__barcode_qr, op_barcode_qr);
+export!(office__barcode_1d, op_barcode_1d);
+
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
 include!("chart_svg.rs");

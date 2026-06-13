@@ -792,3 +792,23 @@ fn Office::chart_save ($type, $path, %opts) {
     $r{path} = $path
     Office::_decode("chart_save", office__chart_save(to_json(\%r)))
 }
+
+## Generate a QR code -> image handle. opts: ec (L/M/Q/H, default M),
+## scale (px/module, 6), quiet (modules, 4), fg, bg. Returns
+## { handle, width, height, modules }. Save/embed via the image surface.
+fn Office::barcode_qr ($data, %opts) {
+    var %r = %opts
+    $r{data} = $data
+    Office::_decode("barcode_qr", office__barcode_qr(to_json(\%r)))
+}
+
+## Generate a 1D barcode -> image handle. $symbology is one of code128,
+## code39, code93, code11, codabar, ean13, ean8, upca, itf, std2of5.
+## opts: scale (px/bar, 2), height (px, 80), quiet (px), fg, bg, set
+## (Code128 A/B/C). Returns { handle, width, height, symbology, bars }.
+fn Office::barcode_1d ($symbology, $data, %opts) {
+    var %r = %opts
+    $r{symbology} = $symbology
+    $r{data} = $data
+    Office::_decode("barcode_1d", office__barcode_1d(to_json(\%r)))
+}

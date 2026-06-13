@@ -411,6 +411,35 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_quantize($h, %opts)` | median-cut to `colors` palette + remap → `{colors}` |
 | `img_favicon($h, $path, %opts)` | multi-resolution `.ico` (`sizes`, default 16/32/48) |
 
+### Barcodes & QR codes (data → image handle → any format)
+
+Both produce an image handle, so the result composes with the entire image
+surface — save to any raster format, `img_paste` onto a label canvas, or embed
+in a PDF (`pdf_build`) or docx. No separate output path.
+
+| Function | Notes |
+|---|---|
+| `barcode_qr(%opts)` | QR code; `data`, `ec` (L/M/Q/H, default M), `scale` px/module (6), `quiet` modules (4), `fg`/`bg` → `{handle, width, height, modules}` |
+| `barcode_1d(%opts)` | 1D barcode; `data`, `symbology` (default `code128`), `scale` px/bar (2), `height` px (80), `quiet` px, `fg`/`bg`, `set` (Code128 A/B/C) → `{handle, width, height, symbology, bars}` |
+
+Supported `symbology` values: `code128`, `code39`, `code93`, `code11`,
+`codabar`, `ean13`, `ean8`, `upca`, `itf` (interleaved 2-of-5), `std2of5`.
+
+```perl
+# QR for a URL, saved as PNG
+my $qr = Office::barcode_qr(data => "https://example.com", ec => "H", scale => 8);
+Office::img_save($qr->{handle}, path => "qr.png");
+
+# Code128 label embedded straight into a PDF
+my $bc = Office::barcode_1d(symbology => "code128", data => "SKU-00421", height => 90);
+Office::pdf_build(path => "label.pdf", pages => [{ elements => [
+  { image => $bc->{handle}, x => 40, y => 60 },
+] }]);
+```
+
+Generated natively with `qrcode` (matrix) + `barcoders` (1D) — no `zint`, no
+ImageMagick, no subprocess.
+
 ## [0x05] No external binaries
 
 Every format is handled by a vendored Rust crate, statically linked into
@@ -430,6 +459,8 @@ the cdylib:
 | image read + write (all formats) | `image` |
 | image drawing (shapes) | `imageproc` |
 | image text drawing | `ab_glyph` + vendored `assets/DejaVuSans.ttf` |
+| QR-code generation | `qrcode` (matrix only, no second image-crate pin) |
+| 1D barcode generation | `barcoders` (`default-features = false`, `std`) |
 
 There is deliberately no call to `soffice` / LibreOffice. That keeps the
 package self-contained and reproducible — `scp` the artifact and it runs.
@@ -459,6 +490,7 @@ stryke-office/
   src/image_ops.rs       # PIL-complete image I/O + manipulation
   src/chart_render.rs    # raster chart renderer (all chart types)
   src/chart_svg.rs       # vector (SVG/PDF) chart renderer
+  src/barcode.rs         # QR + 1D barcode generation (-> image handle)
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
   stryke.toml            # package manifest + [ffi] table
