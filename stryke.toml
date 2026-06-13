@@ -48,6 +48,7 @@ exports = [
     "office__pdf_delete",
     "office__pdf_reorder",
     "office__pdf_search",
+    "office__pdf_crop",
     "office__pdf_burst",
     "office__pdf_chunk",
     "office__pdf_attach",

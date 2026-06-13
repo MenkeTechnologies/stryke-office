@@ -175,7 +175,8 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_merge($inputs, $path)` | `{pages, merged}` | concatenate PDFs (input order) |
 | `Office::pdf_split($path, $pages, $output)` | `{pages}` | extract 1-based page subset to a new PDF |
 | `Office::pdf_rotate($path, $angle, $output, %opts)` | `{rotated, angle}` | rotate pages 90°-multiples; `pages` subset |
-| `Office::pdf_info($path)` | `{pages, version, title?, author?, …}` | page count + document metadata |
+| `Office::pdf_info($path)` | `{pages, version, width, height, mediabox, cropbox?, title?, …}` | page count, first-page geometry + document metadata |
+| `Office::pdf_crop($path, $output, %opts)` | `{cropped}` | set the crop box; `box`=[x0,y0,x1,y1] or `margins`=[l,b,r,t]; `pages` subset |
 | `Office::pdf_watermark($path, $text, $output, %opts)` | `{stamped}` | rotated text watermark on every page; `size`/`color`/`angle` |
 | `Office::pdf_page_numbers($path, $output, %opts)` | `{pages}` | footer page numbers; `format` (`{n}`/`{total}`), `size`/`color`/`y` |
 | `Office::pdf_encrypt($path, $output, %opts)` | `{method}` | password-protect; `owner_password`/`user_password`, `aes` (AES-128 vs RC4), `key_length`, `permissions` |

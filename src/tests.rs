@@ -2054,6 +2054,53 @@ fn pdf_burst_one_file_per_page() {
 }
 
 #[test]
+fn pdf_crop_sets_cropbox() {
+    let src = tmp("crop.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"heading","level":1,"text":"X"}}]}}"#),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // pdf_info now reports first-page geometry (A4 = 595x842)
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{src}"}}"#));
+    assert_eq!(info["width"], 595.0, "A4 width: {info}");
+    assert_eq!(info["height"], 842.0, "A4 height: {info}");
+
+    // explicit box
+    let cb = tmp("crop_box.pdf");
+    let r = call(
+        office__pdf_crop,
+        &format!(r#"{{"path":"{src}","box":[50,50,300,400],"output":"{cb}"}}"#),
+    );
+    assert_eq!(r["cropped"], 1, "one page cropped: {r}");
+    let ib = call(office__pdf_info, &format!(r#"{{"path":"{cb}"}}"#));
+    assert_eq!(
+        ib["cropbox"],
+        json!([50.0, 50.0, 300.0, 400.0]),
+        "cropbox: {ib}"
+    );
+
+    // margins inset from MediaBox: [10,10,10,10] -> [10,10,585,832]
+    let cm = tmp("crop_m.pdf");
+    let r2 = call(
+        office__pdf_crop,
+        &format!(r#"{{"path":"{src}","margins":[10,10,10,10],"output":"{cm}"}}"#),
+    );
+    assert_eq!(r2["ok"], true, "margins crop: {r2}");
+    let im = call(office__pdf_info, &format!(r#"{{"path":"{cm}"}}"#));
+    assert_eq!(
+        im["cropbox"],
+        json!([10.0, 10.0, 585.0, 832.0]),
+        "margin cropbox: {im}"
+    );
+
+    for f in [&src, &cb, &cm] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_chunk_fixed_size() {
     // 5-page source
     let src = tmp("chunk.pdf");
