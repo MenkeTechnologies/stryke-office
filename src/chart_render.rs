@@ -213,7 +213,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     let ph = (b - t).max(1) as f64;
 
     // Kinds that don't need a `series` array (or use a different shape).
-    let needs_series = !matches!(kind.as_str(), "sankey" | "gauge" | "heatmap" | "sunburst");
+    let needs_series = !matches!(kind.as_str(), "sankey" | "gauge" | "heatmap" | "sunburst" | "calendar");
 
     // Non-cartesian renderers draw into `img` then we fall through to the
     // shared legend/finish path. `false` => handle below in the cartesian arm.
@@ -270,6 +270,15 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         "radial_bar" => {
             require_series(&opts)?;
             render_radial_bar(&mut img, &fnt, series, &cats, l, t, r, b, black)
+        }
+        "calendar" => render_calendar(&mut img, &opts, series, l, t, r, b),
+        "parallel" => {
+            require_series(&opts)?;
+            render_parallel(&mut img, &fnt, series, &cats, l, t, r, b, black, grid)
+        }
+        "hexbin" => {
+            require_series(&opts)?;
+            render_hexbin(&mut img, &opts, series, l, t, r, b)
         }
         _ => special = false,
     }
@@ -1909,4 +1918,147 @@ fn op_chart_grid(opts: Value) -> Result<Value> {
 /// Image info plus a chart count, for chart_grid.
 fn info_json_chart(handle: u64, img: &DynamicImage, charts: usize) -> Value {
     json!({"handle": handle, "width": img.width(), "height": img.height(), "charts": charts})
+}
+
+/// Calendar heatmap (GitHub-style): `values` (or the first series' data) laid
+/// out 7 rows × N columns, colored white→green by value.
+fn render_calendar(img: &mut RgbaImage, opts: &Value, series: &[Value], l: i32, t: i32, r: i32, b: i32) {
+    let values: Vec<f64> = opts
+        .get("values")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_f64).collect())
+        .unwrap_or_else(|| series.first().map(series_nums).unwrap_or_default());
+    let n = values.len();
+    if n == 0 {
+        return;
+    }
+    let (lo, hi) = values.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, c), &v| (a.min(v), c.max(v)));
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let cols = opts.get("columns").and_then(Value::as_u64).map(|c| c as usize).unwrap_or(n.div_ceil(7)).max(1);
+    let cell = (((r - l) / cols as i32).min((b - t) / 7)).max(3);
+    for (i, &v) in values.iter().enumerate() {
+        let (col, row) = (i / 7, i % 7);
+        let frac = (v - lo) / span;
+        // white → GitHub green (#216e39)
+        let color = Rgba([
+            (255.0 - frac * (255.0 - 0x21 as f64)) as u8,
+            (255.0 - frac * (255.0 - 0x6e as f64)) as u8,
+            (255.0 - frac * (255.0 - 0x39 as f64)) as u8,
+            255,
+        ]);
+        let x = l + col as i32 * cell;
+        let y = t + row as i32 * cell;
+        draw_filled_rect_mut(img, Rect::at(x + 1, y + 1).of_size((cell - 2).max(1) as u32, (cell - 2).max(1) as u32), color);
+    }
+}
+
+/// Parallel coordinates: one vertical axis per dimension, each series a
+/// polyline crossing all axes (each axis independently normalized).
+#[allow(clippy::too_many_arguments)]
+fn render_parallel(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>, grid: Rgba<u8>) {
+    let ndim = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0).max(cats.len());
+    if ndim < 2 {
+        return;
+    }
+    let mut dmin = vec![f64::INFINITY; ndim];
+    let mut dmax = vec![f64::NEG_INFINITY; ndim];
+    for s in series {
+        for (d, v) in series_nums(s).into_iter().enumerate() {
+            dmin[d] = dmin[d].min(v);
+            dmax[d] = dmax[d].max(v);
+        }
+    }
+    let xat = |d: usize| l as f64 + d as f64 / (ndim - 1) as f64 * (r - l) as f64;
+    let yat = |d: usize, v: f64| {
+        let span = (dmax[d] - dmin[d]).abs().max(1e-9);
+        b as f64 - (v - dmin[d]) / span * (b - t) as f64
+    };
+    for d in 0..ndim {
+        let x = xat(d) as f32;
+        draw_line_segment_mut(img, (x, t as f32), (x, b as f32), grid);
+        if let Some(c) = cats.get(d) {
+            draw_text_mut(img, black, x as i32 - 8, b + 4, PxScale::from(11.0), fnt, c);
+        }
+    }
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        let data = series_nums(s);
+        for d in 1..data.len() {
+            draw_line_segment_mut(img, (xat(d - 1) as f32, yat(d - 1, data[d - 1]) as f32), (xat(d) as f32, yat(d, data[d]) as f32), color);
+        }
+    }
+}
+
+// ── hex grid math (flat-top, redblobgames conventions) ───────────────────────
+
+fn pixel_to_axial(px: f64, py: f64, size: f64) -> (f64, f64) {
+    let q = (2.0 / 3.0 * px) / size;
+    let r = (-1.0 / 3.0 * px + 3f64.sqrt() / 3.0 * py) / size;
+    (q, r)
+}
+
+fn axial_round(q: f64, r: f64) -> (i32, i32) {
+    let (x, z) = (q, r);
+    let y = -x - z;
+    let (mut rx, mut ry, mut rz) = (x.round(), y.round(), z.round());
+    let (dx, dy, dz) = ((rx - x).abs(), (ry - y).abs(), (rz - z).abs());
+    if dx > dy && dx > dz {
+        rx = -ry - rz;
+    } else if dy > dz {
+        ry = -rx - rz;
+    } else {
+        rz = -rx - ry;
+    }
+    let _ = ry;
+    (rx as i32, rz as i32)
+}
+
+fn axial_to_pixel(q: i32, r: i32, size: f64) -> (f64, f64) {
+    let px = size * 1.5 * q as f64;
+    let py = size * 3f64.sqrt() * (r as f64 + q as f64 / 2.0);
+    (px, py)
+}
+
+/// Hexbin: bin scatter points (`data:[[x,y],...]` across series) into a
+/// flat-top hex grid, colored white→blue by count. opts: radius (px, 16).
+fn render_hexbin(img: &mut RgbaImage, opts: &Value, series: &[Value], l: i32, t: i32, r: i32, b: i32) {
+    let pts: Vec<(f64, f64)> = series.iter().flat_map(series_points).collect();
+    if pts.is_empty() {
+        return;
+    }
+    let (mut xmn, mut xmx, mut ymn, mut ymx) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for &(x, y) in &pts {
+        xmn = xmn.min(x);
+        xmx = xmx.max(x);
+        ymn = ymn.min(y);
+        ymx = ymx.max(y);
+    }
+    let xspan = (xmx - xmn).abs().max(1e-9);
+    let yspan = (ymx - ymn).abs().max(1e-9);
+    let size = opts.get("radius").and_then(Value::as_f64).unwrap_or(16.0).max(4.0);
+    let to_px = |x: f64, y: f64| ((x - xmn) / xspan * (r - l) as f64, (ymx - y) / yspan * (b - t) as f64);
+    let mut bins: std::collections::HashMap<(i32, i32), u32> = std::collections::HashMap::new();
+    for &(x, y) in &pts {
+        let (px, py) = to_px(x, y);
+        let (q, rr) = pixel_to_axial(px, py, size);
+        *bins.entry(axial_round(q, rr)).or_insert(0) += 1;
+    }
+    let maxc = bins.values().copied().max().unwrap_or(1) as f64;
+    for (&(q, rr), &cnt) in &bins {
+        let (cx, cy) = axial_to_pixel(q, rr, size);
+        let (cx, cy) = (l as f64 + cx, t as f64 + cy);
+        let frac = cnt as f64 / maxc;
+        let color = Rgba([(255.0 - frac * 187.0) as u8, (255.0 - frac * 141.0) as u8, 255, 255]);
+        let poly: Vec<Point<i32>> = (0..6)
+            .map(|i| {
+                let a = std::f64::consts::PI / 3.0 * i as f64; // flat-top: first vertex at 0°
+                Point::new((cx + size * a.cos()) as i32, (cy + size * a.sin()) as i32)
+            })
+            .collect();
+        let mut p = poly;
+        p.dedup();
+        if p.len() >= 3 {
+            draw_polygon_mut(img, &p, color);
+        }
+    }
 }
