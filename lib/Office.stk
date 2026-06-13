@@ -104,6 +104,21 @@ fn Office::records_write ($path, $records, %opts) {
         office__records_write(to_json({ path => $path, records => $records, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
 }
 
+## Export a sheet to a JSON file (array of header-keyed objects). opts: sheet =>
+## name/index, pretty => 0 for compact. Returns { ok, path, count }.
+fn Office::sheet_to_json ($path, $output, %opts) {
+    Office::_decode("sheet_to_json",
+        office__sheet_to_json(to_json({ path => $path, output => $output, sheet => $opts{sheet}, pretty => $opts{pretty} })))
+}
+
+## Import a JSON file (array of objects) into a spreadsheet. opts: fields =>
+## explicit column order, sheet_name, format => override. Returns
+## { ok, path, rows, fields }.
+fn Office::json_to_sheet ($input, $output, %opts) {
+    Office::_decode("json_to_sheet",
+        office__json_to_sheet(to_json({ input => $input, output => $output, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
+}
+
 ## Sort a sheet's data rows by $by (column name or 0-based index), preserving
 ## the header. opts: sheet => name/index, descending => 1, numeric => 1|0
 ## (default auto-detect), ignore_case => 1 (text mode), header => 0 if the first

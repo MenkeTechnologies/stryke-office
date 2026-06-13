@@ -485,6 +485,45 @@ fn sheet_sort_by_column() {
 }
 
 #[test]
+fn sheet_json_interop_round_trip() {
+    let path = tmp("ji.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["a",1],["b",2]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // sheet -> json file
+    let jf = tmp("ji.json");
+    let sj = call(
+        office__sheet_to_json,
+        &format!(r#"{{"path":"{path}","output":"{jf}"}}"#),
+    );
+    assert_eq!(sj["count"], 2, "two records exported: {sj}");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&jf).unwrap()).unwrap();
+    assert_eq!(parsed[0]["name"], "a", "json rec0 name: {parsed}");
+    assert_eq!(parsed[1]["qty"], 2.0, "json rec1 qty: {parsed}");
+
+    // json file -> sheet
+    let out = tmp("ji_out.xlsx");
+    let js = call(
+        office__json_to_sheet,
+        &format!(r#"{{"input":"{jf}","output":"{out}"}}"#),
+    );
+    assert_eq!(js["rows"], 2, "wrote 2 rows: {js}");
+    let r = call(office__sheet_records, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(r["records"][0]["name"], "a", "round-trip name: {r}");
+    assert_eq!(r["records"][1]["qty"], 2.0, "round-trip qty: {r}");
+
+    for f in [&path, &jf, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(
