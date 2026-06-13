@@ -2258,6 +2258,96 @@ fn extract_images_from_docx_to_dir() {
 }
 
 #[test]
+fn replace_text_coalesces_split_runs() {
+    // A placeholder split across two w:t runs (the OOXML failure mode a naive
+    // per-node replace can't handle) must still be matched and filled.
+    let xml = br#"<w:document><w:body><w:p><w:r><w:t>Hello {{na</w:t></w:r><w:r><w:t xml:space="preserve">me}}!</w:t></w:r></w:p></w:body></w:document>"#;
+    let (out, n) = replace_in_xml(
+        xml,
+        "w:p",
+        Some("w:t"),
+        &[("{{name}}".to_string(), "Jane".to_string())],
+    );
+    assert_eq!(n, 1, "one substitution");
+    let s = String::from_utf8(out).unwrap();
+    assert!(s.contains("Hello Jane!"), "joined into first run: {s}");
+    // a paragraph with no match is left intact (both runs preserved)
+    let (out2, n2) = replace_in_xml(xml, "w:p", Some("w:t"), &[("zzz".into(), "q".into())]);
+    assert_eq!(n2, 0);
+    let s2 = String::from_utf8(out2).unwrap();
+    assert!(
+        s2.contains("{{na") && s2.contains("me}}!"),
+        "untouched: {s2}"
+    );
+}
+
+#[test]
+fn replace_text_docx_round_trips() {
+    let path = tmp("tmpl.docx");
+    call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[{{"kind":"para","text":"Dear {{{{name}}}}, your invoice {{{{id}}}} is ready."}}]}}"#
+        ),
+    );
+    let r = call(
+        office__replace_text,
+        &format!(
+            r#"{{"path":"{path}","replace":{{"{{{{name}}}}":"Jane","{{{{id}}}}":"INV-42"}}}}"#
+        ),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["replaced"], 2, "two placeholders: {r}");
+    let d = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
+    let joined = d["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("|");
+    assert!(
+        joined.contains("Dear Jane, your invoice INV-42 is ready."),
+        "{joined}"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn replace_text_xlsx_strings() {
+    let path = tmp("tmpl.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["Hi {{who}}",1]]}}]}}"#),
+    );
+    let r = call(
+        office__replace_text,
+        &format!(r#"{{"path":"{path}","replace":{{"{{who}}":"World"}}}}"#),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(r["replaced"].as_u64().unwrap() >= 1, "{r}");
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["sheets"][0]["rows"][0][0], "Hi World", "{s}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn replace_text_unsupported_format() {
+    let path = tmp("x.pdf");
+    std::fs::write(&path, "%PDF-1.4\n").ok();
+    let r = call(
+        office__replace_text,
+        &format!(r#"{{"path":"{path}","replace":{{"a":"b"}}}}"#),
+    );
+    assert!(
+        err_of(&r).contains("unsupported format"),
+        "got: {}",
+        err_of(&r)
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn extract_images_unsupported_format() {
     let path = tmp("x.txt");
     std::fs::write(&path, "x").ok();

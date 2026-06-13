@@ -196,6 +196,17 @@ fn Office::extract_images ($path, %opts) {
     Office::_decode("extract_images", office__extract_images(to_json(\%r)))
 }
 
+## Fill a template: search/replace text across a document's run-text parts.
+## $replace is a hashref of { find => replacement }. Placeholders split across
+## runs (the OOXML norm) are coalesced per paragraph, so `{{name}}` matches
+## even when Word stored it as several runs. opts: output (defaults to $path).
+## Works on OOXML (docx/pptx/xlsx) and ODF. Returns { ok, path, replaced }.
+fn Office::replace_text ($path, $replace, %opts) {
+    var %r = { path => $path, replace => $replace }
+    if exists $opts{output} { $r{output} = $opts{output} }
+    Office::_decode("replace_text", office__replace_text(to_json(\%r)))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new

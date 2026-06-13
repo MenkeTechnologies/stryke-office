@@ -1526,6 +1526,10 @@ export!(office__meta_write, op_meta_write);
 include!("extract.rs");
 export!(office__extract_images, op_extract_images);
 
+// document text search/replace (template / mail-merge filling)
+include!("textops.rs");
+export!(office__replace_text, op_replace_text);
+
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");
 

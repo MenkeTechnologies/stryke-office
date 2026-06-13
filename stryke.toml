@@ -30,6 +30,7 @@ exports = [
     "office__meta_read",
     "office__meta_write",
     "office__extract_images",
+    "office__replace_text",
     "office__img_open",
     "office__img_new",
     "office__img_save",
