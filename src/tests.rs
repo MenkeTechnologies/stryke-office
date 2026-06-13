@@ -385,6 +385,86 @@ fn doc_blocks_ordered_structural_read() {
 }
 
 #[test]
+fn slides_read_extracts_speaker_notes() {
+    use std::io::Write as _;
+    use zip::write::SimpleFileOptions;
+    let opt = || SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    // pptx: slide1 + its rels pointing at notesSlide1
+    let px = tmp("notes.pptx");
+    {
+        let mut zw = zip::ZipWriter::new(std::fs::File::create(&px).unwrap());
+        zw.start_file("ppt/slides/slide1.xml", opt()).unwrap();
+        zw.write_all(
+            br#"<p:sld xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>Slide Title</a:t></a:r></a:p></p:sld>"#,
+        )
+        .unwrap();
+        zw.start_file("ppt/slides/_rels/slide1.xml.rels", opt())
+            .unwrap();
+        zw.write_all(
+            br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/>
+</Relationships>"#,
+        )
+        .unwrap();
+        zw.start_file("ppt/notesSlides/notesSlide1.xml", opt())
+            .unwrap();
+        zw.write_all(
+            br#"<p:notes xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>Remember to smile</a:t></a:r></a:p></p:notes>"#,
+        )
+        .unwrap();
+        zw.finish().unwrap();
+    }
+    let ps = call(office__slides_read, &format!(r#"{{"path":"{px}"}}"#));
+    assert_eq!(
+        ps["slides"][0]["text"][0], "Slide Title",
+        "pptx slide text: {ps}"
+    );
+    assert_eq!(
+        ps["slides"][0]["notes"][0], "Remember to smile",
+        "pptx speaker notes: {ps}"
+    );
+
+    // odp: a draw:page with body text + a presentation:notes subtree
+    let ox = tmp("notes.odp");
+    {
+        let mut zw = zip::ZipWriter::new(std::fs::File::create(&ox).unwrap());
+        zw.start_file("content.xml", opt()).unwrap();
+        zw.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:presentation>
+  <draw:page>
+   <draw:frame><draw:text-box><text:p>Slide Body</text:p></draw:text-box></draw:frame>
+   <presentation:notes><draw:frame><draw:text-box><text:p>Speaker note here</text:p></draw:text-box></draw:frame></presentation:notes>
+  </draw:page>
+ </office:presentation></office:body>
+</office:document-content>"#,
+        )
+        .unwrap();
+        zw.finish().unwrap();
+    }
+    let os = call(office__slides_read, &format!(r#"{{"path":"{ox}"}}"#));
+    assert_eq!(
+        os["slides"][0]["text"],
+        json!(["Slide Body"]),
+        "odp slide text only: {os}"
+    );
+    assert_eq!(
+        os["slides"][0]["notes"],
+        json!(["Speaker note here"]),
+        "odp notes separated: {os}"
+    );
+
+    std::fs::remove_file(&px).ok();
+    std::fs::remove_file(&ox).ok();
+}
+
+#[test]
 fn missing_path_errors_cleanly() {
     let v = call(office__sheet_read, "{}");
     assert_eq!(err_of(&v), "missing path");

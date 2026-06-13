@@ -102,6 +102,8 @@ fn Office::doc_write ($path, $blocks, %opts) {
 
 ## Read a presentation (pptx/odp). Returns an arrayref of slides, each
 ## { text => [line, ...] }.
+## Read a presentation (pptx/odp). Returns a list of { text => [...],
+## notes => [...] } per slide — `notes` holds the speaker notes.
 fn Office::slides_read ($path) {
     Office::_decode("slides_read", office__slides_read(to_json({ path => $path })))->{slides}
 }
