@@ -38,6 +38,7 @@ exports = [
     "office__img_draw_circle",
     "office__img_draw_text",
     "office__img_close",
+    "office__chart_render",
 ]
 
 [scripts]

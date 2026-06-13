@@ -1,0 +1,44 @@
+#!/usr/bin/env stryke
+# examples/excel_to_charts.stk — the headline workflow:
+# write an Excel file, read it back, then render its data as several chart
+# types and save each in a different image format.
+# Run:   s examples/excel_to_charts.stk
+
+use Office
+
+# 1. Create an Excel workbook with some data.
+val $xlsx = "/tmp/office-sales.xlsx"
+Office::sheet_write($xlsx, [{
+    name => "Sales",
+    rows => [
+        ["Quarter", "Sales", "Cost"],
+        ["Q1", 120, 80],
+        ["Q2", 150, 95],
+        ["Q3", 130, 88],
+        ["Q4", 180, 110],
+    ],
+}])
+p "wrote $xlsx"
+
+# 2. Parse it back.
+val $sheets = Office::sheet_read($xlsx)
+val @rows = @{ $sheets->[0]{rows} }
+val @cats     = map { $_->[0] } @rows[1..$#rows]
+val @sales    = map { $_->[1] } @rows[1..$#rows]
+val @cost     = map { $_->[2] } @rows[1..$#rows]
+
+# 3. Render the data as many chart types, each saved in a different format.
+val $series = [
+    { name => "Sales", data => \@sales },
+    { name => "Cost",  data => \@cost },
+]
+
+var @specs = (["bar", "png"], ["line", "jpg"], ["area", "webp"], ["pie", "bmp"])
+for val $spec (@specs) {
+    val ($type, $fmt) = @$spec
+    val $chart = Office::chart_render($type, $series, title => "Quarterly $type", categories => \@cats)
+    val $out = "/tmp/office-chart-$type.$fmt"
+    Office::img_save($chart->{handle}, $out)
+    Office::img_close($chart->{handle})
+    p "rendered $type chart -> $out"
+}

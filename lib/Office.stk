@@ -206,3 +206,22 @@ fn Office::img_draw_text ($handle, $x, $y, $text, $color, %opts) {
 fn Office::img_close ($handle) {
     Office::_decode("img_close", office__img_close(to_json({ handle => $handle })))
 }
+
+# ── charts (data -> image handle -> any format) ─────────────────────
+#
+# Render a chart to an image handle, then img_save it in whatever format
+# you want (png/jpeg/gif/bmp/webp/tiff) or process it further. Fully
+# self-contained — no plotters, no system fonts, no external binaries.
+
+## Render a chart. $type: "bar"|"column"|"line"|"area"|"scatter"|"pie".
+## $series: arrayref of { name, data => [n, ...], color? }  (scatter data is
+## [[x, y], ...]; pie uses the first series' data as slices). opts: title,
+## width (800), height (600), categories => [labels]. Returns
+## { handle, width, height, type } — pass handle to Office::img_save / img_*.
+fn Office::chart_render ($type, $series, %opts) {
+    val $r = {
+        type => $type, series => $series, title => $opts{title},
+        width => $opts{width}, height => $opts{height}, categories => $opts{categories},
+    }
+    Office::_decode("chart_render", office__chart_render(to_json($r)))
+}

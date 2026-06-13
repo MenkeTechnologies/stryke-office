@@ -1134,6 +1134,11 @@ export!(office__img_draw_circle, op_img_draw_circle);
 export!(office__img_draw_text, op_img_draw_text);
 export!(office__img_close, op_img_close);
 
+// standalone chart rendering (-> image handle, save to any format)
+include!("chart_render.rs");
+
+export!(office__chart_render, op_chart_render);
+
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");
 

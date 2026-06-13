@@ -36,4 +36,7 @@ assert_ok exists &Office::img_draw_circle, "Office::img_draw_circle exists"
 assert_ok exists &Office::img_draw_text, "Office::img_draw_text exists"
 assert_ok exists &Office::img_close, "Office::img_close exists"
 
+# charting
+assert_ok exists &Office::chart_render, "Office::chart_render exists"
+
 test_run

@@ -181,6 +181,35 @@ Office::doc_write("d.docx", [
 ], page_size => [11906, 16838])          # A4 in twips
 ```
 
+### Charting (data → image handle → any format)
+
+`Office::chart_render` rasterizes a chart and returns an **image handle**, so
+you save it in whatever format you want with `img_save` (png/jpeg/gif/bmp/
+webp/tiff) or process it further. The classic flow — parse an Excel file,
+then render its data as many charts in any format:
+
+```stryke
+val $sheets = Office::sheet_read("sales.xlsx")
+val @rows   = @{ $sheets->[0]{rows} }
+val @cats   = map { $_->[0] } @rows[1..$#rows]
+val @sales  = map { $_->[1] } @rows[1..$#rows]
+
+for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
+    val ($type, $fmt) = @$spec
+    val $c = Office::chart_render($type, [{ name => "Sales", data => \@sales }],
+                                  title => "Q sales", categories => \@cats)
+    Office::img_save($c->{handle}, "out-$type.$fmt")   # any raster format
+    Office::img_close($c->{handle})
+}
+```
+
+Chart types: `bar`/`column`, `line`, `area`, `scatter` (`data` is `[[x,y],…]`),
+`pie`. opts: `title`, `width` (800), `height` (600), `categories`, per-series
+`color`. Rendered natively with `imageproc` + the vendored font — no plotters,
+no system fonts, no external binaries. (The stryke core also has `*_svg` chart
+builtins for quick inline SVG; this renders raster charts you can save/embed
+in any format.)
+
 ### Images (handle-based, like a PIL `Image`)
 
 | Function | Returns | Notes |

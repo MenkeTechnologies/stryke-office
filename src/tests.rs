@@ -549,6 +549,60 @@ fn docx_inline_image() {
     std::fs::remove_file(&docx).ok();
 }
 
+// ── charting (data -> image handle -> any format) ────────────────────
+
+#[test]
+fn chart_render_to_image_then_save_any_format() {
+    for kind in ["bar", "line", "area", "scatter", "pie"] {
+        let series = if kind == "scatter" {
+            r#"[{"name":"pts","data":[[1,2],[2,5],[3,3]]}]"#
+        } else {
+            r#"[{"name":"Sales","data":[10,25,15,30]},{"name":"Cost","data":[8,12,9,20]}]"#
+        };
+        let c = call(
+            office__chart_render,
+            &format!(
+                r#"{{"type":"{kind}","title":"Demo","width":640,"height":400,"categories":["Q1","Q2","Q3","Q4"],"series":{series}}}"#
+            ),
+        );
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind}: no handle: {c}"));
+        assert_eq!(c["width"], 640, "{kind}: chart width");
+        // The chart is a normal image handle — save to any format, reopen.
+        let png = tmp(&format!("chart-{kind}.png"));
+        let s = call(
+            office__img_save,
+            &format!(r#"{{"handle":{h},"path":"{png}"}}"#),
+        );
+        assert_eq!(s["ok"], true, "{kind}: save png failed: {s}");
+        let jpg = tmp(&format!("chart-{kind}.jpg"));
+        call(
+            office__img_save,
+            &format!(r#"{{"handle":{h},"path":"{jpg}"}}"#),
+        );
+        let o = call(office__img_open, &format!(r#"{{"path":"{png}"}}"#));
+        assert_eq!(o["width"], 640, "{kind}: reopened chart width");
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        call(
+            office__img_close,
+            &format!(r#"{{"handle":{}}}"#, o["handle"].as_u64().unwrap()),
+        );
+        std::fs::remove_file(&png).ok();
+        std::fs::remove_file(&jpg).ok();
+    }
+}
+
+#[test]
+fn chart_missing_series_errors() {
+    let v = call(office__chart_render, r#"{"type":"bar"}"#);
+    assert!(
+        err_of(&v).starts_with("missing series"),
+        "got: {}",
+        err_of(&v)
+    );
+}
+
 #[test]
 fn image_unknown_handle_errors() {
     let v = call(office__img_save, r#"{"handle":987654,"path":"/tmp/x.png"}"#);
