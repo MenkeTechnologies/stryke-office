@@ -341,6 +341,25 @@ fn extract_blocks_odt(xml: &[u8]) -> Vec<Value> {
     blocks
 }
 
+/// The heading outline of a docx/odt document: `{ outline: [{ level, text }],
+/// count }` in document order. The document analogue of `pdf_outline`; useful
+/// for navigation or generating a table of contents.
+fn op_doc_outline(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let blocks = doc_blocks_or_paras(path)?;
+    let outline: Vec<Value> = blocks
+        .iter()
+        .filter(|b| b.get("kind").and_then(Value::as_str) == Some("heading"))
+        .map(|b| {
+            json!({
+                "level": b.get("level").and_then(Value::as_u64).unwrap_or(1),
+                "text": b.get("text").and_then(Value::as_str).unwrap_or(""),
+            })
+        })
+        .collect();
+    Ok(json!({ "count": outline.len(), "outline": outline }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via

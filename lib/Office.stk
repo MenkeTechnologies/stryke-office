@@ -232,6 +232,12 @@ fn Office::doc_tables ($path) {
     Office::_decode("doc_tables", office__doc_tables(to_json({ path => $path })))
 }
 
+## Heading outline of a docx/odt: returns { outline => [{ level, text }], count }
+## in document order — the document analogue of pdf_outline.
+fn Office::doc_outline ($path) {
+    Office::_decode("doc_outline", office__doc_outline(to_json({ path => $path })))
+}
+
 ## Ordered structural read of a docx/odt: returns { blocks => [...], count }
 ## with blocks { kind => "heading", level, text } | { kind => "para", text } |
 ## { kind => "table", rows => [[cell, ...]] } in document order — the read-side
