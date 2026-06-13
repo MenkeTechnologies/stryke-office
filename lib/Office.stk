@@ -592,14 +592,17 @@ fn Office::img_drop_shadow ($handle, %opts) {
 ##   bar | column | stacked | line | area | stacked_area | step | combo |
 ##   scatter | bubble | pie | donut | radar | histogram | sankey | waterfall |
 ##   ohlc | candlestick | boxplot | funnel | gauge | heatmap | treemap |
-##   polar | bullet | pareto | lollipop | dot | gantt | sunburst
+##   polar | bullet | pareto | lollipop | dot | gantt | sunburst |
+##   range | range_column | percent_stacked | streamgraph | waffle | slope
 ## $series: arrayref of { name, data => [n, ...], color?, kind? }.
 ##   bullet series => { name, value, target, ranges => [r1,r2,...] };
 ##   gantt series => { name, start, end, color? };
+##   range/range_column => data => [[low,high],...];
 ##   sunburst => rings => [[..],[..]] innermost first (no series needed);
 ##   scatter accepts trendline => 1 to overlay a least-squares line.
 ## Cross-cutting opts: markers => 1 (line family), reference_lines =>
-##   [{ y, color? }] (horizontal threshold lines).
+##   [{ y, color? }] (horizontal threshold lines), smooth => 1 (spline lines),
+##   palette => ["#..."] (custom color cycle), background => "#..." (canvas).
 ##   scatter data => [[x, y], ...]; bubble => [[x, y, size], ...];
 ##   ohlc/candlestick => [[open, high, low, close], ...];
 ##   boxplot data => raw numbers (min/q1/median/q3/max computed);

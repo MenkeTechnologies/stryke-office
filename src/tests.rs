@@ -1111,6 +1111,40 @@ fn chart_incr22_types_and_overlays() {
 }
 
 #[test]
+fn chart_incr25_types_theming_smooth() {
+    // range bars from [lo,hi] pairs
+    let rc = call(office__chart_render, r#"{"type":"range_column","categories":["a","b","c"],"series":[{"data":[[2,8],[3,6],[1,9]]}]}"#);
+    let rh = rc["handle"].as_u64().expect("range raster handle");
+    call(office__img_close, &format!(r#"{{"handle":{rh}}}"#));
+    let rv = call(office__chart_svg, r#"{"type":"range_column","categories":["a","b","c"],"series":[{"data":[[2,8],[3,6],[1,9]]}]}"#);
+    assert!(rv["svg"].as_str().unwrap_or("").contains("<rect"), "range svg bars");
+
+    // waffle / slope / percent_stacked / streamgraph
+    for kind in ["waffle", "slope", "percent_stacked", "streamgraph"] {
+        let series = if kind == "slope" {
+            r#"[{"name":"x","data":[10,40]},{"name":"y","data":[30,20]}]"#
+        } else {
+            r#"[{"name":"s1","data":[5,8,3]},{"name":"s2","data":[2,4,6]}]"#
+        };
+        let c = call(office__chart_render, &format!(r#"{{"type":"{kind}","width":400,"height":320,"categories":["a","b","c"],"series":{series}}}"#));
+        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","categories":["a","b","c"],"series":{series}}}"#));
+        let svg = v["svg"].as_str().unwrap_or("");
+        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{kind} svg malformed");
+    }
+
+    // custom palette + background + smooth line
+    let v = call(
+        office__chart_svg,
+        r##"{"type":"line","categories":["a","b","c","d"],"series":[{"data":[3,9,2,7]}],"smooth":true,"palette":["#112233"],"background":"#101820"}"##,
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(svg.contains("#101820"), "custom background applied");
+    assert!(svg.contains("#112233"), "custom palette applied");
+}
+
+#[test]
 fn chart_legend_and_labels_emit() {
     // legend swatches + value labels appear in the SVG
     let v = call(

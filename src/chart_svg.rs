@@ -28,13 +28,16 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         .map(|a| a.iter().map(cell_to_string).collect())
         .unwrap_or_default();
     let title = opts.get("title").and_then(Value::as_str).unwrap_or("");
+    let smooth = opts.get("smooth").and_then(Value::as_bool).unwrap_or(false);
+    set_palette(opts);
+    let bg = opts.get("background").and_then(Value::as_str).unwrap_or("#ffffff");
 
     let mut s = String::new();
     let _ = write!(
         s,
         r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" font-family="sans-serif">"#
     );
-    let _ = write!(s, r##"<rect width="{w}" height="{h}" fill="#ffffff"/>"##);
+    let _ = write!(s, r##"<rect width="{w}" height="{h}" fill="{}"/>"##, xml_escape(bg));
     if !title.is_empty() {
         let _ = write!(
             s,
@@ -66,6 +69,8 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "pareto" => svg_pareto(&mut s, series, &cats, l, t, r, b),
         "gantt" => svg_gantt(&mut s, series, l, t, r, b),
         "sunburst" => svg_sunburst(&mut s, opts, series, l, t, r, b),
+        "waffle" => svg_waffle(&mut s, series, l, t, r, b),
+        "slope" => svg_slope(&mut s, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -109,6 +114,25 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
                 let col: f64 = series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0)).sum();
                 ymax = ymax.max(col);
             }
+        } else if matches!(kind, "range" | "range_bar" | "range_column") {
+            for ser in series {
+                for (lo, hi) in series_pairs(ser) {
+                    ymin = ymin.min(lo);
+                    ymax = ymax.max(hi);
+                }
+            }
+        } else if kind == "percent_stacked" {
+            ymin = 0.0;
+            ymax = 100.0;
+        } else if kind == "streamgraph" {
+            let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+            let mut maxtot = 0.0f64;
+            for ci in 0..ncat {
+                let col: f64 = series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0)).sum();
+                maxtot = maxtot.max(col);
+            }
+            ymax = maxtot / 2.0;
+            ymin = -maxtot / 2.0;
         } else {
             for ser in series {
                 for v in series_nums(ser) {
@@ -137,9 +161,12 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         }
 
         match kind {
-            "line" => svg_line_area(&mut s, series, l, pw, &yp, b, false),
-            "area" => svg_line_area(&mut s, series, l, pw, &yp, b, true),
+            "line" => svg_line_area(&mut s, series, l, pw, &yp, b, false, smooth),
+            "area" => svg_line_area(&mut s, series, l, pw, &yp, b, true, smooth),
             "stacked_area" => svg_stacked_area(&mut s, series, l, pw, &yp),
+            "streamgraph" => svg_streamgraph(&mut s, series, l, pw, &yp, ymin, ymax),
+            "range" | "range_bar" | "range_column" => svg_range(&mut s, series, l, pw, &yp),
+            "percent_stacked" => svg_percent_stacked(&mut s, series, l, pw, &yp),
             "step" => svg_step(&mut s, series, l, pw, &yp),
             "scatter" => svg_scatter(&mut s, series, l, pw, xmin, xmax, &yp),
             "bubble" => svg_bubble(&mut s, series, l, pw, xmin, xmax, &yp),
@@ -726,7 +753,143 @@ fn svg_sunburst(s: &mut String, opts: &Value, series: &[Value], l: f64, t: f64, 
     }
 }
 
-fn svg_line_area(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, b: f64, fill: bool) {
+/// Floating range bars (vector) from `data:[[lo,hi],...]`.
+fn svg_range(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64) {
+    let ncat = series.iter().map(|x| series_pairs(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let nser = series.len().max(1);
+    let slot = pw / ncat as f64;
+    let bw = slot * 0.8 / nser as f64;
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        for (ci, (lo, hi)) in series_pairs(ser).into_iter().enumerate() {
+            let x = l + ci as f64 * slot + slot * 0.1 + si as f64 * bw;
+            let (y, height) = (yp(hi), (yp(lo) - yp(hi)).max(1.0));
+            let _ = write!(s, r##"<rect x="{x:.1}" y="{y:.1}" width="{bw:.1}" height="{height:.1}" fill="{col}"/>"##);
+        }
+    }
+}
+
+/// 100%-stacked columns (vector).
+fn svg_percent_stacked(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64) {
+    let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let slot = pw / ncat as f64;
+    let bw = slot * 0.8;
+    let totals: Vec<f64> = (0..ncat)
+        .map(|ci| series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0).max(0.0)).sum::<f64>().max(f64::EPSILON))
+        .collect();
+    let mut cum = vec![0.0f64; ncat];
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        for (ci, v) in series_nums(ser).into_iter().enumerate() {
+            let pct = v.max(0.0) / totals[ci] * 100.0;
+            let x = l + ci as f64 * slot + slot * 0.1;
+            let y = yp(cum[ci] + pct);
+            let height = (yp(cum[ci]) - y).max(0.0);
+            let _ = write!(s, r##"<rect x="{x:.1}" y="{y:.1}" width="{bw:.1}" height="{height:.1}" fill="{col}"/>"##);
+            cum[ci] += pct;
+        }
+    }
+}
+
+/// Streamgraph (vector): centered stacked area.
+fn svg_streamgraph(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, _ymin: f64, _ymax: f64) {
+    let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let xat = |i: usize| l + if ncat > 1 { i as f64 / (ncat - 1) as f64 * pw } else { pw / 2.0 };
+    let mut cum: Vec<f64> = (0..ncat)
+        .map(|ci| -series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0)).sum::<f64>() / 2.0)
+        .collect();
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let data = series_nums(ser);
+        let mut pts = String::new();
+        for ci in 0..ncat {
+            let v = data.get(ci).copied().unwrap_or(0.0);
+            let _ = write!(pts, "{:.1},{:.1} ", xat(ci), yp(cum[ci] + v));
+        }
+        for ci in (0..ncat).rev() {
+            let _ = write!(pts, "{:.1},{:.1} ", xat(ci), yp(cum[ci]));
+        }
+        let _ = write!(s, r##"<polygon points="{pts}" fill="{col}" fill-opacity="0.7"/>"##);
+        for ci in 0..ncat {
+            cum[ci] += data.get(ci).copied().unwrap_or(0.0);
+        }
+    }
+}
+
+/// Waffle chart (vector): 10×10 grid colored by category share.
+fn svg_waffle(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let total: f64 = data.iter().sum();
+    if total <= 0.0 {
+        return;
+    }
+    let side = (r - l).min(b - t).max(10.0);
+    let cell = side / 10.0;
+    let gap = (cell / 8.0).max(1.0);
+    let mut counts: Vec<i32> = data.iter().map(|v| (v / total * 100.0).floor() as i32).collect();
+    let mut assigned: i32 = counts.iter().sum();
+    let mut rema: Vec<(usize, f64)> = data.iter().enumerate().map(|(i, v)| (i, (v / total * 100.0).fract())).collect();
+    rema.sort_by(|a, c| c.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut ri = 0;
+    while assigned < 100 && !rema.is_empty() {
+        counts[rema[ri % rema.len()].0] += 1;
+        assigned += 1;
+        ri += 1;
+    }
+    let mut idx = 0usize;
+    for (ci, &cnt) in counts.iter().enumerate() {
+        for _ in 0..cnt {
+            if idx >= 100 {
+                break;
+            }
+            let (gx, gy) = (idx % 10, idx / 10);
+            let x = l + gx as f64 * cell + gap;
+            let y = b - (gy as f64 + 1.0) * cell + gap;
+            let _ = write!(s, r##"<rect x="{x:.1}" y="{y:.1}" width="{:.1}" height="{:.1}" fill="{}"/>"##, (cell - 2.0 * gap).max(1.0), (cell - 2.0 * gap).max(1.0), svg_palette(ci));
+            idx += 1;
+        }
+    }
+}
+
+/// Slope chart (vector): first→last value connected across two x positions.
+fn svg_slope(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let vals: Vec<(&Value, f64, f64)> = series
+        .iter()
+        .filter_map(|x| {
+            let d = series_nums(x);
+            Some((x, *d.first()?, *d.last()?))
+        })
+        .collect();
+    if vals.is_empty() {
+        return;
+    }
+    let lo = vals.iter().flat_map(|v| [v.1, v.2]).fold(f64::INFINITY, f64::min);
+    let hi = vals.iter().flat_map(|v| [v.1, v.2]).fold(f64::NEG_INFINITY, f64::max);
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let yv = |v: f64| b - (v - lo) / span * (b - t);
+    let (x0, x1) = (l + 60.0, r - 60.0);
+    let _ = write!(s, r##"<line x1="{x0:.1}" y1="{t}" x2="{x0:.1}" y2="{b}" stroke="#d2d2d2"/><line x1="{x1:.1}" y1="{t}" x2="{x1:.1}" y2="{b}" stroke="#d2d2d2"/>"##);
+    for (si, (ser, a, c)) in vals.iter().enumerate() {
+        let col = svg_palette(si);
+        let _ = write!(s, r##"<line x1="{x0:.1}" y1="{:.1}" x2="{x1:.1}" y2="{:.1}" stroke="{col}" stroke-width="2"/>"##, yv(*a), yv(*c));
+        let _ = write!(s, r##"<circle cx="{x0:.1}" cy="{:.1}" r="4" fill="{col}"/><circle cx="{x1:.1}" cy="{:.1}" r="4" fill="{col}"/>"##, yv(*a), yv(*c));
+        if let Some(name) = ser.get("name").and_then(Value::as_str) {
+            let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" text-anchor="end" fill="#1e1e1e">{}</text>"##, x0 - 6.0, yv(*a) + 4.0, xml_escape(name));
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn svg_line_area(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, b: f64, fill: bool, smooth: bool) {
     for (si, ser) in series.iter().enumerate() {
         let col = svg_palette(si);
         let data = series_nums(ser);
@@ -735,7 +898,12 @@ fn svg_line_area(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(
         }
         let n = data.len();
         let xat = |i: usize| l + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 };
-        let pts: String = data.iter().enumerate().map(|(i, v)| format!("{:.1},{:.1} ", xat(i), yp(*v))).collect();
+        let verts: Vec<(f32, f32)> = if smooth && n >= 3 {
+            catmull_rom(&(0..n).map(|i| (xat(i) as f32, yp(data[i]) as f32)).collect::<Vec<_>>(), 16)
+        } else {
+            (0..n).map(|i| (xat(i) as f32, yp(data[i]) as f32)).collect()
+        };
+        let pts: String = verts.iter().map(|(x, y)| format!("{x:.1},{y:.1} ")).collect();
         if fill {
             let _ = write!(s, r##"<polygon points="{:.1},{:.1} {pts}{:.1},{:.1}" fill="{col}" fill-opacity="0.45"/>"##, xat(0), b, xat(n - 1), b);
         }

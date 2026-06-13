@@ -22,8 +22,33 @@ const PALETTE: &[&str] = &[
     "#636363", "#997300",
 ];
 
+thread_local! {
+    /// Per-call custom color cycle (set from the `palette` opt); empty = use
+    /// the built-in PALETTE.
+    static PALETTE_OVERRIDE: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Install (or clear) the custom palette for this render call. Always called
+/// once at the top of a render so state never leaks between calls.
+fn set_palette(opts: &Value) {
+    let v: Vec<String> = opts
+        .get("palette")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+        .unwrap_or_default();
+    PALETTE_OVERRIDE.with(|p| *p.borrow_mut() = v);
+}
+
 fn palette(i: usize) -> Rgba<u8> {
-    parse_color(Some(&Value::String(PALETTE[i % PALETTE.len()].to_string())))
+    PALETTE_OVERRIDE.with(|p| {
+        let p = p.borrow();
+        let hex = if p.is_empty() {
+            PALETTE[i % PALETTE.len()].to_string()
+        } else {
+            p[i % p.len()].clone()
+        };
+        parse_color(Some(&Value::String(hex)))
+    })
 }
 
 fn font() -> FontRef<'static> {
@@ -166,8 +191,14 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         .unwrap_or_default();
     let title = opts.get("title").and_then(Value::as_str).unwrap_or("");
     let labels = opts.get("labels").and_then(Value::as_bool).unwrap_or(false);
+    let smooth = opts.get("smooth").and_then(Value::as_bool).unwrap_or(false);
+    set_palette(&opts);
+    let bg = match opts.get("background") {
+        Some(c) => parse_color(Some(c)),
+        None => Rgba([255, 255, 255, 255]),
+    };
 
-    let mut img = RgbaImage::from_pixel(w, h, Rgba([255, 255, 255, 255]));
+    let mut img = RgbaImage::from_pixel(w, h, bg);
     let fnt = font();
     let black = Rgba([30, 30, 30, 255]);
     let grid = Rgba([210, 210, 210, 255]);
@@ -224,6 +255,14 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             render_gantt(&mut img, &fnt, series, l, t, r, b, black, grid)
         }
         "sunburst" => render_sunburst(&mut img, &opts, series, l, t, r, b),
+        "waffle" => {
+            require_series(&opts)?;
+            render_waffle(&mut img, series, &cats, l, t, r, b)
+        }
+        "slope" => {
+            require_series(&opts)?;
+            render_slope(&mut img, &fnt, series, l, t, r, b, black)
+        }
         _ => special = false,
     }
 
@@ -271,6 +310,25 @@ fn op_chart_render(opts: Value) -> Result<Value> {
                 let col: f64 = series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0)).sum();
                 ymax = ymax.max(col);
             }
+        } else if matches!(kind.as_str(), "range" | "range_bar" | "range_column") {
+            for s in series {
+                for (lo, hi) in series_pairs(s) {
+                    ymin = ymin.min(lo);
+                    ymax = ymax.max(hi);
+                }
+            }
+        } else if kind == "percent_stacked" {
+            ymin = 0.0;
+            ymax = 100.0;
+        } else if kind == "streamgraph" {
+            let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+            let mut maxtot = 0.0f64;
+            for ci in 0..ncat {
+                let col: f64 = series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0)).sum();
+                maxtot = maxtot.max(col);
+            }
+            ymax = maxtot / 2.0;
+            ymin = -maxtot / 2.0;
         } else {
             for s in series {
                 for v in series_nums(s) {
@@ -297,9 +355,12 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         }
 
         match kind.as_str() {
-            "line" => render_line_area(&mut img, series, l, r, b, ymin, ymax, false),
-            "area" => render_line_area(&mut img, series, l, r, b, ymin, ymax, true),
+            "line" => render_line_area(&mut img, series, l, r, b, ymin, ymax, false, smooth),
+            "area" => render_line_area(&mut img, series, l, r, b, ymin, ymax, true, smooth),
             "stacked_area" => render_stacked_area(&mut img, series, l, r, b, ymin, ymax),
+            "streamgraph" => render_streamgraph(&mut img, series, l, r, b, ymin, ymax),
+            "range" | "range_bar" | "range_column" => render_range(&mut img, series, l, pw, &yp),
+            "percent_stacked" => render_percent_stacked(&mut img, series, l, pw, b, &yp),
             "step" => render_step(&mut img, series, l, r, b, ymin, ymax),
             "scatter" => render_scatter(&mut img, series, l as f64, pw, xmin, xmax, yp),
             "bubble" => render_bubble(&mut img, series, l as f64, pw, xmin, xmax, yp),
@@ -564,6 +625,7 @@ fn render_line_area(
     ymin: f64,
     ymax: f64,
     fill: bool,
+    smooth: bool,
 ) {
     let pw = (r - l).max(1) as f64;
     for (si, s) in series.iter().enumerate() {
@@ -577,14 +639,19 @@ fn render_line_area(
             l as f64 + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 }
         };
         let yv = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * (b as f64 - 44.0).max(1.0)) as f32;
+        // The drawn vertices — Catmull-Rom-interpolated when smoothing.
+        let verts: Vec<(f32, f32)> = if smooth && n >= 3 {
+            catmull_rom(&(0..n).map(|i| (xat(i) as f32, yv(data[i]))).collect::<Vec<_>>(), 16)
+        } else {
+            (0..n).map(|i| (xat(i) as f32, yv(data[i]))).collect()
+        };
         if fill {
-            let mut poly: Vec<Point<i32>> = Vec::with_capacity(n + 2);
+            let mut poly: Vec<Point<i32>> = Vec::with_capacity(verts.len() + 2);
             poly.push(Point::new(xat(0) as i32, b));
-            for (i, v) in data.iter().enumerate() {
-                poly.push(Point::new(xat(i) as i32, yv(*v) as i32));
+            for &(x, y) in &verts {
+                poly.push(Point::new(x as i32, y as i32));
             }
             poly.push(Point::new(xat(n - 1) as i32, b));
-            // dedup consecutive identical points (draw_polygon_mut requirement)
             poly.dedup();
             if poly.len() >= 3 && poly.first() != poly.last() {
                 let mut fillc = color;
@@ -592,15 +659,53 @@ fn render_line_area(
                 draw_polygon_mut(img, &poly, fillc);
             }
         }
-        for i in 1..n {
-            draw_line_segment_mut(
-                img,
-                (xat(i - 1) as f32, yv(data[i - 1])),
-                (xat(i) as f32, yv(data[i])),
-                color,
-            );
+        for w in verts.windows(2) {
+            draw_line_segment_mut(img, w[0], w[1], color);
         }
     }
+}
+
+/// Sample a Catmull-Rom spline through `pts`, `steps` segments between each
+/// pair, returning the densified polyline.
+fn catmull_rom(pts: &[(f32, f32)], steps: usize) -> Vec<(f32, f32)> {
+    let n = pts.len();
+    if n < 3 {
+        return pts.to_vec();
+    }
+    let mut out = Vec::with_capacity(n * steps);
+    let at = |i: isize| pts[i.clamp(0, n as isize - 1) as usize];
+    for i in 0..n - 1 {
+        let p0 = at(i as isize - 1);
+        let p1 = pts[i];
+        let p2 = pts[i + 1];
+        let p3 = at(i as isize + 2);
+        for s in 0..steps {
+            let t = s as f32 / steps as f32;
+            let t2 = t * t;
+            let t3 = t2 * t;
+            let f = |a: f32, b: f32, c: f32, d: f32| {
+                0.5 * ((2.0 * b) + (-a + c) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2 + (-a + 3.0 * b - 3.0 * c + d) * t3)
+            };
+            out.push((f(p0.0, p1.0, p2.0, p3.0), f(p0.1, p1.1, p2.1, p3.1)));
+        }
+    }
+    out.push(pts[n - 1]);
+    out
+}
+
+/// `[low, high]` pairs of a series (`data:[[lo,hi],...]`).
+fn series_pairs(s: &Value) -> Vec<(f64, f64)> {
+    s.get("data")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| {
+                    let p = p.as_array()?;
+                    Some((p.first()?.as_f64()?, p.get(1)?.as_f64()?))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn render_scatter(
@@ -1437,6 +1542,155 @@ fn render_sunburst(img: &mut RgbaImage, opts: &Value, series: &[Value], l: i32, 
             }
             ci += 1;
             angle += sweep;
+        }
+    }
+}
+
+/// Floating range bars from `data:[[low,high],...]` of each series.
+fn render_range(img: &mut RgbaImage, series: &[Value], l: i32, pw: f64, yp: &dyn Fn(f64) -> f32) {
+    let ncat = series.iter().map(|s| series_pairs(s).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let nser = series.len().max(1);
+    let slot = pw / ncat as f64;
+    let barw = (slot * 0.8 / nser as f64).max(1.0);
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        for (ci, (lo, hi)) in series_pairs(s).into_iter().enumerate() {
+            let x = l as f64 + ci as f64 * slot + slot * 0.1 + si as f64 * barw;
+            let (y0, y1) = (yp(hi), yp(lo));
+            draw_filled_rect_mut(img, Rect::at(x as i32, y0 as i32).of_size(barw as u32, (y1 - y0).max(1.0) as u32), color);
+        }
+    }
+}
+
+/// 100%-stacked columns: each category normalized to fill the full height.
+fn render_percent_stacked(img: &mut RgbaImage, series: &[Value], l: i32, pw: f64, _b: i32, yp: &dyn Fn(f64) -> f32) {
+    let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let slot = pw / ncat as f64;
+    let barw = (slot * 0.8).max(1.0);
+    let totals: Vec<f64> = (0..ncat)
+        .map(|ci| series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0).max(0.0)).sum::<f64>().max(f64::EPSILON))
+        .collect();
+    let mut cum = vec![0.0f64; ncat];
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        for (ci, v) in series_nums(s).into_iter().enumerate() {
+            let pct = v.max(0.0) / totals[ci] * 100.0;
+            let x = l as f64 + ci as f64 * slot + slot * 0.1;
+            let y0 = yp(cum[ci] + pct);
+            let y1 = yp(cum[ci]);
+            draw_filled_rect_mut(img, Rect::at(x as i32, y0 as i32).of_size(barw as u32, (y1 - y0).max(1.0) as u32), color);
+            cum[ci] += pct;
+        }
+    }
+}
+
+/// Streamgraph: stacked area centered on a zero baseline (wiggle layout).
+fn render_streamgraph(img: &mut RgbaImage, series: &[Value], l: i32, r: i32, b: i32, ymin: f64, ymax: f64) {
+    let pw = (r - l).max(1) as f64;
+    let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let xat = |i: usize| l as f64 + if ncat > 1 { i as f64 / (ncat - 1) as f64 * pw } else { pw / 2.0 };
+    let yv = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * (b as f64 - 44.0).max(1.0)) as f32;
+    // baseline at -total/2 per category
+    let mut cum: Vec<f64> = (0..ncat)
+        .map(|ci| -series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0)).sum::<f64>() / 2.0)
+        .collect();
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        let data = series_nums(s);
+        let mut poly: Vec<Point<i32>> = Vec::new();
+        for ci in 0..ncat {
+            let v = data.get(ci).copied().unwrap_or(0.0);
+            poly.push(Point::new(xat(ci) as i32, yv(cum[ci] + v) as i32));
+        }
+        for ci in (0..ncat).rev() {
+            poly.push(Point::new(xat(ci) as i32, yv(cum[ci]) as i32));
+        }
+        poly.dedup();
+        if poly.len() >= 3 && poly.first() != poly.last() {
+            let mut fc = color;
+            fc.0[3] = 180;
+            draw_polygon_mut(img, &poly, fc);
+        }
+        for ci in 0..ncat {
+            cum[ci] += data.get(ci).copied().unwrap_or(0.0);
+        }
+    }
+}
+
+/// Waffle chart: a 10×10 grid of cells colored by each category's share of
+/// the first series' total.
+fn render_waffle(img: &mut RgbaImage, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let total: f64 = data.iter().sum();
+    if total <= 0.0 {
+        return;
+    }
+    let side = ((r - l).min(b - t)).max(10);
+    let cell = side / 10;
+    let gap = (cell / 8).max(1);
+    // cell counts per category (largest-remainder to 100)
+    let mut counts: Vec<i32> = data.iter().map(|v| (v / total * 100.0).floor() as i32).collect();
+    let mut assigned: i32 = counts.iter().sum();
+    let mut rema: Vec<(usize, f64)> = data.iter().enumerate().map(|(i, v)| (i, (v / total * 100.0).fract())).collect();
+    rema.sort_by(|a, c| c.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut ri = 0;
+    while assigned < 100 && !rema.is_empty() {
+        counts[rema[ri % rema.len()].0] += 1;
+        assigned += 1;
+        ri += 1;
+    }
+    let mut idx = 0usize;
+    for (ci, &cnt) in counts.iter().enumerate() {
+        for _ in 0..cnt {
+            if idx >= 100 {
+                break;
+            }
+            let (gx, gy) = (idx % 10, idx / 10);
+            let x = l + gx as i32 * cell;
+            let y = b - (gy as i32 + 1) * cell; // fill bottom-up
+            draw_filled_rect_mut(img, Rect::at(x + gap, y + gap).of_size((cell - 2 * gap).max(1) as u32, (cell - 2 * gap).max(1) as u32), palette(ci));
+            idx += 1;
+        }
+    }
+    let _ = cats;
+}
+
+/// Slope chart: connect each series' first→last value across two x positions.
+#[allow(clippy::too_many_arguments)]
+fn render_slope(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>) {
+    let vals: Vec<(&Value, f64, f64)> = series
+        .iter()
+        .filter_map(|s| {
+            let d = series_nums(s);
+            Some((s, *d.first()?, *d.last()?))
+        })
+        .collect();
+    if vals.is_empty() {
+        return;
+    }
+    let lo = vals.iter().flat_map(|v| [v.1, v.2]).fold(f64::INFINITY, f64::min);
+    let hi = vals.iter().flat_map(|v| [v.1, v.2]).fold(f64::NEG_INFINITY, f64::max);
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let yv = |v: f64| b as f32 - ((v - lo) / span) as f32 * (b - t) as f32;
+    let (x0, x1) = (l as f32 + 60.0, r as f32 - 60.0);
+    draw_line_segment_mut(img, (x0, t as f32), (x0, b as f32), Rgba([210, 210, 210, 255]));
+    draw_line_segment_mut(img, (x1, t as f32), (x1, b as f32), Rgba([210, 210, 210, 255]));
+    for (si, (s, a, c)) in vals.iter().enumerate() {
+        let color = series_color(s, si);
+        draw_line_segment_mut(img, (x0, yv(*a)), (x1, yv(*c)), color);
+        draw_filled_circle_mut(img, (x0 as i32, yv(*a) as i32), 4, color);
+        draw_filled_circle_mut(img, (x1 as i32, yv(*c) as i32), 4, color);
+        if let Some(name) = s.get("name").and_then(Value::as_str) {
+            draw_text_mut(img, black, x0 as i32 - 56, yv(*a) as i32 - 6, PxScale::from(11.0), fnt, name);
         }
     }
 }

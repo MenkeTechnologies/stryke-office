@@ -256,11 +256,15 @@ series required), `treemap` (area-proportional), `polar`/rose, `bullet`
 (per-series `{name, value, target, ranges}`), `pareto` (sorted bars +
 cumulative-% line), `lollipop`/`dot`, `gantt` (per-series
 `{name, start, end}` on a time axis), `sunburst` (multi-ring,
-`rings => [[..],[..]]` innermost first). opts: `title`, `width` (800),
-`height` (600), `categories`, per-series `color`, `legend => 0` to suppress,
-`labels => 1` for data labels, `x_label`, `y_label`, `markers => 1`
-(line family), `reference_lines => [{y, color}]` (threshold lines). Every type
-renders identically in raster **and** SVG.
+`rings => [[..],[..]]` innermost first), `range`/`range_column` (floating bars
+from `data => [[lo,hi],…]`), `percent_stacked` (100%-stacked), `streamgraph`
+(centered stacked area), `waffle` (10×10 share grid), `slope` (before/after).
+opts: `title`, `width` (800), `height` (600), `categories`, per-series
+`color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
+`y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,
+`smooth => 1` (Catmull-Rom spline lines), `palette => ["#…"]` (custom color
+cycle), `background => "#…"` (canvas). Every type renders identically in
+raster **and** SVG.
 
 **Raster and vector output, any format.** Three entry points:
 - `chart_render(type, series, %opts)` → raster image handle (then `img_save`
