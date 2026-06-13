@@ -251,6 +251,16 @@ fn Office::slides_write ($path, $slides, %opts) {
     Office::_decode("slides_write", office__slides_write(to_json($r)))
 }
 
+## Concatenate presentations into one deck. $inputs is an arrayref of paths; the
+## target format follows $output's extension (so this also converts pptx<->odp).
+## Each source slide's first text line becomes the title, the rest the body
+## (slide text only — notes/media are not carried). Returns { ok, path, sources,
+## slides }.
+fn Office::slides_merge ($inputs, $output, %opts) {
+    Office::_decode("slides_merge",
+        office__slides_merge(to_json({ inputs => $inputs, output => $output, format => $opts{format} })))
+}
+
 # ── pdf ─────────────────────────────────────────────────────────────
 
 ## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.
