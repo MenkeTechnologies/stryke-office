@@ -399,6 +399,61 @@ fn sheet_select_columns() {
 }
 
 #[test]
+fn sheet_join_inner_and_left() {
+    let left = tmp("jl.xlsx");
+    let right = tmp("jr.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{left}","sheets":[{{"name":"L","rows":[["id","name"],[1,"a"],[2,"b"],[3,"c"]]}}]}}"#
+        ),
+    );
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{right}","sheets":[{{"name":"R","rows":[["id","city"],[1,"NYC"],[2,"LA"]]}}]}}"#
+        ),
+    );
+
+    // inner join on id -> only ids 1,2
+    let out = tmp("ji2.xlsx");
+    let r = call(
+        office__sheet_join,
+        &format!(r#"{{"left":"{left}","right":"{right}","on":"id","output":"{out}"}}"#),
+    );
+    assert_eq!(r["matched"], 2, "2 matches: {r}");
+    assert_eq!(r["rows"], 2, "2 result rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "id", "header id: {rd}");
+    assert_eq!(rows[0][1], "name");
+    assert_eq!(rows[0][2], "city", "right col joined: {rd}");
+    assert_eq!(rows[1][1], "a", "id1 name: {rd}");
+    assert_eq!(rows[1][2], "NYC", "id1 city: {rd}");
+
+    // left join -> id 3 included with blank city
+    let outl = tmp("jlj.xlsx");
+    let rl = call(
+        office__sheet_join,
+        &format!(
+            r#"{{"left":"{left}","right":"{right}","on":"id","how":"left","output":"{outl}"}}"#
+        ),
+    );
+    assert_eq!(rl["rows"], 3, "left join keeps all 3: {rl}");
+    let rdl = call(office__sheet_read, &format!(r#"{{"path":"{outl}"}}"#));
+    let last = rdl["sheets"][0]["rows"].as_array().unwrap().last().unwrap();
+    assert_eq!(last[1], "c", "id3 name: {rdl}");
+    assert!(
+        last[2].as_str().unwrap_or("").is_empty(),
+        "id3 city blank: {rdl}"
+    );
+
+    for f in [&left, &right, &out, &outl] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_pivot_matrix() {
     let path = tmp("piv.xlsx");
     let w = call(
