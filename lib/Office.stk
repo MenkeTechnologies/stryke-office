@@ -185,6 +185,17 @@ fn Office::meta_write ($path, $props, %opts) {
     Office::_decode("meta_write", office__meta_write(to_json(\%r)))
 }
 
+## Extract embedded raster media from an office container (xlsx/docx/pptx,
+## ods/odt/odp) or a PDF. Each decoded image is returned as a live image
+## handle (use it with any img_* op). opts: dir (also write the originals to
+## this directory). Returns { images => [{ name, handle, width, height,
+## path? }], count, skipped }.
+fn Office::extract_images ($path, %opts) {
+    var %r = { path => $path }
+    if exists $opts{dir} { $r{dir} = $opts{dir} }
+    Office::_decode("extract_images", office__extract_images(to_json(\%r)))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new

@@ -1522,6 +1522,10 @@ include!("meta_ops.rs");
 export!(office__meta_read, op_meta_read);
 export!(office__meta_write, op_meta_write);
 
+// embedded media extraction (OOXML/ODF media parts + PDF image XObjects)
+include!("extract.rs");
+export!(office__extract_images, op_extract_images);
+
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");
 
