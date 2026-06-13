@@ -40,6 +40,7 @@ exports = [
     "office__replace_text",
     "office__doc_tables",
     "office__doc_blocks",
+    "office__doc_links",
     "office__img_open",
     "office__img_new",
     "office__img_save",
