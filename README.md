@@ -148,6 +148,10 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
 | `Office::pdf_build($path, $elements, %opts)` | `{pages, bytes}` | multi-page: heading/paragraph/text/image/rect/line/pagebreak; `page_size`/`margin` |
+| `Office::pdf_merge($inputs, $path)` | `{pages, merged}` | concatenate PDFs (input order) |
+| `Office::pdf_split($path, $pages, $output)` | `{pages}` | extract 1-based page subset to a new PDF |
+| `Office::pdf_rotate($path, $angle, $output, %opts)` | `{rotated, angle}` | rotate pages 90°-multiples; `pages` subset |
+| `Office::pdf_info($path)` | `{pages, version, title?, author?, …}` | page count + document metadata |
 
 ### Rich formatting
 
@@ -417,6 +421,7 @@ the cdylib:
 | docx / odt / pptx / odp read | native `zip` + `quick-xml` |
 | pptx write | native `zip` + hand-built OOXML |
 | pdf read + write | `lo_core` (self-contained, no font files) |
+| pdf merge / split / rotate / info | `lopdf` (pure-Rust core, `default-features = false`) |
 | image read + write (all formats) | `image` |
 | image drawing (shapes) | `imageproc` |
 | image text drawing | `ab_glyph` + vendored `assets/DejaVuSans.ttf` |
@@ -450,6 +455,7 @@ stryke-office/
   src/chart_render.rs    # raster chart renderer (all chart types)
   src/chart_svg.rs       # vector (SVG/PDF) chart renderer
   src/pdf_build.rs       # multi-element paginated PDF document builder
+  src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
   stryke.toml            # package manifest + [ffi] table
   lib/Office.stk         # stryke wrapper (use Office)
   assets/DejaVuSans.ttf  # vendored font for image text drawing

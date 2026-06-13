@@ -20,6 +20,7 @@ calamine = "0.35"          # read xlsx/ods/xls + csv
 rust_xlsxwriter = "0.95"   # write xlsx
 lo_odf = "0.4"             # write ods/odt/odp (OpenDocument serializers)
 lo_core = "0.4"            # ODF data models + self-contained PDF read/write (no font files)
+lopdf = { version = "0.40", default-features = false }  # PDF parse/merge/split/rotate (pure-Rust core; no chrono/rayon/tokio)
 docx-rs = "0.4"            # write docx
 zip = "2"                  # read OOXML/ODF containers; write pptx
 quick-xml = "0.40"         # parse/emit the XML inside those containers

@@ -1464,6 +1464,13 @@ export!(office__pdf_write, op_pdf_write);
 include!("pdf_build.rs");
 export!(office__pdf_build, op_pdf_build);
 
+// PDF manipulation (merge/split/rotate/info) via lopdf
+include!("pdf_ops.rs");
+export!(office__pdf_merge, op_pdf_merge);
+export!(office__pdf_split, op_pdf_split);
+export!(office__pdf_rotate, op_pdf_rotate);
+export!(office__pdf_info, op_pdf_info);
+
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");
 

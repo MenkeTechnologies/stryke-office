@@ -128,6 +128,32 @@ fn Office::pdf_build ($path, $elements, %opts) {
         office__pdf_build(to_json({ path => $path, elements => $elements, page_size => $opts{page_size}, margin => $opts{margin} })))
 }
 
+## Merge several PDFs into one (page order = $inputs order). Returns
+## { pages, merged }.
+fn Office::pdf_merge ($inputs, $path) {
+    die "Office::pdf_merge: inputs must be arrayref" unless ref($inputs) eq "ARRAY"
+    Office::_decode("pdf_merge", office__pdf_merge(to_json({ inputs => $inputs, path => $path })))
+}
+
+## Extract a subset of pages (1-based, original order) into a new PDF.
+fn Office::pdf_split ($path, $pages, $output) {
+    die "Office::pdf_split: pages must be arrayref" unless ref($pages) eq "ARRAY"
+    Office::_decode("pdf_split", office__pdf_split(to_json({ path => $path, pages => $pages, output => $output })))
+}
+
+## Rotate pages by $angle degrees (multiple of 90). opts: pages => [1-based
+## subset] (default all).
+fn Office::pdf_rotate ($path, $angle, $output, %opts) {
+    Office::_decode("pdf_rotate",
+        office__pdf_rotate(to_json({ path => $path, angle => $angle, output => $output, pages => $opts{pages} })))
+}
+
+## PDF metadata: { pages, version, title?, author?, subject?, creator?,
+## producer?, keywords? }.
+fn Office::pdf_info ($path) {
+    Office::_decode("pdf_info", office__pdf_info(to_json({ path => $path })))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new
