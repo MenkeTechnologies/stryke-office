@@ -399,6 +399,51 @@ fn sheet_select_columns() {
 }
 
 #[test]
+fn sheet_pivot_matrix() {
+    let path = tmp("piv.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","quarter","amt"],
+                ["west","Q1",10],
+                ["west","Q2",20],
+                ["east","Q1",5],
+                ["east","Q1",15]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("piv_out.xlsx");
+    let r = call(
+        office__sheet_pivot,
+        &format!(
+            r#"{{"path":"{path}","rows":"region","cols":"quarter","value":"amt","agg":"sum","output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["rows"], 2, "2 row groups: {r}");
+    assert_eq!(r["cols"], 2, "2 col groups: {r}");
+    let rr = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rr["sheets"][0]["rows"];
+    // header: [region, Q1, Q2]
+    assert_eq!(rows[0][0], "region", "corner header: {rr}");
+    assert_eq!(rows[0][1], "Q1");
+    assert_eq!(rows[0][2], "Q2");
+    // east: Q1=20 (5+15), Q2 missing -> 0
+    assert_eq!(rows[1][0], "east", "first row group: {rr}");
+    assert_eq!(rows[1][1], 20.0, "east Q1 sum: {rr}");
+    assert_eq!(rows[1][2], 0.0, "east Q2 missing -> 0: {rr}");
+    // west: Q1=10, Q2=20
+    assert_eq!(rows[2][1], 10.0, "west Q1: {rr}");
+    assert_eq!(rows[2][2], 20.0, "west Q2: {rr}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_aggregate_group_by() {
     let path = tmp("agg.xlsx");
     let w = call(

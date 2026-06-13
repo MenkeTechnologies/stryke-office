@@ -1748,6 +1748,124 @@ fn op_sheet_aggregate(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "groups": group_count }))
 }
 
+/// Build a pivot table: group rows by one column and columns by another, with a
+/// value aggregated into each cell (Excel PivotTable). opts: path, output,
+/// rows => row-group column, cols => column-group column, value => aggregated
+/// column (required for sum/mean/min/max), agg => count|sum|mean|min|max
+/// (default sum), sheet, header (default true), format. Output is a matrix sheet
+/// sorted by row and column keys; missing combos are 0 (count/sum) or blank.
+/// Returns `{ ok, path, rows, cols }`.
+fn op_sheet_pivot(opts: Value) -> Result<Value> {
+    use std::collections::{BTreeSet, HashMap};
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("sum");
+    if !matches!(agg, "count" | "sum" | "mean" | "min" | "max") {
+        return Err(anyhow!("unknown agg: {agg}"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let rcol = resolve_col(opts.get("rows"), header_row)?;
+    let ccol = resolve_col(opts.get("cols"), header_row)?;
+    let vcol = match opts.get("value") {
+        Some(_) => Some(resolve_col(opts.get("value"), header_row)?),
+        None if agg == "count" => None,
+        None => return Err(anyhow!("agg '{agg}' requires a value column")),
+    };
+
+    let cell_at = |row: &Value, c: usize| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let mut row_keys: BTreeSet<String> = BTreeSet::new();
+    let mut col_keys: BTreeSet<String> = BTreeSet::new();
+    let mut acc: HashMap<(String, String), (u64, f64, f64, f64, u64)> = HashMap::new();
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    for row in &rows[data_start..] {
+        let rk = cell_to_string(&cell_at(row, rcol));
+        let ck = cell_to_string(&cell_at(row, ccol));
+        row_keys.insert(rk.clone());
+        col_keys.insert(ck.clone());
+        let e = acc
+            .entry((rk, ck))
+            .or_insert((0, 0.0, f64::INFINITY, f64::NEG_INFINITY, 0));
+        e.0 += 1;
+        if let Some(vc) = vcol {
+            if let Some(x) = sheet_cell_num(&cell_at(row, vc)) {
+                e.1 += x;
+                e.2 = e.2.min(x);
+                e.3 = e.3.max(x);
+                e.4 += 1;
+            }
+        }
+    }
+
+    let row_name = header_row
+        .and_then(|hr| hr.get(rcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", rcol + 1));
+    let cols: Vec<String> = col_keys.into_iter().collect();
+    let mut out_rows: Vec<Value> = Vec::with_capacity(row_keys.len() + 1);
+    let mut head = vec![json!(row_name)];
+    head.extend(cols.iter().map(|c| json!(c)));
+    out_rows.push(Value::Array(head));
+
+    let (n_rows, n_cols) = (row_keys.len(), cols.len());
+    for rk in row_keys {
+        let mut out_row = vec![json!(rk)];
+        for ck in &cols {
+            let cell = match acc.get(&(rk.clone(), ck.clone())) {
+                Some(&(count, sum, min, max, numc)) => match agg {
+                    "count" => json!(count),
+                    "sum" => json!(sum),
+                    "mean" if numc > 0 => json!(sum / numc as f64),
+                    "min" if numc > 0 => json!(min),
+                    "max" if numc > 0 => json!(max),
+                    _ => json!(""),
+                },
+                None => {
+                    if agg == "count" || agg == "sum" {
+                        json!(0)
+                    } else {
+                        json!("")
+                    }
+                }
+            };
+            out_row.push(cell);
+        }
+        out_rows.push(Value::Array(out_row));
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Pivot", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n_rows, "cols": n_cols }))
+}
+
 /// Project/reorder a sheet's columns. opts: path, output, columns => array of
 /// column names or 0-based indices (required, in output order), sheet,
 /// header => bool (names need true; default true), format. Every row (header
@@ -2779,6 +2897,7 @@ export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
+export!(office__sheet_pivot, op_sheet_pivot);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);

@@ -146,6 +146,16 @@ fn Office::sheet_aggregate ($path, $group_by, $output, %opts) {
         office__sheet_aggregate(to_json({ path => $path, group_by => $group_by, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Build a pivot table: group rows by $rows column and columns by $cols column,
+## aggregating $opts{value} into each cell (Excel PivotTable). opts: value =>
+## aggregated column (required for sum/mean/min/max), agg => count|sum|mean|min|
+## max (default sum), sheet, header => 0 if first row is data, format. Output is
+## a matrix sheet. Returns { ok, path, rows, cols }.
+fn Office::sheet_pivot ($path, $rows, $cols, $output, %opts) {
+    Office::_decode("sheet_pivot",
+        office__sheet_pivot(to_json({ path => $path, rows => $rows, cols => $cols, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Project/reorder columns. $columns is an arrayref of column names or 0-based
 ## indices in the desired output order. opts: sheet, header => 0 if first row is
 ## data, format => override. Returns { ok, path, columns }.
