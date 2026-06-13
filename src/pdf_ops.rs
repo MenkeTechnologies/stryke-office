@@ -467,3 +467,83 @@ fn op_pdf_compress(opts: Value) -> Result<Value> {
         "saved": before.saturating_sub(after),
     }))
 }
+
+// ── page management: delete / reorder ─────────────────────────────────────────
+
+/// Remove pages from a PDF. opts: path => input, output => path,
+/// pages => [1-based page numbers to delete]. Returns the remaining count.
+fn op_pdf_delete(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let drop: Vec<u32> = opts
+        .get("pages")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing pages (expected array of 1-based page numbers)"))?
+        .iter()
+        .filter_map(|v| v.as_u64().map(|n| n as u32))
+        .collect();
+    if drop.is_empty() {
+        return Err(anyhow!("no pages selected"));
+    }
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    doc.delete_pages(&drop);
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({"ok": true, "path": out, "pages": doc.get_pages().len()}))
+}
+
+/// Reorder (and/or subset) a PDF's pages. opts: path => input, output => path,
+/// order => [1-based page numbers in the desired output order]. Pages omitted
+/// from `order` are dropped; a page may be repeated. The effective MediaBox is
+/// baked onto each page and every page is reparented to the root page tree, so
+/// the flattened result is self-contained (documents relying on Resources
+/// inherited from intermediate page-tree nodes are not rewritten).
+fn op_pdf_reorder(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let order: Vec<u32> = opts
+        .get("order")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing order (expected array of 1-based page numbers)"))?
+        .iter()
+        .filter_map(|v| v.as_u64().map(|n| n as u32))
+        .collect();
+    if order.is_empty() {
+        return Err(anyhow!("empty order"));
+    }
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages = doc.get_pages();
+    let pages_root = doc
+        .catalog()
+        .and_then(|c| c.get(b"Pages"))
+        .and_then(|o| o.as_reference())
+        .map_err(|e| anyhow!("no page tree: {e}"))?;
+    // Bake the effective MediaBox onto each page and reparent it to the root, so
+    // pointing the root's Kids straight at the leaves loses no inherited size.
+    for &pid in pages.values() {
+        let (w, h) = pdf_page_size(&doc, pid);
+        if let Ok(d) = doc.get_object_mut(pid).and_then(|o| o.as_dict_mut()) {
+            if d.get(b"MediaBox").is_err() {
+                d.set(
+                    "MediaBox",
+                    Object::Array(vec![0.into(), 0.into(), w.into(), h.into()]),
+                );
+            }
+            d.set("Parent", Object::Reference(pages_root));
+        }
+    }
+    let kids: Vec<Object> = order
+        .iter()
+        .filter_map(|n| pages.get(n).map(|id| Object::Reference(*id)))
+        .collect();
+    if kids.is_empty() {
+        return Err(anyhow!("order referenced no existing pages"));
+    }
+    let count = kids.len() as i64;
+    if let Ok(d) = doc.get_object_mut(pages_root).and_then(|o| o.as_dict_mut()) {
+        d.set("Kids", Object::Array(kids));
+        d.set("Count", count);
+    }
+    doc.prune_objects();
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({"ok": true, "path": out, "pages": count}))
+}
