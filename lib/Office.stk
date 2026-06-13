@@ -661,6 +661,22 @@ fn Office::img_seam_carve ($handle, $width) {
     Office::_decode("img_seam_carve", office__img_seam_carve(to_json({ handle => $handle, width => $width })))
 }
 
+## Floyd-Steinberg dither to $levels steps per channel. opts: levels (2).
+fn Office::img_dither ($handle, %opts) {
+    Office::_decode("img_dither", office__img_dither(to_json({ handle => $handle, levels => $opts{levels} })))
+}
+
+## Median-cut quantize to a palette and remap. opts: colors (16). Returns
+## { colors => [{r,g,b,hex}] }.
+fn Office::img_quantize ($handle, %opts) {
+    Office::_decode("img_quantize", office__img_quantize(to_json({ handle => $handle, colors => $opts{colors} })))
+}
+
+## Write a multi-resolution .ico favicon. opts: sizes => [16,32,48].
+fn Office::img_favicon ($handle, $path, %opts) {
+    Office::_decode("img_favicon", office__img_favicon(to_json({ handle => $handle, path => $path, sizes => $opts{sizes} })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format

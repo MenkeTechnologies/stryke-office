@@ -398,6 +398,9 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_kaleidoscope($h, %opts)` | mirror wedges; `segments` |
 | `img_spritesheet($h, %opts)` | split into `cols`×`rows` handles |
 | `img_seam_carve($h, $width)` | content-aware width reduction |
+| `img_dither($h, %opts)` | Floyd–Steinberg to `levels` steps/channel |
+| `img_quantize($h, %opts)` | median-cut to `colors` palette + remap → `{colors}` |
+| `img_favicon($h, $path, %opts)` | multi-resolution `.ico` (`sizes`, default 16/32/48) |
 
 ## [0x05] No external binaries
 

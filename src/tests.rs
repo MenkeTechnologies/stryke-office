@@ -1035,6 +1035,36 @@ fn image_color_science_and_distortions() {
 }
 
 #[test]
+fn image_dither_quantize_favicon() {
+    // build a gradient so quantization/dither have real color variety
+    let n = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let h = n["handle"].as_u64().unwrap();
+    call(office__img_gradient, &format!(r##"{{"handle":{h},"kind":"linear","from":"#ff0000","to":"#0000ff"}}"##));
+
+    // dither to 1-bit per channel
+    let d = call(office__img_dither, &format!(r#"{{"handle":{h},"levels":2}}"#));
+    assert_eq!(d["ok"], true, "dither: {d}");
+
+    // quantize to 8 colors → palette returned
+    let q = call(office__img_quantize, &format!(r#"{{"handle":{h},"colors":8}}"#));
+    let colors = q["colors"].as_array().unwrap();
+    assert!(!colors.is_empty() && colors.len() <= 8, "quantize palette size: {}", colors.len());
+    assert!(colors[0]["hex"].as_str().unwrap_or("").starts_with('#'), "palette has hex");
+
+    // multi-size favicon
+    let path = tmp("fav.ico");
+    let f = call(office__img_favicon, &format!(r#"{{"handle":{h},"path":"{path}","sizes":[16,32,48]}}"#));
+    assert_eq!(f["ok"], true, "favicon: {f}");
+    let bytes = std::fs::read(&path).unwrap();
+    // ICONDIR: reserved=0, type=1, count=3
+    assert_eq!(&bytes[0..4], &[0, 0, 1, 0], "ico header");
+    assert_eq!(bytes[4], 3, "ico contains 3 images");
+    std::fs::remove_file(&path).ok();
+
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn chart_radar_and_bubble_render() {
     let c = call(
         office__chart_render,

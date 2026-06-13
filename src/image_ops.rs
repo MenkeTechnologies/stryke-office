@@ -1841,6 +1841,189 @@ fn op_img_round_corners(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true}))
 }
 
+// ── dithering, palette quantization, favicon ─────────────────────────────────
+
+/// Floyd–Steinberg error-diffusion dither to `levels` steps per channel
+/// (default 2 = 1-bit). Classic retro / print-prep look.
+fn op_img_dither(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let levels = opts.get("levels").and_then(Value::as_u64).unwrap_or(2).clamp(2, 256) as i32;
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width() as i32, src.height() as i32);
+        // working buffer of f64 RGB
+        let mut buf: Vec<f64> = src.pixels().flat_map(|p| [p.0[0] as f64, p.0[1] as f64, p.0[2] as f64]).collect();
+        let alpha: Vec<u8> = src.pixels().map(|p| p.0[3]).collect();
+        let step = 255.0 / (levels - 1) as f64;
+        let at = |x: i32, y: i32, c: usize| (y as usize * w as usize + x as usize) * 3 + c;
+        for y in 0..hgt {
+            for x in 0..w {
+                for c in 0..3 {
+                    let old = buf[at(x, y, c)];
+                    let q = (old / step).round() * step;
+                    let new = q.clamp(0.0, 255.0);
+                    let err = old - new;
+                    buf[at(x, y, c)] = new;
+                    let mut spread = |nx: i32, ny: i32, f: f64| {
+                        if nx >= 0 && nx < w && ny >= 0 && ny < hgt {
+                            buf[at(nx, ny, c)] += err * f;
+                        }
+                    };
+                    spread(x + 1, y, 7.0 / 16.0);
+                    spread(x - 1, y + 1, 3.0 / 16.0);
+                    spread(x, y + 1, 5.0 / 16.0);
+                    spread(x + 1, y + 1, 1.0 / 16.0);
+                }
+            }
+        }
+        let mut out = image::RgbaImage::new(w as u32, hgt as u32);
+        for (i, px) in out.pixels_mut().enumerate() {
+            *px = image::Rgba([
+                buf[i * 3].clamp(0.0, 255.0) as u8,
+                buf[i * 3 + 1].clamp(0.0, 255.0) as u8,
+                buf[i * 3 + 2].clamp(0.0, 255.0) as u8,
+                alpha[i],
+            ]);
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Median-cut quantization: derive a palette of `colors` (default 16) and
+/// remap every pixel to its nearest palette entry. Returns the palette.
+fn op_img_quantize(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let ncolors = opts.get("colors").and_then(Value::as_u64).unwrap_or(16).clamp(2, 256) as usize;
+    let mut palette_out: Vec<[u8; 3]> = Vec::new();
+    transform(h, |img| {
+        let mut buf = img.to_rgba8();
+        let pixels: Vec<[u8; 3]> = buf.pixels().map(|p| [p.0[0], p.0[1], p.0[2]]).collect();
+        let palette = median_cut(pixels, ncolors);
+        palette_out = palette.clone();
+        for px in buf.pixels_mut() {
+            let c = [px.0[0], px.0[1], px.0[2]];
+            let best = palette
+                .iter()
+                .min_by_key(|p| {
+                    let d = |i: usize| (p[i] as i64 - c[i] as i64).pow(2);
+                    d(0) + d(1) + d(2)
+                })
+                .copied()
+                .unwrap_or(c);
+            px.0[0] = best[0];
+            px.0[1] = best[1];
+            px.0[2] = best[2];
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    let colors: Vec<Value> = palette_out
+        .iter()
+        .map(|c| json!({"r": c[0], "g": c[1], "b": c[2], "hex": format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])}))
+        .collect();
+    Ok(json!({"ok": true, "colors": colors}))
+}
+
+/// Median-cut: recursively split the color set along its widest channel until
+/// `n` boxes, returning each box's average color.
+fn median_cut(pixels: Vec<[u8; 3]>, n: usize) -> Vec<[u8; 3]> {
+    if pixels.is_empty() {
+        return vec![[0, 0, 0]];
+    }
+    let mut boxes = vec![pixels];
+    while boxes.len() < n {
+        // pick the box with the largest single-channel range
+        let mut best: Option<(usize, usize, u8)> = None; // (box idx, channel, range)
+        for (bi, b) in boxes.iter().enumerate() {
+            if b.len() < 2 {
+                continue;
+            }
+            for c in 0..3 {
+                let (mut lo, mut hi) = (255u8, 0u8);
+                for p in b {
+                    lo = lo.min(p[c]);
+                    hi = hi.max(p[c]);
+                }
+                let range = hi - lo;
+                if best.map(|(_, _, r)| range > r).unwrap_or(true) {
+                    best = Some((bi, c, range));
+                }
+            }
+        }
+        let Some((bi, c, _)) = best else { break };
+        let mut b = boxes.swap_remove(bi);
+        b.sort_by_key(|p| p[c]);
+        let mid = b.len() / 2;
+        let hi = b.split_off(mid);
+        boxes.push(b);
+        boxes.push(hi);
+    }
+    boxes
+        .iter()
+        .filter(|b| !b.is_empty())
+        .map(|b| {
+            let n = b.len() as u64;
+            let sum = b.iter().fold([0u64; 3], |mut a, p| {
+                for i in 0..3 {
+                    a[i] += p[i] as u64;
+                }
+                a
+            });
+            [(sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8]
+        })
+        .collect()
+}
+
+/// Write a multi-resolution .ico (favicon) containing the image downscaled to
+/// each of `sizes` (default 16/32/48), each stored as a PNG payload.
+fn op_img_favicon(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let path = req_str(&opts, "path")?.to_string();
+    let sizes: Vec<u32> = opts
+        .get("sizes")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_u64).map(|s| s.clamp(1, 256) as u32).collect())
+        .unwrap_or_else(|| vec![16, 32, 48]);
+    if sizes.is_empty() {
+        return Err(anyhow!("favicon needs at least one size"));
+    }
+    let src = rgba_of(h)?;
+    // PNG-encode each resized image
+    let mut entries: Vec<(u32, Vec<u8>)> = Vec::new();
+    for &sz in &sizes {
+        let resized = image::imageops::resize(&src, sz, sz, image::imageops::FilterType::Lanczos3);
+        let mut png = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(resized)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .map_err(|e| anyhow!("encode png: {e}"))?;
+        entries.push((sz, png.into_inner()));
+    }
+    // ICONDIR (6) + ICONDIRENTRY (16 each), then payloads
+    let n = entries.len();
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0, 0]); // reserved
+    out.extend_from_slice(&1u16.to_le_bytes()); // type = icon
+    out.extend_from_slice(&(n as u16).to_le_bytes());
+    let mut offset = 6 + 16 * n as u32;
+    for (sz, png) in &entries {
+        let dim = if *sz >= 256 { 0u8 } else { *sz as u8 };
+        out.push(dim); // width
+        out.push(dim); // height
+        out.push(0); // color count
+        out.push(0); // reserved
+        out.extend_from_slice(&1u16.to_le_bytes()); // planes
+        out.extend_from_slice(&32u16.to_le_bytes()); // bit count
+        out.extend_from_slice(&(png.len() as u32).to_le_bytes()); // size
+        out.extend_from_slice(&offset.to_le_bytes()); // offset
+        offset += png.len() as u32;
+    }
+    for (_, png) in &entries {
+        out.extend_from_slice(png);
+    }
+    std::fs::write(&path, &out)?;
+    Ok(json!({"ok": true, "path": path, "sizes": sizes, "bytes": out.len()}))
+}
+
 // ── color science + distortions ──────────────────────────────────────────────
 
 /// RGB (0..255) → HSL (h in 0..360, s/l in 0..1).
