@@ -87,6 +87,7 @@ Office::doc_write("memo.docx", [
 ])
 val @paragraphs = Office::doc_read("memo.docx")
 val $tables = Office::doc_tables("memo.docx")    # recover table grids dropped by doc_read
+val $blocks = Office::doc_blocks("memo.docx")    # ordered heading/para/table blocks
 
 # Presentation: build a deck
 Office::slides_write("deck.pptx", [
@@ -144,6 +145,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; `format` opt |
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
+| `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |
 | `Office::slides_read($path)` | arrayref of `{text => [...]}` | pptx/odp |
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
@@ -643,7 +645,7 @@ stryke-office/
   src/meta_ops.rs        # document metadata read/write (OOXML/ODF/PDF)
   src/extract.rs         # embedded media extraction (-> image handles)
   src/textops.rs         # template text search/replace (run-coalescing)
-  src/doc_struct.rs      # structured document reads (tables) from docx/odt
+  src/doc_struct.rs      # structured document reads (tables + ordered blocks) from docx/odt
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info/encrypt/decrypt/compress (lopdf)
   src/pdf_form.rs        # PDF AcroForm field list + fill (lopdf)

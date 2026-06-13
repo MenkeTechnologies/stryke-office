@@ -75,6 +75,14 @@ fn Office::doc_tables ($path) {
     Office::_decode("doc_tables", office__doc_tables(to_json({ path => $path })))
 }
 
+## Ordered structural read of a docx/odt: returns { blocks => [...], count }
+## with blocks { kind => "heading", level, text } | { kind => "para", text } |
+## { kind => "table", rows => [[cell, ...]] } in document order — the read-side
+## mirror of the doc_write block model.
+fn Office::doc_blocks ($path) {
+    Office::_decode("doc_blocks", office__doc_blocks(to_json({ path => $path })))
+}
+
 ## Write a document. $blocks is an arrayref of blocks:
 ##   { kind => "para"|"heading", level, align, text }  (or runs => [{text, bold, ...}])
 ##   { kind => "list", ordered => 1|0, items => [str, ...] }   # numbered/bulleted (docx)
