@@ -1199,6 +1199,36 @@ export!(office__img_posterize, op_img_posterize);
 export!(office__img_sepia, op_img_sepia);
 export!(office__img_tint, op_img_tint);
 
+// extended PIL-complete processing surface
+export!(office__img_autocontrast, op_img_autocontrast);
+export!(office__img_equalize, op_img_equalize);
+export!(office__img_solarize, op_img_solarize);
+export!(office__img_colorize, op_img_colorize);
+export!(office__img_emboss, op_img_emboss);
+export!(office__img_convolve, op_img_convolve);
+export!(office__img_edges, op_img_edges);
+export!(office__img_box_blur, op_img_box_blur);
+export!(office__img_median, op_img_median);
+export!(office__img_pixelate, op_img_pixelate);
+export!(office__img_vignette, op_img_vignette);
+export!(office__img_opacity, op_img_opacity);
+export!(office__img_putalpha, op_img_putalpha);
+export!(office__img_blend, op_img_blend);
+export!(office__img_blend_mode, op_img_blend_mode);
+export!(office__img_composite, op_img_composite);
+export!(office__img_border, op_img_border);
+export!(office__img_trim, op_img_trim);
+export!(office__img_transpose, op_img_transpose);
+export!(office__img_transverse, op_img_transverse);
+export!(office__img_histogram, op_img_histogram);
+export!(office__img_extrema, op_img_extrema);
+export!(office__img_noise, op_img_noise);
+export!(office__img_watermark, op_img_watermark);
+export!(office__img_split, op_img_split);
+export!(office__img_merge, op_img_merge);
+export!(office__img_dilate, op_img_dilate);
+export!(office__img_erode, op_img_erode);
+
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
 include!("chart_svg.rs");

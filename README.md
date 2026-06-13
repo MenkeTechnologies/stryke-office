@@ -105,16 +105,22 @@ val $info = Office::pdf_read("out.pdf")   # { pages => [...], text => "..." }
 | Document | docx, odt, html, md, rtf, txt | yes | docx, odt, html, md, rtf, txt, pdf |
 | Presentation | pptx, odp | yes | yes |
 | PDF | pdf | text + pages | text |
-| Image | png, jpeg, gif, bmp, webp, tiff, … | yes | yes |
+| Image | png, jpeg, gif, bmp, webp, tiff, avif, ico, tga, qoi, pnm, dds, hdr, exr, ff | yes | yes |
 
 The output format is taken from the path extension; override with
-`format => "..."`.
+`format => "..."`. Every raster codec the `image` crate ships is enabled, so
+read and write cover the full list above.
 
-Images get a full PIL-style surface (open/new/save/info, resize/thumbnail/
-crop/rotate/flip/convert/paste, get/put pixel, and ImageDraw-style
-rect/line/circle/text). This complements the stryke core `image_*` filter
-builtins (blur, edge, sharpen, grayscale, …) — those operate on pixel
-data; this package adds the file I/O and manipulation surface.
+Images get a full PIL-complete surface: open/new/save/info, resize/thumbnail/
+crop/rotate/flip/convert/paste, get/put pixel, ImageDraw-style
+rect/line/circle/text, the tone/color filters
+(blur/sharpen/brighten/contrast/huerotate/invert/grayscale/gamma/threshold/
+posterize/sepia/tint), and a deep processing layer
+(autocontrast/equalize/solarize/colorize/emboss/convolve/edges/box_blur/median/
+pixelate/vignette/opacity/putalpha/blend/blend_mode/composite/border/trim/
+transpose/transverse/histogram/extrema/noise/watermark/split/merge/dilate/
+erode). This complements the stryke core `image_*` filter builtins — those
+operate on pixel data; this package adds the file I/O and manipulation surface.
 
 ## [0x04] API reference
 
@@ -247,6 +253,36 @@ in any format.)
 | `Office::img_draw_rect / img_draw_line / img_draw_circle / img_draw_text` | hashref | `fill` opt; text uses vendored DejaVu Sans or a `font` path |
 | `Office::img_close($handle)` | hashref | release the handle |
 | `Office::img_blur / img_sharpen / img_brighten / img_contrast / img_huerotate / img_invert / img_grayscale` | hashref | in-place filters on a handle |
+| `Office::img_gamma / img_threshold / img_posterize / img_sepia / img_tint` | hashref | tone / color filters |
+
+#### Extended processing (PIL-complete)
+
+All in-place on a handle unless noted; geometry-changing ops return new
+`{handle, width, height, mode}`.
+
+| Function | Notes |
+|---|---|
+| `img_autocontrast($h, %opts)` | full-range stretch; `cutoff` percent tail clip |
+| `img_equalize($h)` | per-channel histogram equalization |
+| `img_solarize($h, %opts)` | invert above `threshold` (128) |
+| `img_colorize($h, $black, $white)` | map luma to a two-color gradient |
+| `img_emboss($h)` / `img_convolve($h, $kernel, %opts)` | fixed emboss / arbitrary 3×3 kernel (`divisor`, `offset`) |
+| `img_edges($h, %opts)` | Canny edges → grayscale; `low`/`high` |
+| `img_box_blur($h, %opts)` / `img_median($h, %opts)` | box blur (`radius`) / median despeckle (`radius`) |
+| `img_pixelate($h, %opts)` | mosaic; `block` |
+| `img_vignette($h, %opts)` | radial darkening; `strength` 0..1 |
+| `img_opacity($h, $factor)` / `img_putalpha($h, $alpha)` | scale / set alpha |
+| `img_blend($h, $src, $alpha)` | cross-fade two handles |
+| `img_blend_mode($h, $src, $mode)` | multiply/screen/overlay/darken/lighten/difference/add/subtract |
+| `img_composite($h, $src, $mask)` | composite through a grayscale mask |
+| `img_border($h, %opts)` / `img_trim($h, %opts)` | add solid border / autocrop uniform border |
+| `img_transpose($h)` / `img_transverse($h)` | diagonal / anti-diagonal flip (swaps W/H) |
+| `img_histogram($h)` | `{ r, g, b, luma }` 256-bin counts |
+| `img_extrema($h)` | per-channel `[min, max]` |
+| `img_noise($h, %opts)` | `kind` gaussian/salt_pepper, `amount`, `seed` |
+| `img_watermark($h, $text, %opts)` | tiled diagonal watermark; `opacity`, `size`, `gap`, `color`, `font` |
+| `img_split($h)` / `img_merge($r, $g, $b, %opts)` | split to channel images / merge back |
+| `img_dilate($h, %opts)` / `img_erode($h, %opts)` | morphology; `iterations` |
 
 ## [0x05] No external binaries
 

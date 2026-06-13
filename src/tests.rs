@@ -797,6 +797,81 @@ fn image_color_processing_ops() {
 }
 
 #[test]
+fn image_extended_processing_ops() {
+    let n = call(
+        office__img_new,
+        r#"{"width":48,"height":48,"color":[120,160,200,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    // in-place ops that return {"ok":true}
+    for (f, arg) in [
+        (
+            office__img_autocontrast as extern "C" fn(*const c_char) -> *const c_char,
+            r#"{"handle":H,"cutoff":2}"#,
+        ),
+        (office__img_equalize, r#"{"handle":H}"#),
+        (office__img_solarize, r#"{"handle":H,"threshold":100}"#),
+        (office__img_colorize, r##"{"handle":H,"black":"#000080","white":"#ffd700"}"##),
+        (office__img_emboss, r#"{"handle":H}"#),
+        (office__img_convolve, r#"{"handle":H,"kernel":[0,-1,0,-1,5,-1,0,-1,0]}"#),
+        (office__img_box_blur, r#"{"handle":H,"radius":2}"#),
+        (office__img_median, r#"{"handle":H,"radius":1}"#),
+        (office__img_pixelate, r#"{"handle":H,"block":4}"#),
+        (office__img_vignette, r#"{"handle":H,"strength":0.5}"#),
+        (office__img_opacity, r#"{"handle":H,"factor":0.5}"#),
+        (office__img_putalpha, r#"{"handle":H,"alpha":200}"#),
+        (office__img_noise, r#"{"handle":H,"kind":"gaussian","amount":15,"seed":7}"#),
+        (office__img_noise, r#"{"handle":H,"kind":"salt_pepper","amount":0.1,"seed":7}"#),
+        (office__img_watermark, r#"{"handle":H,"text":"DRAFT","opacity":0.3}"#),
+        (office__img_dilate, r#"{"handle":H,"iterations":1}"#),
+        (office__img_erode, r#"{"handle":H,"iterations":1}"#),
+    ] {
+        let v = call(f, &arg.replace('H', &h.to_string()));
+        assert_eq!(v["ok"], true, "op failed: {v}");
+    }
+    // geometry ops that report new dimensions
+    let bordered = call(office__img_border, &format!(r#"{{"handle":{h},"size":5,"color":[255,0,0]}}"#));
+    assert_eq!(bordered["width"], 58, "border grows canvas: {bordered}");
+    let tp = call(office__img_transpose, &format!(r#"{{"handle":{h}}}"#));
+    assert_eq!(tp["width"], 58, "transpose swaps W/H: {tp}");
+    let tv = call(office__img_transverse, &format!(r#"{{"handle":{h}}}"#));
+    assert_eq!(tv["height"], 58, "transverse swaps W/H back: {tv}");
+
+    // canny edges → grayscale image
+    let edges = call(office__img_edges, &format!(r#"{{"handle":{h},"low":20,"high":80}}"#));
+    assert_eq!(edges["mode"], "L", "edges produce grayscale: {edges}");
+
+    // histogram + extrema readouts
+    let hist = call(office__img_histogram, &format!(r#"{{"handle":{h}}}"#));
+    assert_eq!(hist["luma"].as_array().unwrap().len(), 256, "256-bin luma histogram");
+    let ext = call(office__img_extrema, &format!(r#"{{"handle":{h}}}"#));
+    assert!(ext["r"].is_array(), "extrema reports per-channel min/max: {ext}");
+
+    // split → 4 channel handles, merge back
+    let sp = call(office__img_split, &format!(r#"{{"handle":{h}}}"#));
+    let (cr, cg, cb, ca) = (
+        sp["handles"]["r"].as_u64().unwrap(),
+        sp["handles"]["g"].as_u64().unwrap(),
+        sp["handles"]["b"].as_u64().unwrap(),
+        sp["handles"]["a"].as_u64().unwrap(),
+    );
+    let merged = call(office__img_merge, &format!(r#"{{"r":{cr},"g":{cg},"b":{cb},"a":{ca}}}"#));
+    let mh = merged["handle"].as_u64().expect("merge handle");
+
+    // blend / blend_mode / composite between two same-size handles
+    let other = call(office__img_new, r#"{"width":58,"height":58,"color":[200,80,40,255]}"#);
+    let oh = other["handle"].as_u64().unwrap();
+    let bl = call(office__img_blend, &format!(r#"{{"handle":{h},"src":{oh},"alpha":0.4}}"#));
+    assert_eq!(bl["ok"], true, "blend: {bl}");
+    let bm = call(office__img_blend_mode, &format!(r#"{{"handle":{h},"src":{oh},"mode":"screen"}}"#));
+    assert_eq!(bm["ok"], true, "blend_mode: {bm}");
+
+    for handle in [h, cr, cg, cb, ca, mh, oh] {
+        call(office__img_close, &format!(r#"{{"handle":{handle}}}"#));
+    }
+}
+
+#[test]
 fn chart_radar_and_bubble_render() {
     let c = call(
         office__chart_render,

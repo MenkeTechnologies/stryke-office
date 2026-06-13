@@ -270,6 +270,160 @@ fn Office::img_tint ($handle, $color) {
     Office::_decode("img_tint", office__img_tint(to_json({ handle => $handle, color => $color })))
 }
 
+# ── extended processing (PIL-complete surface) ──────────────────────
+
+## Auto-contrast: stretch each channel to full range. opts: cutoff (percent
+## of each histogram tail to clip, default 0).
+fn Office::img_autocontrast ($handle, %opts) {
+    Office::_decode("img_autocontrast", office__img_autocontrast(to_json({ handle => $handle, cutoff => $opts{cutoff} })))
+}
+
+## Per-channel histogram equalization.
+fn Office::img_equalize ($handle) {
+    Office::_decode("img_equalize", office__img_equalize(to_json({ handle => $handle })))
+}
+
+## Solarize: invert channel values at/above $threshold (default 128).
+fn Office::img_solarize ($handle, %opts) {
+    Office::_decode("img_solarize", office__img_solarize(to_json({ handle => $handle, threshold => $opts{threshold} })))
+}
+
+## Colorize grayscale to a gradient between $black (luma 0) and $white (255).
+fn Office::img_colorize ($handle, $black, $white) {
+    Office::_decode("img_colorize", office__img_colorize(to_json({ handle => $handle, black => $black, white => $white })))
+}
+
+## Emboss via a fixed 3x3 kernel.
+fn Office::img_emboss ($handle) {
+    Office::_decode("img_emboss", office__img_emboss(to_json({ handle => $handle })))
+}
+
+## Apply an arbitrary 3x3 convolution. $kernel is 9 numbers (row-major).
+## opts: divisor (default kernel sum), offset (default 0).
+fn Office::img_convolve ($handle, $kernel, %opts) {
+    Office::_decode("img_convolve",
+        office__img_convolve(to_json({ handle => $handle, kernel => $kernel, divisor => $opts{divisor}, offset => $opts{offset} })))
+}
+
+## Canny edge detection -> white edges on black (returns new geometry/mode).
+## opts: low (default 30), high (default 100).
+fn Office::img_edges ($handle, %opts) {
+    Office::_decode("img_edges", office__img_edges(to_json({ handle => $handle, low => $opts{low}, high => $opts{high} })))
+}
+
+## Separable box blur. opts: radius (default 2).
+fn Office::img_box_blur ($handle, %opts) {
+    Office::_decode("img_box_blur", office__img_box_blur(to_json({ handle => $handle, radius => $opts{radius} })))
+}
+
+## Median (despeckle) filter. opts: radius (default 1).
+fn Office::img_median ($handle, %opts) {
+    Office::_decode("img_median", office__img_median(to_json({ handle => $handle, radius => $opts{radius} })))
+}
+
+## Pixelate / mosaic. opts: block (default 8).
+fn Office::img_pixelate ($handle, %opts) {
+    Office::_decode("img_pixelate", office__img_pixelate(to_json({ handle => $handle, block => $opts{block} })))
+}
+
+## Radial vignette. opts: strength 0..1 (default 0.6).
+fn Office::img_vignette ($handle, %opts) {
+    Office::_decode("img_vignette", office__img_vignette(to_json({ handle => $handle, strength => $opts{strength} })))
+}
+
+## Scale alpha by $factor 0..1.
+fn Office::img_opacity ($handle, $factor) {
+    Office::_decode("img_opacity", office__img_opacity(to_json({ handle => $handle, factor => $factor })))
+}
+
+## Set a constant alpha for every pixel (0..255).
+fn Office::img_putalpha ($handle, $alpha) {
+    Office::_decode("img_putalpha", office__img_putalpha(to_json({ handle => $handle, alpha => $alpha })))
+}
+
+## Cross-fade base toward $src by $alpha 0..1 ($src resized to base size).
+fn Office::img_blend ($handle, $src, $alpha) {
+    Office::_decode("img_blend", office__img_blend(to_json({ handle => $handle, src => $src, alpha => $alpha })))
+}
+
+## Blend two handles with a $mode: multiply/screen/overlay/darken/lighten/
+## difference/add/subtract.
+fn Office::img_blend_mode ($handle, $src, $mode) {
+    Office::_decode("img_blend_mode", office__img_blend_mode(to_json({ handle => $handle, src => $src, mode => $mode })))
+}
+
+## Composite $src over base through grayscale $mask (white=src, black=base).
+fn Office::img_composite ($handle, $src, $mask) {
+    Office::_decode("img_composite", office__img_composite(to_json({ handle => $handle, src => $src, mask => $mask })))
+}
+
+## Grow the canvas with a solid border. opts: size (default 10), color.
+fn Office::img_border ($handle, %opts) {
+    Office::_decode("img_border", office__img_border(to_json({ handle => $handle, size => $opts{size}, color => $opts{color} })))
+}
+
+## Autocrop a uniform border matching the top-left pixel. opts: tolerance
+## (default 0).
+fn Office::img_trim ($handle, %opts) {
+    Office::_decode("img_trim", office__img_trim(to_json({ handle => $handle, tolerance => $opts{tolerance} })))
+}
+
+## Transpose across the main diagonal (swaps W/H).
+fn Office::img_transpose ($handle) {
+    Office::_decode("img_transpose", office__img_transpose(to_json({ handle => $handle })))
+}
+
+## Transverse across the anti-diagonal (swaps W/H).
+fn Office::img_transverse ($handle) {
+    Office::_decode("img_transverse", office__img_transverse(to_json({ handle => $handle })))
+}
+
+## Per-channel 256-bin histograms: { r, g, b, luma } -> arrayrefs of counts.
+fn Office::img_histogram ($handle) {
+    Office::_decode("img_histogram", office__img_histogram(to_json({ handle => $handle })))
+}
+
+## Min/max of each channel: { r=>[lo,hi], g, b, a }.
+fn Office::img_extrema ($handle) {
+    Office::_decode("img_extrema", office__img_extrema(to_json({ handle => $handle })))
+}
+
+## Add noise. opts: kind => "gaussian"|"salt_pepper", amount (gaussian stddev
+## ~20, or s&p rate 0..1 ~0.05), seed (default 1).
+fn Office::img_noise ($handle, %opts) {
+    Office::_decode("img_noise",
+        office__img_noise(to_json({ handle => $handle, kind => $opts{kind}, amount => $opts{amount}, seed => $opts{seed} })))
+}
+
+## Tile a semi-transparent diagonal watermark. opts: color, size (28),
+## opacity 0..1 (0.25), gap (220), font.
+fn Office::img_watermark ($handle, $text, %opts) {
+    Office::_decode("img_watermark",
+        office__img_watermark(to_json({ handle => $handle, text => $text, color => $opts{color}, size => $opts{size}, opacity => $opts{opacity}, gap => $opts{gap}, font => $opts{font} })))
+}
+
+## Split into channel images. Returns { handles => { r, g, b, a } }, each a
+## grayscale (L) image; close them when done.
+fn Office::img_split ($handle) {
+    Office::_decode("img_split", office__img_split(to_json({ handle => $handle })))
+}
+
+## Merge grayscale channel handles into one image. $a is optional (opaque if
+## omitted). Returns a new image handle.
+fn Office::img_merge ($r, $g, $b, %opts) {
+    Office::_decode("img_merge", office__img_merge(to_json({ r => $r, g => $g, b => $b, a => $opts{a} })))
+}
+
+## Morphological dilate. opts: iterations (default 1).
+fn Office::img_dilate ($handle, %opts) {
+    Office::_decode("img_dilate", office__img_dilate(to_json({ handle => $handle, iterations => $opts{iterations} })))
+}
+
+## Morphological erode. opts: iterations (default 1).
+fn Office::img_erode ($handle, %opts) {
+    Office::_decode("img_erode", office__img_erode(to_json({ handle => $handle, iterations => $opts{iterations} })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format

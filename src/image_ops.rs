@@ -499,3 +499,702 @@ fn op_img_tint(opts: Value) -> Result<Value> {
         ]
     })
 }
+
+// ── extended processing ops (PIL-complete surface) ───────────────────────────
+//
+// Everything below stays native: manual per-pixel work plus the handful of
+// `imageproc` routines verified to exist (median_filter, canny). No new crates.
+
+/// Rec.601 luma of an RGB triple (0..255).
+fn luma601(r: u8, g: u8, b: u8) -> u8 {
+    ((r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000) as u8
+}
+
+/// An owned RGBA copy of the image under `handle`.
+fn rgba_of(handle: u64) -> Result<image::RgbaImage> {
+    with_image(handle, |img| Ok(img.to_rgba8()))
+}
+
+/// Stretch each RGB channel to the full 0..255 range, clipping `cutoff`
+/// percent of each channel's histogram tails (default 0).
+fn op_img_autocontrast(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let cutoff = opts.get("cutoff").and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, 49.0);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let n = (buf.width() * buf.height()) as f64;
+        let clip = (n * cutoff / 100.0) as u32;
+        let mut lut = [[0u8; 256]; 3];
+        for c in 0..3 {
+            let mut hist = [0u32; 256];
+            for px in buf.pixels() {
+                hist[px.0[c] as usize] += 1;
+            }
+            let (mut lo, mut acc) = (0usize, 0u32);
+            while lo < 255 {
+                acc += hist[lo];
+                if acc > clip {
+                    break;
+                }
+                lo += 1;
+            }
+            let (mut hi, mut acc2) = (255usize, 0u32);
+            while hi > 0 {
+                acc2 += hist[hi];
+                if acc2 > clip {
+                    break;
+                }
+                hi -= 1;
+            }
+            if hi <= lo {
+                for (i, slot) in lut[c].iter_mut().enumerate() {
+                    *slot = i as u8;
+                }
+            } else {
+                let scale = 255.0 / (hi - lo) as f64;
+                for (i, slot) in lut[c].iter_mut().enumerate() {
+                    *slot = (((i as f64 - lo as f64) * scale).round()).clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+        for px in buf.pixels_mut() {
+            for c in 0..3 {
+                px.0[c] = lut[c][px.0[c] as usize];
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Per-channel histogram equalization (flattens the tonal distribution).
+fn op_img_equalize(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |img| {
+        let mut buf = img.to_rgba8();
+        let total = (buf.width() * buf.height()).max(1) as f64;
+        let mut lut = [[0u8; 256]; 3];
+        for c in 0..3 {
+            let mut hist = [0u32; 256];
+            for px in buf.pixels() {
+                hist[px.0[c] as usize] += 1;
+            }
+            let mut cum = 0u32;
+            for (i, &count) in hist.iter().enumerate() {
+                cum += count;
+                lut[c][i] = (cum as f64 / total * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+        for px in buf.pixels_mut() {
+            for c in 0..3 {
+                px.0[c] = lut[c][px.0[c] as usize];
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Invert all channel values at or above `threshold` (default 128).
+fn op_img_solarize(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let t = opts.get("threshold").and_then(Value::as_u64).unwrap_or(128) as u8;
+    pixel_map(h, move |[r, g, b, a]| {
+        let f = |v: u8| if v >= t { 255 - v } else { v };
+        [f(r), f(g), f(b), a]
+    })
+}
+
+/// Map grayscale luma to a gradient between `black` (luma 0) and `white`
+/// (luma 255). Colors accept "#rrggbb"/[r,g,b].
+fn op_img_colorize(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let lo = parse_color(opts.get("black"));
+    let hi = parse_color(opts.get("white"));
+    pixel_map(h, move |[r, g, b, a]| {
+        let t = luma601(r, g, b) as f64 / 255.0;
+        let lerp = |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * t).round() as u8;
+        [lerp(lo.0[0], hi.0[0]), lerp(lo.0[1], hi.0[1]), lerp(lo.0[2], hi.0[2]), a]
+    })
+}
+
+/// Apply a 3x3 convolution kernel (flattened row-major, 9 numbers) with an
+/// optional `divisor` (default = kernel sum or 1) and `offset` (default 0).
+/// Used by emboss/edge presets and arbitrary user kernels.
+fn convolve3(buf: &image::RgbaImage, k: &[f64; 9], div: f64, off: f64) -> image::RgbaImage {
+    let (w, h) = (buf.width(), buf.height());
+    let mut out = image::RgbaImage::new(w, h);
+    let div = if div.abs() < f64::EPSILON { 1.0 } else { div };
+    for y in 0..h {
+        for x in 0..w {
+            let mut acc = [0.0f64; 3];
+            for ky in 0..3i32 {
+                for kx in 0..3i32 {
+                    let sx = (x as i32 + kx - 1).clamp(0, w as i32 - 1) as u32;
+                    let sy = (y as i32 + ky - 1).clamp(0, h as i32 - 1) as u32;
+                    let p = buf.get_pixel(sx, sy).0;
+                    let kv = k[(ky * 3 + kx) as usize];
+                    for c in 0..3 {
+                        acc[c] += p[c] as f64 * kv;
+                    }
+                }
+            }
+            let a = buf.get_pixel(x, y).0[3];
+            out.put_pixel(
+                x,
+                y,
+                image::Rgba([
+                    (acc[0] / div + off).clamp(0.0, 255.0) as u8,
+                    (acc[1] / div + off).clamp(0.0, 255.0) as u8,
+                    (acc[2] / div + off).clamp(0.0, 255.0) as u8,
+                    a,
+                ]),
+            );
+        }
+    }
+    out
+}
+
+/// Emboss via a fixed 3x3 kernel.
+fn op_img_emboss(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |img| {
+        let buf = img.to_rgba8();
+        let k = [-2.0, -1.0, 0.0, -1.0, 1.0, 1.0, 0.0, 1.0, 2.0];
+        Ok(DynamicImage::ImageRgba8(convolve3(&buf, &k, 1.0, 128.0)))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Arbitrary 3x3 convolution. opts: kernel (9 numbers), divisor?, offset?.
+fn op_img_convolve(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let arr = opts
+        .get("kernel")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing kernel (expected 9 numbers)"))?;
+    if arr.len() < 9 {
+        return Err(anyhow!("kernel must have 9 numbers"));
+    }
+    let mut k = [0.0f64; 9];
+    for (i, slot) in k.iter_mut().enumerate() {
+        *slot = arr[i].as_f64().unwrap_or(0.0);
+    }
+    let sum: f64 = k.iter().sum();
+    let div = opts.get("divisor").and_then(Value::as_f64).unwrap_or(if sum.abs() < f64::EPSILON { 1.0 } else { sum });
+    let off = opts.get("offset").and_then(Value::as_f64).unwrap_or(0.0);
+    transform(h, move |img| {
+        let buf = img.to_rgba8();
+        Ok(DynamicImage::ImageRgba8(convolve3(&buf, &k, div, off)))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Canny edge detection → white edges on black. opts: low (default 30), high
+/// (default 100).
+fn op_img_edges(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let low = opts.get("low").and_then(Value::as_f64).unwrap_or(30.0) as f32;
+    let high = opts.get("high").and_then(Value::as_f64).unwrap_or(100.0) as f32;
+    transform(h, move |img| {
+        let edges = imageproc::edges::canny(&img.to_luma8(), low.min(high), high.max(low));
+        Ok(DynamicImage::ImageLuma8(edges))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
+/// Separable box blur with radius `r` (default 2).
+fn op_img_box_blur(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let r = opts.get("radius").and_then(Value::as_u64).unwrap_or(2).clamp(1, 64) as i32;
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width() as i32, src.height() as i32);
+        let win = (2 * r + 1) as f64;
+        // horizontal pass
+        let mut tmp = image::RgbaImage::new(w as u32, hgt as u32);
+        for y in 0..hgt {
+            for x in 0..w {
+                let mut acc = [0.0f64; 3];
+                for dx in -r..=r {
+                    let sx = (x + dx).clamp(0, w - 1) as u32;
+                    let p = src.get_pixel(sx, y as u32).0;
+                    for c in 0..3 {
+                        acc[c] += p[c] as f64;
+                    }
+                }
+                let a = src.get_pixel(x as u32, y as u32).0[3];
+                tmp.put_pixel(x as u32, y as u32, image::Rgba([(acc[0] / win) as u8, (acc[1] / win) as u8, (acc[2] / win) as u8, a]));
+            }
+        }
+        // vertical pass
+        let mut out = image::RgbaImage::new(w as u32, hgt as u32);
+        for y in 0..hgt {
+            for x in 0..w {
+                let mut acc = [0.0f64; 3];
+                for dy in -r..=r {
+                    let sy = (y + dy).clamp(0, hgt - 1) as u32;
+                    let p = tmp.get_pixel(x as u32, sy).0;
+                    for c in 0..3 {
+                        acc[c] += p[c] as f64;
+                    }
+                }
+                let a = tmp.get_pixel(x as u32, y as u32).0[3];
+                out.put_pixel(x as u32, y as u32, image::Rgba([(acc[0] / win) as u8, (acc[1] / win) as u8, (acc[2] / win) as u8, a]));
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Median filter (despeckle). opts: radius (default 1).
+fn op_img_median(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let r = opts.get("radius").and_then(Value::as_u64).unwrap_or(1).clamp(1, 32) as u32;
+    transform(h, move |img| {
+        let out = imageproc::filter::median_filter(&img.to_rgba8(), r, r);
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Pixelate / mosaic: shrink by `block` then nearest-upscale back. opts:
+/// block (default 8).
+fn op_img_pixelate(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let block = opts.get("block").and_then(Value::as_u64).unwrap_or(8).clamp(2, 256) as u32;
+    transform(h, move |img| {
+        use image::imageops::FilterType::Nearest;
+        let (w, hgt) = (img.width(), img.height());
+        let small = img.resize_exact((w / block).max(1), (hgt / block).max(1), Nearest);
+        Ok(small.resize_exact(w, hgt, Nearest))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Radial vignette darkening toward the edges. opts: strength 0..1 (default
+/// 0.6).
+fn op_img_vignette(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let strength = opts.get("strength").and_then(Value::as_f64).unwrap_or(0.6).clamp(0.0, 1.0);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let (w, hgt) = (buf.width() as f64, buf.height() as f64);
+        let (cx, cy) = (w / 2.0, hgt / 2.0);
+        let maxd = (cx * cx + cy * cy).sqrt();
+        for (x, y, px) in buf.enumerate_pixels_mut() {
+            let d = ((x as f64 - cx).powi(2) + (y as f64 - cy).powi(2)).sqrt() / maxd;
+            let f = 1.0 - strength * d * d;
+            for c in 0..3 {
+                px.0[c] = (px.0[c] as f64 * f).clamp(0.0, 255.0) as u8;
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Scale the alpha channel by `factor` 0..1 (semi-transparency).
+fn op_img_opacity(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let f = opts.get("factor").and_then(Value::as_f64).unwrap_or(1.0).clamp(0.0, 1.0);
+    pixel_map(h, move |[r, g, b, a]| [r, g, b, (a as f64 * f) as u8])
+}
+
+/// Set a constant alpha for every pixel (0..255).
+fn op_img_putalpha(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let a = opts.get("alpha").and_then(Value::as_u64).unwrap_or(255).min(255) as u8;
+    pixel_map(h, move |[r, g, b, _]| [r, g, b, a])
+}
+
+/// Linear cross-fade between the base handle and `src` by `alpha` 0..1
+/// (`src` is resized to the base size). out = base*(1-a) + src*a.
+fn op_img_blend(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let src = req_u64_img(&opts, "src")?;
+    let alpha = opts.get("alpha").and_then(Value::as_f64).unwrap_or(0.5).clamp(0.0, 1.0);
+    let src_img = rgba_of(src)?;
+    transform(h, move |img| {
+        let base = img.to_rgba8();
+        let s = image::imageops::resize(&src_img, base.width(), base.height(), image::imageops::FilterType::Triangle);
+        let mut out = base.clone();
+        for (p, q) in out.pixels_mut().zip(s.pixels()) {
+            for c in 0..4 {
+                p.0[c] = (p.0[c] as f64 * (1.0 - alpha) + q.0[c] as f64 * alpha).round() as u8;
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Blend two handles with a Photoshop-style `mode`: multiply, screen,
+/// overlay, darken, lighten, difference, add, subtract. `src` resized to base.
+fn op_img_blend_mode(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let src = req_u64_img(&opts, "src")?;
+    let mode = opts.get("mode").and_then(Value::as_str).unwrap_or("multiply").to_string();
+    let src_img = rgba_of(src)?;
+    transform(h, move |img| {
+        let base = img.to_rgba8();
+        let s = image::imageops::resize(&src_img, base.width(), base.height(), image::imageops::FilterType::Triangle);
+        let mut out = base.clone();
+        let f = |a: u8, b: u8| -> u8 {
+            let (x, y) = (a as f64 / 255.0, b as f64 / 255.0);
+            let v = match mode.as_str() {
+                "screen" => 1.0 - (1.0 - x) * (1.0 - y),
+                "overlay" => if x < 0.5 { 2.0 * x * y } else { 1.0 - 2.0 * (1.0 - x) * (1.0 - y) },
+                "darken" => x.min(y),
+                "lighten" => x.max(y),
+                "difference" => (x - y).abs(),
+                "add" => x + y,
+                "subtract" => x - y,
+                _ => x * y, // multiply
+            };
+            (v.clamp(0.0, 1.0) * 255.0).round() as u8
+        };
+        for (p, q) in out.pixels_mut().zip(s.pixels()) {
+            for c in 0..3 {
+                p.0[c] = f(p.0[c], q.0[c]);
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Composite `src` over the base through a grayscale `mask` handle (white =
+/// keep src, black = keep base). All resized to base size.
+fn op_img_composite(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let src = req_u64_img(&opts, "src")?;
+    let mask = req_u64_img(&opts, "mask")?;
+    let src_img = rgba_of(src)?;
+    let mask_img = rgba_of(mask)?;
+    transform(h, move |img| {
+        let base = img.to_rgba8();
+        let (w, hgt) = (base.width(), base.height());
+        let s = image::imageops::resize(&src_img, w, hgt, image::imageops::FilterType::Triangle);
+        let m = image::imageops::resize(&mask_img, w, hgt, image::imageops::FilterType::Triangle);
+        let mut out = base.clone();
+        for (i, p) in out.pixels_mut().enumerate() {
+            let x = (i as u32) % w;
+            let y = (i as u32) / w;
+            let mp = m.get_pixel(x, y).0;
+            let t = luma601(mp[0], mp[1], mp[2]) as f64 / 255.0;
+            let q = s.get_pixel(x, y).0;
+            for c in 0..4 {
+                p.0[c] = (p.0[c] as f64 * (1.0 - t) + q[c] as f64 * t).round() as u8;
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Add a solid-color border of `size` px on every side (grows the canvas).
+/// opts: size (default 10), color (default opaque black).
+fn op_img_border(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let sz = opts.get("size").and_then(Value::as_u64).unwrap_or(10) as u32;
+    let color = parse_color(opts.get("color"));
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width(), src.height());
+        let mut out = image::RgbaImage::from_pixel(w + 2 * sz, hgt + 2 * sz, color);
+        image::imageops::overlay(&mut out, &src, sz as i64, sz as i64);
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
+/// Autocrop a uniform border matching the top-left pixel within `tolerance`
+/// (default 0). Returns the new geometry.
+fn op_img_trim(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let tol = opts.get("tolerance").and_then(Value::as_u64).unwrap_or(0) as i32;
+    transform(h, move |img| {
+        let buf = img.to_rgba8();
+        let (w, hgt) = (buf.width(), buf.height());
+        if w == 0 || hgt == 0 {
+            return Ok(DynamicImage::ImageRgba8(buf));
+        }
+        let bg = buf.get_pixel(0, 0).0;
+        let matches = |p: &[u8; 4]| (0..4).all(|c| (p[c] as i32 - bg[c] as i32).abs() <= tol);
+        let (mut minx, mut miny, mut maxx, mut maxy) = (w, hgt, 0u32, 0u32);
+        let mut any = false;
+        for (x, y, px) in buf.enumerate_pixels() {
+            if !matches(&px.0) {
+                any = true;
+                minx = minx.min(x);
+                miny = miny.min(y);
+                maxx = maxx.max(x);
+                maxy = maxy.max(y);
+            }
+        }
+        if !any {
+            return Ok(DynamicImage::ImageRgba8(buf));
+        }
+        let cropped = image::imageops::crop_imm(&buf, minx, miny, maxx - minx + 1, maxy - miny + 1).to_image();
+        Ok(DynamicImage::ImageRgba8(cropped))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
+/// Transpose across the main diagonal (out[y,x] = in[x,y]); swaps W/H.
+fn op_img_transpose(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width(), src.height());
+        let mut out = image::RgbaImage::new(hgt, w);
+        for (x, y, px) in src.enumerate_pixels() {
+            out.put_pixel(y, x, *px);
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
+/// Transverse across the anti-diagonal; swaps W/H.
+fn op_img_transverse(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width(), src.height());
+        let mut out = image::RgbaImage::new(hgt, w);
+        for (x, y, px) in src.enumerate_pixels() {
+            out.put_pixel(hgt - 1 - y, w - 1 - x, *px);
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
+/// Per-channel 256-bin histogram plus a luma histogram.
+fn op_img_histogram(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    with_image(h, |img| {
+        let buf = img.to_rgba8();
+        let (mut r, mut g, mut b, mut l) = ([0u32; 256], [0u32; 256], [0u32; 256], [0u32; 256]);
+        for px in buf.pixels() {
+            r[px.0[0] as usize] += 1;
+            g[px.0[1] as usize] += 1;
+            b[px.0[2] as usize] += 1;
+            l[luma601(px.0[0], px.0[1], px.0[2]) as usize] += 1;
+        }
+        Ok(json!({"r": r.to_vec(), "g": g.to_vec(), "b": b.to_vec(), "luma": l.to_vec()}))
+    })
+}
+
+/// Min/max value of each channel.
+fn op_img_extrema(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    with_image(h, |img| {
+        let buf = img.to_rgba8();
+        let mut lo = [255u8; 4];
+        let mut hi = [0u8; 4];
+        for px in buf.pixels() {
+            for c in 0..4 {
+                lo[c] = lo[c].min(px.0[c]);
+                hi[c] = hi[c].max(px.0[c]);
+            }
+        }
+        Ok(json!({
+            "r": [lo[0], hi[0]], "g": [lo[1], hi[1]],
+            "b": [lo[2], hi[2]], "a": [lo[3], hi[3]],
+        }))
+    })
+}
+
+/// Deterministic LCG → uniform f64 in [0,1). Seeded so output is reproducible.
+struct Lcg(u64);
+impl Lcg {
+    fn next_f64(&mut self) -> f64 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (self.0 >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+/// Add noise. opts: kind "gaussian"|"salt_pepper" (default gaussian),
+/// amount (gaussian stddev, default 20; or s&p rate 0..1, default 0.05),
+/// seed (default 1).
+fn op_img_noise(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let kind = opts.get("kind").and_then(Value::as_str).unwrap_or("gaussian").to_string();
+    let amount = opts.get("amount").and_then(Value::as_f64);
+    let seed = opts.get("seed").and_then(Value::as_u64).unwrap_or(1);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let mut rng = Lcg(seed.wrapping_add(0x9E3779B97F4A7C15));
+        if kind == "salt_pepper" {
+            let rate = amount.unwrap_or(0.05).clamp(0.0, 1.0);
+            for px in buf.pixels_mut() {
+                if rng.next_f64() < rate {
+                    let v = if rng.next_f64() < 0.5 { 0 } else { 255 };
+                    px.0[0] = v;
+                    px.0[1] = v;
+                    px.0[2] = v;
+                }
+            }
+        } else {
+            let std = amount.unwrap_or(20.0);
+            for px in buf.pixels_mut() {
+                // Box–Muller for a normal sample.
+                let (u1, u2) = (rng.next_f64().max(1e-12), rng.next_f64());
+                let n = (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos() * std;
+                for c in 0..3 {
+                    px.0[c] = (px.0[c] as f64 + n).clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Tile semi-transparent diagonal watermark text across the image. opts:
+/// text (required), color (default white), size (default 28), opacity 0..1
+/// (default 0.25), gap (default 220), font?.
+fn op_img_watermark(opts: Value) -> Result<Value> {
+    use ab_glyph::{FontRef, PxScale};
+    use imageproc::drawing::draw_text_mut;
+    let h = req_u64_img(&opts, "handle")?;
+    let text = req_str(&opts, "text")?.to_string();
+    let color = parse_color(opts.get("color").or(Some(&Value::String("#ffffff".into()))));
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(28.0) as f32;
+    let opacity = opts.get("opacity").and_then(Value::as_f64).unwrap_or(0.25).clamp(0.0, 1.0);
+    let gap = opts.get("gap").and_then(Value::as_u64).unwrap_or(220).max(40) as i32;
+    let font_bytes: Vec<u8> = match opts.get("font").and_then(Value::as_str) {
+        Some(p) => std::fs::read(p).map_err(|e| anyhow!("font {p}: {e}"))?,
+        None => FONT_BYTES.to_vec(),
+    };
+    transform(h, move |img| {
+        let mut base = img.to_rgba8();
+        let (w, hgt) = (base.width() as i32, base.height() as i32);
+        // Draw onto a transparent layer, then alpha-composite at `opacity`.
+        let mut layer = image::RgbaImage::new(base.width(), base.height());
+        let font = FontRef::try_from_slice(&font_bytes).map_err(|_| anyhow!("invalid font"))?;
+        let scale = PxScale::from(size);
+        let mut row = 0;
+        let mut y = 0;
+        while y < hgt {
+            let xoff = if row % 2 == 0 { 0 } else { gap / 2 };
+            let mut x = -xoff;
+            while x < w {
+                draw_text_mut(&mut layer, color, x, y, scale, &font, &text);
+                x += gap;
+            }
+            y += gap / 2;
+            row += 1;
+        }
+        for (p, q) in base.pixels_mut().zip(layer.pixels()) {
+            let a = q.0[3] as f64 / 255.0 * opacity;
+            for c in 0..3 {
+                p.0[c] = (p.0[c] as f64 * (1.0 - a) + q.0[c] as f64 * a).round() as u8;
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(base))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Split into channel images. Returns `{handles: {r,g,b,a}}`, each a grayscale
+/// (L) image of that channel.
+fn op_img_split(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let buf = rgba_of(h)?;
+    let (w, hgt) = (buf.width(), buf.height());
+    let mut chans = [(); 4].map(|_| image::GrayImage::new(w, hgt));
+    for (x, y, px) in buf.enumerate_pixels() {
+        for c in 0..4 {
+            chans[c].put_pixel(x, y, image::Luma([px.0[c]]));
+        }
+    }
+    let [r, g, b, a] = chans;
+    Ok(json!({"handles": {
+        "r": insert_image(DynamicImage::ImageLuma8(r)),
+        "g": insert_image(DynamicImage::ImageLuma8(g)),
+        "b": insert_image(DynamicImage::ImageLuma8(b)),
+        "a": insert_image(DynamicImage::ImageLuma8(a)),
+    }}))
+}
+
+/// Merge grayscale channel handles into one RGB(A) image. opts: r, g, b
+/// (required handles), a? (optional). Returns a new image handle.
+fn op_img_merge(opts: Value) -> Result<Value> {
+    let r = rgba_of(req_u64_img(&opts, "r")?)?;
+    let g = rgba_of(req_u64_img(&opts, "g")?)?;
+    let b = rgba_of(req_u64_img(&opts, "b")?)?;
+    let a = opts.get("a").and_then(Value::as_u64).map(rgba_of).transpose()?;
+    let (w, hgt) = (r.width(), r.height());
+    let mut out = image::RgbaImage::new(w, hgt);
+    for (x, y, px) in out.enumerate_pixels_mut() {
+        let av = a.as_ref().map(|m| m.get_pixel(x, y).0[0]).unwrap_or(255);
+        *px = image::Rgba([
+            r.get_pixel(x, y).0[0],
+            g.get_pixel(x.min(g.width() - 1), y.min(g.height() - 1)).0[0],
+            b.get_pixel(x.min(b.width() - 1), y.min(b.height() - 1)).0[0],
+            av,
+        ]);
+    }
+    let handle = insert_image(DynamicImage::ImageRgba8(out));
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
+/// 3x3 grayscale-style morphology (per RGB channel). `grow` = dilate (max),
+/// else erode (min).
+fn morph3(buf: &image::RgbaImage, grow: bool) -> image::RgbaImage {
+    let (w, hgt) = (buf.width() as i32, buf.height() as i32);
+    let mut out = buf.clone();
+    for y in 0..hgt {
+        for x in 0..w {
+            let mut v = if grow { [0u8; 3] } else { [255u8; 3] };
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let sx = (x + dx).clamp(0, w - 1) as u32;
+                    let sy = (y + dy).clamp(0, hgt - 1) as u32;
+                    let p = buf.get_pixel(sx, sy).0;
+                    for c in 0..3 {
+                        v[c] = if grow { v[c].max(p[c]) } else { v[c].min(p[c]) };
+                    }
+                }
+            }
+            let px = out.get_pixel_mut(x as u32, y as u32);
+            for c in 0..3 {
+                px.0[c] = v[c];
+            }
+        }
+    }
+    out
+}
+
+/// Morphological dilate, repeated `iterations` times (default 1).
+fn op_img_dilate(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let it = opts.get("iterations").and_then(Value::as_u64).unwrap_or(1).clamp(1, 16);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        for _ in 0..it {
+            buf = morph3(&buf, true);
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Morphological erode, repeated `iterations` times (default 1).
+fn op_img_erode(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let it = opts.get("iterations").and_then(Value::as_u64).unwrap_or(1).clamp(1, 16);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        for _ in 0..it {
+            buf = morph3(&buf, false);
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
