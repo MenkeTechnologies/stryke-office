@@ -198,6 +198,55 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_aggregate_group_by() {
+    let path = tmp("agg.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["east",5],
+                ["west",20],
+                ["east",15]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // sum amt by region -> east 20, west 30 (sorted by group key)
+    let out = tmp("agg_sum.xlsx");
+    let r = call(
+        office__sheet_aggregate,
+        &format!(
+            r#"{{"path":"{path}","group_by":"region","value":"amt","agg":"sum","output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["groups"], 2, "two groups: {r}");
+    let rr = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rr["sheets"][0]["rows"];
+    assert_eq!(rows[0][1], "sum_amt", "agg label: {rr}");
+    assert_eq!(rows[1][0], "east", "first group east: {rr}");
+    assert_eq!(rows[1][1], 20.0, "east sum: {rr}");
+    assert_eq!(rows[2][0], "west", "west: {rr}");
+    assert_eq!(rows[2][1], 30.0, "west sum: {rr}");
+
+    // count by region -> 2 each
+    let cout = tmp("agg_count.xlsx");
+    let c = call(
+        office__sheet_aggregate,
+        &format!(r#"{{"path":"{path}","group_by":"region","agg":"count","output":"{cout}"}}"#),
+    );
+    assert_eq!(c["groups"], 2, "count groups: {c}");
+    let cr = call(office__sheet_read, &format!(r#"{{"path":"{cout}"}}"#));
+    assert_eq!(cr["sheets"][0]["rows"][1][1], 2.0, "east count 2: {cr}");
+
+    for f in [&path, &out, &cout] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(

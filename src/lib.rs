@@ -1580,6 +1580,125 @@ fn op_sheet_filter(opts: Value) -> Result<Value> {
     )
 }
 
+/// Resolve a column selector (0-based index or header name) to an index.
+fn resolve_col(by: Option<&Value>, header_row: Option<&[Value]>) -> Result<usize> {
+    match by {
+        Some(Value::Number(n)) => {
+            Ok(n.as_u64().ok_or_else(|| anyhow!("bad column index"))? as usize)
+        }
+        Some(Value::String(name)) => header_row
+            .and_then(|hr| hr.iter().position(|c| cell_to_string(c) == *name))
+            .ok_or_else(|| anyhow!("column not found: {name}")),
+        _ => Err(anyhow!("column must be a name or 0-based index")),
+    }
+}
+
+/// Group rows by a column and aggregate another (SQL GROUP BY). opts: path,
+/// output, group_by => column name/index (required), value => column to
+/// aggregate (required for sum/mean/min/max), agg => count|sum|mean|min|max
+/// (default count), sheet, header (default true), format. Output is a two-column
+/// sheet sorted by group key. Returns `{ ok, path, groups }`.
+fn op_sheet_aggregate(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("count");
+    if !matches!(agg, "count" | "sum" | "mean" | "min" | "max") {
+        return Err(anyhow!("unknown agg: {agg}"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let gcol = resolve_col(opts.get("group_by"), header_row)?;
+    let vcol = match opts.get("value") {
+        Some(_) => Some(resolve_col(opts.get("value"), header_row)?),
+        None if agg == "count" => None,
+        None => return Err(anyhow!("agg '{agg}' requires a value column")),
+    };
+
+    let cell_at = |row: &Value, c: usize| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    // (count, sum, min, max, numeric_count) per group, sorted by key.
+    let mut groups: std::collections::BTreeMap<String, (u64, f64, f64, f64, u64)> =
+        std::collections::BTreeMap::new();
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    for row in &rows[data_start..] {
+        let key = cell_to_string(&cell_at(row, gcol));
+        let e = groups
+            .entry(key)
+            .or_insert((0, 0.0, f64::INFINITY, f64::NEG_INFINITY, 0));
+        e.0 += 1;
+        if let Some(vc) = vcol {
+            if let Some(x) = sheet_cell_num(&cell_at(row, vc)) {
+                e.1 += x;
+                e.2 = e.2.min(x);
+                e.3 = e.3.max(x);
+                e.4 += 1;
+            }
+        }
+    }
+
+    let group_name = header_row
+        .and_then(|hr| hr.get(gcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", gcol + 1));
+    let value_name = vcol.map(|vc| {
+        header_row
+            .and_then(|hr| hr.get(vc))
+            .map(cell_to_string)
+            .unwrap_or_else(|| format!("Col{}", vc + 1))
+    });
+    let agg_label = if agg == "count" {
+        "count".to_string()
+    } else {
+        format!("{agg}_{}", value_name.as_deref().unwrap_or("value"))
+    };
+
+    let group_count = groups.len();
+    let mut out_rows: Vec<Value> = vec![json!([group_name, agg_label])];
+    for (key, (count, sum, min, max, numc)) in groups {
+        let v = match agg {
+            "count" => json!(count),
+            "sum" => json!(sum),
+            "mean" if numc > 0 => json!(sum / numc as f64),
+            "min" if numc > 0 => json!(min),
+            "max" if numc > 0 => json!(max),
+            _ => Value::Null,
+        };
+        out_rows.push(json!([key, v]));
+    }
+
+    let mut wopts =
+        json!({ "path": output, "sheets": [{ "name": "Aggregate", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "groups": group_count }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -2191,6 +2310,7 @@ export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_filter, op_sheet_filter);
+export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
