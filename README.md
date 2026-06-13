@@ -169,6 +169,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
 | `Office::pdf_build($path, $elements, %opts)` | `{pages, bytes}` | multi-page: heading/paragraph/text/image/rect/line/pagebreak; `page_size`/`margin` |
+| `Office::images_to_pdf($images, $output, %opts)` | `{pages}` | combine image files into a PDF, one per page, fit-to-page; `page_size`/`margin` |
 | `Office::pdf_merge($inputs, $path)` | `{pages, merged}` | concatenate PDFs (input order) |
 | `Office::pdf_split($path, $pages, $output)` | `{pages}` | extract 1-based page subset to a new PDF |
 | `Office::pdf_rotate($path, $angle, $output, %opts)` | `{rotated, angle}` | rotate pages 90°-multiples; `pages` subset |

@@ -2599,6 +2599,7 @@ export!(office__pdf_write, op_pdf_write);
 // multi-element PDF document builder (text/images/shapes across pages)
 include!("pdf_build.rs");
 export!(office__pdf_build, op_pdf_build);
+export!(office__images_to_pdf, op_images_to_pdf);
 
 // PDF manipulation (merge/split/rotate/info) via lopdf
 include!("pdf_ops.rs");

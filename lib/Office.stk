@@ -290,6 +290,15 @@ fn Office::pdf_build ($path, $elements, %opts) {
         office__pdf_build(to_json({ path => $path, elements => $elements, page_size => $opts{page_size}, margin => $opts{margin} })))
 }
 
+## Build a PDF from image files — one image per page, each scaled to fit the
+## page within the margins (aspect preserved). $images is an arrayref of paths.
+## opts: page_size => [w, h] points (default A4), margin => points (default 36).
+## Returns { ok, path, pages }.
+fn Office::images_to_pdf ($images, $output, %opts) {
+    Office::_decode("images_to_pdf",
+        office__images_to_pdf(to_json({ images => $images, output => $output, page_size => $opts{page_size}, margin => $opts{margin} })))
+}
+
 ## Merge several PDFs into one (page order = $inputs order). Returns
 ## { pages, merged }.
 fn Office::pdf_merge ($inputs, $path) {

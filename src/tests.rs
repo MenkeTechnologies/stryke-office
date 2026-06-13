@@ -1687,6 +1687,49 @@ fn pdf_build_multi_element_document() {
 }
 
 #[test]
+fn images_to_pdf_one_per_page() {
+    // two PNGs of different sizes
+    let p1 = tmp("im1.png");
+    let p2 = tmp("im2.png");
+    let h1 = call(
+        office__img_new,
+        r#"{"width":64,"height":48,"color":[200,0,0,255]}"#,
+    );
+    let h2 = call(
+        office__img_new,
+        r#"{"width":40,"height":90,"color":[0,0,200,255]}"#,
+    );
+    call(
+        office__img_save,
+        &format!(
+            r#"{{"handle":{},"path":"{p1}"}}"#,
+            h1["handle"].as_u64().unwrap()
+        ),
+    );
+    call(
+        office__img_save,
+        &format!(
+            r#"{{"handle":{},"path":"{p2}"}}"#,
+            h2["handle"].as_u64().unwrap()
+        ),
+    );
+
+    let out = tmp("album.pdf");
+    let r = call(
+        office__images_to_pdf,
+        &format!(r#"{{"images":["{p1}","{p2}"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "images_to_pdf: {r}");
+    assert_eq!(r["pages"], 2, "one page per image: {r}");
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 2, "pdf has 2 pages: {info}");
+
+    for f in [&p1, &p2, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_merge_split_rotate_info() {
     // make two 2-page source PDFs via pdf_build
     let a = tmp("a.pdf");
