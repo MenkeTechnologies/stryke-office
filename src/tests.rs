@@ -903,6 +903,30 @@ fn doc_merge_concatenates_and_converts() {
 }
 
 #[test]
+fn slides_stats_counts() {
+    let px = tmp("sstats.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[
+                {{"title":"Intro","body":["one two","three"]}},
+                {{"title":"Next","body":["four"]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(office__slides_stats, &format!(r#"{{"path":"{px}"}}"#));
+    assert_eq!(s["slides"], 2, "two slides: {s}");
+    // slide0: Intro(1)+one two(2)+three(1)=4 ; slide1: Next(1)+four(1)=2 ; total 6
+    assert_eq!(s["words"], 6, "total text words: {s}");
+    assert_eq!(s["notes_words"], 0, "no notes: {s}");
+    assert_eq!(s["per_slide"][0]["words"], 4, "slide0 words: {s}");
+    assert_eq!(s["per_slide"][1]["words"], 2, "slide1 words: {s}");
+
+    std::fs::remove_file(&px).ok();
+}
+
+#[test]
 fn slides_merge_combines_decks() {
     let a = tmp("deckA.pptx");
     let b = tmp("deckB.pptx");

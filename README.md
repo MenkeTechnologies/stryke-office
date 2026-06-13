@@ -169,6 +169,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_read($path)` | arrayref of `{text => [...], notes => [...]}` | pptx/odp; `notes` = speaker notes |
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
 | `Office::slides_merge($inputs, $output, %opts)` | `{sources, slides}` | concatenate decks into one (pptx/odp); target ext converts |
+| `Office::slides_stats($path)` | `{slides, words, notes_words, per_slide:[{words,notes_words}]}` | per-deck statistics |
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
 | `Office::pdf_build($path, $elements, %opts)` | `{pages, bytes}` | multi-page: heading/paragraph/text/image/rect/line/pagebreak; `page_size`/`margin` |
