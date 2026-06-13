@@ -45,6 +45,7 @@ exports = [
     "office__doc_tables",
     "office__doc_blocks",
     "office__doc_links",
+    "office__doc_stats",
     "office__img_open",
     "office__img_new",
     "office__img_save",

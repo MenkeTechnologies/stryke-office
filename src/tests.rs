@@ -309,6 +309,37 @@ fn doc_tables_extracted_from_docx_and_odt() {
 }
 
 #[test]
+fn doc_stats_word_count_across_formats() {
+    // docx: heading "Title" (1 word) + paragraph "one two three four" (4 words)
+    let dx = tmp("stats.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Title"}},
+                {{"kind":"para","text":"one two three four"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx write: {w}");
+    let s = call(office__doc_stats, &format!(r#"{{"path":"{dx}"}}"#));
+    assert_eq!(s["words"], 5, "5 words: {s}");
+    assert_eq!(s["paragraphs"], 2, "2 paragraphs: {s}");
+    // "Title"(5) + "onetwothreefour"(15) = 20 non-space chars
+    assert_eq!(s["characters_no_spaces"], 20, "non-space chars: {s}");
+
+    // plain text
+    let tx = tmp("stats.txt");
+    std::fs::write(&tx, "hello world\nfoo bar baz").unwrap();
+    let st = call(office__doc_stats, &format!(r#"{{"path":"{tx}"}}"#));
+    assert_eq!(st["words"], 5, "txt words: {st}");
+    assert_eq!(st["lines"], 2, "txt lines: {st}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&tx).ok();
+}
+
+#[test]
 fn doc_blocks_ordered_structural_read() {
     // docx: write headings/paras/table in order, recover the block sequence
     let dx = tmp("blocks.docx");
