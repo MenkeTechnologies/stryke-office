@@ -1699,6 +1699,69 @@ fn op_sheet_aggregate(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "groups": group_count }))
 }
 
+/// Project/reorder a sheet's columns. opts: path, output, columns => array of
+/// column names or 0-based indices (required, in output order), sheet,
+/// header => bool (names need true; default true), format. Every row (header
+/// included) is reduced to the chosen columns. Other sheets pass through.
+/// Returns `{ ok, path, columns }`.
+fn op_sheet_select(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let wanted = opts
+        .get("columns")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing columns (expected array of names or indices)"))?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let cols: Vec<usize> = wanted
+        .iter()
+        .map(|c| resolve_col(Some(c), hr))
+        .collect::<Result<_>>()?;
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            let arr = row.as_array();
+            Value::Array(
+                cols.iter()
+                    .map(|&c| arr.and_then(|a| a.get(c)).cloned().unwrap_or(Value::Null))
+                    .collect(),
+            )
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "columns": cols.len() }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -2311,6 +2374,7 @@ export!(office__records_write, op_records_write);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
+export!(office__sheet_select, op_sheet_select);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

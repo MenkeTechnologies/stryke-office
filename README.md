@@ -151,6 +151,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_sort($path, $by, $output, %opts)` | `{sorted, column}` | sort data rows by a column (header kept); `descending`/`numeric`/`ignore_case` opts |
 | `Office::sheet_filter($path, $by, $output, %opts)` | `{kept, removed, column}` | keep rows matching `op` (eq/ne/contains/gt/lt/ge/le) on a column |
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
+| `Office::sheet_select($path, $columns, $output, %opts)` | `{columns}` | project/reorder columns by name or index |
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |

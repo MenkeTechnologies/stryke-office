@@ -198,6 +198,53 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_select_columns() {
+    let path = tmp("sel.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty","note"],["a",10,"x"],["b",20,"y"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // reorder + drop: keep note, name
+    let out = tmp("sel_out.xlsx");
+    let r = call(
+        office__sheet_select,
+        &format!(r#"{{"path":"{path}","columns":["note","name"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["columns"], 2, "two columns: {r}");
+    let rr = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rr["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "note", "header reordered: {rr}");
+    assert_eq!(rows[0][1], "name");
+    assert_eq!(rows[1][0], "x", "row cell reordered: {rr}");
+    assert_eq!(rows[1][1], "a");
+
+    // select by index
+    let iout = tmp("sel_idx.xlsx");
+    let r2 = call(
+        office__sheet_select,
+        &format!(r#"{{"path":"{path}","columns":[1],"output":"{iout}"}}"#),
+    );
+    assert_eq!(r2["columns"], 1, "one column: {r2}");
+    let ri = call(office__sheet_read, &format!(r#"{{"path":"{iout}"}}"#));
+    assert_eq!(
+        ri["sheets"][0]["rows"][0][0], "qty",
+        "index-selected header: {ri}"
+    );
+    assert_eq!(
+        ri["sheets"][0]["rows"][1][0], 10.0,
+        "index-selected value: {ri}"
+    );
+
+    for f in [&path, &out, &iout] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_aggregate_group_by() {
     let path = tmp("agg.xlsx");
     let w = call(
