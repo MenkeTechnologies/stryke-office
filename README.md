@@ -162,6 +162,8 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_encrypt($path, $output, %opts)` | `{method}` | password-protect; `owner_password`/`user_password`, `aes` (AES-128 vs RC4), `key_length`, `permissions` |
 | `Office::pdf_decrypt($path, $output, %opts)` | `{path}` | strip protection given `password` (owner or user) |
 | `Office::pdf_compress($path, $output)` | `{before, after, saved}` | prune unused objects + deflate streams; reports byte savings |
+| `Office::pdf_delete($path, $pages, $output)` | `{pages}` | remove 1-based pages; returns remaining count |
+| `Office::pdf_reorder($path, $order, $output)` | `{pages}` | reorder/subset/repeat pages by a 1-based `order` list |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |
@@ -648,7 +650,7 @@ stryke-office/
   src/textops.rs         # template text search/replace (run-coalescing)
   src/doc_struct.rs      # structured document reads (tables, ordered blocks, hyperlinks) from docx/odt
   src/pdf_build.rs       # multi-element paginated PDF document builder
-  src/pdf_ops.rs         # PDF merge/split/rotate/info/encrypt/decrypt/compress (lopdf)
+  src/pdf_ops.rs         # PDF merge/split/rotate/info/encrypt/decrypt/compress/delete/reorder (lopdf)
   src/pdf_form.rs        # PDF AcroForm field list + fill (lopdf)
   src/pdf_outline.rs     # PDF outline/bookmarks read + write (lopdf)
   stryke.toml            # package manifest + [ffi] table

@@ -1197,6 +1197,57 @@ fn pdf_encrypt_decrypt_compress() {
 }
 
 #[test]
+fn pdf_delete_and_reorder_pages() {
+    let src = tmp("pg.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Alpha"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Bravo"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Charlie"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // delete page 2 (Bravo) -> 2 pages remain, Bravo gone
+    let del = tmp("pg.del.pdf");
+    let d = call(
+        office__pdf_delete,
+        &format!(r#"{{"path":"{src}","pages":[2],"output":"{del}"}}"#),
+    );
+    assert_eq!(d["pages"], 2, "two pages remain: {d}");
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{del}"}}"#));
+    let txt = rd["text"].as_str().unwrap_or("");
+    assert!(
+        txt.contains("Alpha") && txt.contains("Charlie") && !txt.contains("Bravo"),
+        "kept Alpha+Charlie, dropped Bravo: {txt:?}"
+    );
+
+    // reorder to [3,1,2] -> Charlie, Alpha, Bravo
+    let reo = tmp("pg.reo.pdf");
+    let r = call(
+        office__pdf_reorder,
+        &format!(r#"{{"path":"{src}","order":[3,1,2],"output":"{reo}"}}"#),
+    );
+    assert_eq!(r["pages"], 3, "three pages: {r}");
+    let rr = call(office__pdf_read, &format!(r#"{{"path":"{reo}"}}"#));
+    let rtxt = rr["text"].as_str().unwrap_or("");
+    let (ia, ib, ic) = (rtxt.find("Alpha"), rtxt.find("Bravo"), rtxt.find("Charlie"));
+    assert!(
+        ic.is_some() && ic < ia && ia < ib,
+        "page order Charlie<Alpha<Bravo: {rtxt:?}"
+    );
+
+    for f in [&src, &del, &reo] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_watermark_and_page_numbers() {
     // 3-page source
     let src = tmp("wm_src.pdf");

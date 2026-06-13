@@ -216,6 +216,21 @@ fn Office::pdf_compress ($path, $output) {
         office__pdf_compress(to_json({ path => $path, output => $output })))
 }
 
+## Delete pages from a PDF. $pages is an arrayref of 1-based page numbers to
+## remove. Returns { ok, path, pages } (remaining count).
+fn Office::pdf_delete ($path, $pages, $output) {
+    Office::_decode("pdf_delete",
+        office__pdf_delete(to_json({ path => $path, pages => $pages, output => $output })))
+}
+
+## Reorder (and/or subset) a PDF's pages. $order is an arrayref of 1-based page
+## numbers in the desired output order; omitted pages are dropped and a page may
+## repeat. Returns { ok, path, pages }.
+fn Office::pdf_reorder ($path, $order, $output) {
+    Office::_decode("pdf_reorder",
+        office__pdf_reorder(to_json({ path => $path, order => $order, output => $output })))
+}
+
 ## List the interactive AcroForm fields in a PDF. Returns { fields => [{ name,
 ## type (text/button/choice/signature), value, options? }], count }.
 fn Office::pdf_form_fields ($path) {
