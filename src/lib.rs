@@ -1366,6 +1366,109 @@ fn op_records_write(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": path, "rows": records.len(), "fields": fields }))
 }
 
+/// Sort a sheet's data rows by a column, preserving the header. opts: path,
+/// output, by => column name or 0-based index (required), sheet => name/index
+/// (default first), header => bool (default true), descending => bool,
+/// numeric => bool (default: auto-detect), ignore_case => bool (text mode),
+/// format => override. Stable sort; all other sheets pass through unchanged.
+/// Returns `{ ok, path, sorted, column }`.
+fn op_sheet_sort(opts: Value) -> Result<Value> {
+    use std::cmp::Ordering;
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let descending = opts
+        .get("descending")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array)
+    } else {
+        None
+    };
+    let col = match opts.get("by") {
+        Some(Value::Number(n)) => n.as_u64().ok_or_else(|| anyhow!("bad column index"))? as usize,
+        Some(Value::String(name)) => header_row
+            .and_then(|hr| hr.iter().position(|c| cell_to_string(c) == *name))
+            .ok_or_else(|| anyhow!("column not found: {name}"))?,
+        _ => return Err(anyhow!("missing by (column name or 0-based index)")),
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut data: Vec<Value> = rows[data_start..].to_vec();
+    let cell_at = |row: &Value| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(col))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let numeric = match opts.get("numeric").and_then(Value::as_bool) {
+        Some(b) => b,
+        None => data
+            .iter()
+            .all(|r| sheet_cell_blank(&cell_at(r)) || sheet_cell_num(&cell_at(r)).is_some()),
+    };
+
+    data.sort_by(|a, b| {
+        let (ca, cb) = (cell_at(a), cell_at(b));
+        let ord = if numeric {
+            let na = sheet_cell_num(&ca).unwrap_or(f64::INFINITY);
+            let nb = sheet_cell_num(&cb).unwrap_or(f64::INFINITY);
+            na.partial_cmp(&nb).unwrap_or(Ordering::Equal)
+        } else {
+            let (mut ka, mut kb) = (cell_to_string(&ca), cell_to_string(&cb));
+            if ignore_case {
+                ka = ka.to_lowercase();
+                kb = kb.to_lowercase();
+            }
+            ka.cmp(&kb)
+        };
+        if descending {
+            ord.reverse()
+        } else {
+            ord
+        }
+    });
+
+    let sorted = data.len();
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        new_rows.push(rows[0].clone());
+    }
+    new_rows.extend(data);
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sorted": sorted, "column": col }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -1975,6 +2078,7 @@ export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
+export!(office__sheet_sort, op_sheet_sort);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
