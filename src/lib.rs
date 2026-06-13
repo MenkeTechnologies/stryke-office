@@ -1667,6 +1667,11 @@ export!(office__pdf_compress, op_pdf_compress);
 export!(office__pdf_delete, op_pdf_delete);
 export!(office__pdf_reorder, op_pdf_reorder);
 
+// PDF file attachments (embedded files): embed + list/extract
+include!("pdf_attach.rs");
+export!(office__pdf_attach, op_pdf_attach);
+export!(office__pdf_attachments, op_pdf_attachments);
+
 // PDF AcroForm fields: list + fill
 include!("pdf_form.rs");
 export!(office__pdf_form_fields, op_pdf_form_fields);

@@ -32,6 +32,8 @@ exports = [
     "office__pdf_compress",
     "office__pdf_delete",
     "office__pdf_reorder",
+    "office__pdf_attach",
+    "office__pdf_attachments",
     "office__pdf_form_fields",
     "office__pdf_fill_form",
     "office__pdf_outline",

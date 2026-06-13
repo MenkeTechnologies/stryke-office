@@ -231,6 +231,22 @@ fn Office::pdf_reorder ($path, $order, $output) {
         office__pdf_reorder(to_json({ path => $path, order => $order, output => $output })))
 }
 
+## Embed a file inside a PDF (appends to any existing attachments). opts: name
+## => stored name (default: the file's basename). Returns { ok, path, name,
+## size, count }.
+fn Office::pdf_attach ($path, $file, $output, %opts) {
+    Office::_decode("pdf_attach",
+        office__pdf_attach(to_json({ path => $path, file => $file, output => $output, name => $opts{name} })))
+}
+
+## List (and optionally extract) files embedded in a PDF. opts: extract_dir =>
+## write each attachment there by basename. Returns { attachments => [{ name,
+## size }], count }.
+fn Office::pdf_attachments ($path, %opts) {
+    Office::_decode("pdf_attachments",
+        office__pdf_attachments(to_json({ path => $path, extract_dir => $opts{extract_dir} })))
+}
+
 ## List the interactive AcroForm fields in a PDF. Returns { fields => [{ name,
 ## type (text/button/choice/signature), value, options? }], count }.
 fn Office::pdf_form_fields ($path) {
