@@ -308,6 +308,14 @@ fn Office::slides_stats ($path) {
     Office::_decode("slides_stats", office__slides_stats(to_json({ path => $path })))
 }
 
+## Append slides to an existing presentation. $slides is an arrayref of
+## { title, body => [...] }. opts: output (default: in place), format =>
+## override. Returns { ok, path, slides, added }.
+fn Office::slides_append ($path, $slides, %opts) {
+    Office::_decode("slides_append",
+        office__slides_append(to_json({ path => $path, slides => $slides, output => $opts{output}, format => $opts{format} })))
+}
+
 # ── pdf ─────────────────────────────────────────────────────────────
 
 ## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.

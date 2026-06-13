@@ -942,6 +942,32 @@ fn doc_merge_concatenates_and_converts() {
 }
 
 #[test]
+fn slides_append_adds_slides() {
+    let path = tmp("sapp.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{path}","slides":[{{"title":"A","body":["x"]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("sapp_out.pptx");
+    let r = call(
+        office__slides_append,
+        &format!(r#"{{"path":"{path}","slides":[{{"title":"B","body":["y"]}}],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["added"], 1, "added 1 slide: {r}");
+    assert_eq!(r["slides"], 2, "2 slides total: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read 2 slides: {rd}");
+    assert_eq!(slides[0]["text"][0], "A", "first title: {rd}");
+    assert_eq!(slides[1]["text"][0], "B", "appended title: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn slides_stats_counts() {
     let px = tmp("sstats.pptx");
     let w = call(

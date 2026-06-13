@@ -2639,6 +2639,57 @@ fn op_slides_stats(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Append slides to an existing presentation. opts: path, slides => [{title,
+/// body}], output (default: in place), format. Existing slides are read back
+/// into {title, body} (first text line is the title), so the target format
+/// follows the output extension. Returns `{ ok, path, slides, added }`.
+fn op_slides_append(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let add = opts
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides (expected array)"))?;
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let existing = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut out_slides: Vec<Value> = Vec::new();
+    for s in &existing {
+        let text: Vec<String> = s
+            .get("text")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (title, body) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        out_slides.push(json!({ "title": title, "body": body }));
+    }
+    let added = add.len();
+    out_slides.extend(add.iter().cloned());
+    let total = out_slides.len();
+
+    let mut wopts = json!({ "path": output, "slides": out_slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": total, "added": added }))
+}
+
 // ── pdf (self-contained, via lo_core) ────────────────────────────────────────
 
 fn op_pdf_read(opts: Value) -> Result<Value> {
@@ -2738,6 +2789,7 @@ export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
 export!(office__slides_merge, op_slides_merge);
 export!(office__slides_stats, op_slides_stats);
+export!(office__slides_append, op_slides_append);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 
