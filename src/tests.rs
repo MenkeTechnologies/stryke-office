@@ -2015,6 +2015,45 @@ fn pdf_burst_one_file_per_page() {
 }
 
 #[test]
+fn pdf_chunk_fixed_size() {
+    // 5-page source
+    let src = tmp("chunk.pdf");
+    let mut els = String::new();
+    for (i, name) in ["P1", "P2", "P3", "P4", "P5"].iter().enumerate() {
+        if i > 0 {
+            els.push_str(r#"{"type":"pagebreak"},"#);
+        }
+        els.push_str(&format!(
+            r#"{{"type":"heading","level":1,"text":"{name}"}}"#
+        ));
+        if i < 4 {
+            els.push(',');
+        }
+    }
+    let b = call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{els}]}}"#),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let dir = tmp("chunk_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__pdf_chunk,
+        &format!(r#"{{"path":"{src}","size":2,"dir":"{dir}","prefix":"c"}}"#),
+    );
+    assert_eq!(r["count"], 3, "5 pages / 2 -> 3 chunks: {r}");
+    // chunk 1 has 2 pages, chunk 3 has the remaining 1
+    let i1 = call(office__pdf_info, &format!(r#"{{"path":"{dir}/c-1.pdf"}}"#));
+    assert_eq!(i1["pages"], 2, "chunk 1 = 2 pages: {i1}");
+    let i3 = call(office__pdf_info, &format!(r#"{{"path":"{dir}/c-3.pdf"}}"#));
+    assert_eq!(i3["pages"], 1, "chunk 3 = 1 page: {i3}");
+
+    std::fs::remove_file(&src).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(

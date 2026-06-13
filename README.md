@@ -185,6 +185,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_attachments($path, %opts)` | `{attachments:[{name,size}], count}` | list embedded files; `extract_dir` writes them out |
 | `Office::pdf_search($path, $query, %opts)` | `{count, matched_pages, pages:[{page,count,snippet}]}` | per-page full-text search; `ignore_case` opt |
 | `Office::pdf_burst($path, $dir, %opts)` | `{count, files}` | split into one PDF per page (`{prefix}-{n}.pdf`) |
+| `Office::pdf_chunk($path, $size, $dir, %opts)` | `{count, files}` | split into fixed-size page chunks (last may be shorter) |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |

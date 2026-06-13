@@ -379,6 +379,14 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Split a PDF into fixed-size page chunks of $size pages, written to $dir as
+## {prefix}-{n}.pdf (the last chunk may be shorter). opts: prefix => filename
+## stem (default: the source's stem). Returns { count, files }.
+fn Office::pdf_chunk ($path, $size, $dir, %opts) {
+    Office::_decode("pdf_chunk",
+        office__pdf_chunk(to_json({ path => $path, size => $size, dir => $dir, prefix => $opts{prefix} })))
+}
+
 ## Delete pages from a PDF. $pages is an arrayref of 1-based page numbers to
 ## remove. Returns { ok, path, pages } (remaining count).
 fn Office::pdf_delete ($path, $pages, $output) {
