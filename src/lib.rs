@@ -2350,6 +2350,47 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "filled": filled }))
 }
 
+/// Explode a multi-sheet workbook into one file per sheet. opts: path,
+/// dir => output directory, format => output extension (default: the source's),
+/// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
+/// with the sheet name sanitized. Returns `{ count, files }`.
+fn op_sheet_split(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let ext = opts
+        .get("format")
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| ext_of(path));
+    let prefix = opts.get("prefix").and_then(Value::as_str).unwrap_or("");
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut files = Vec::new();
+    for s in &sheets {
+        let name = s["name"].as_str().unwrap_or("Sheet");
+        let safe: String = name
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let safe = safe.trim();
+        let out = format!("{dir}/{prefix}{safe}.{ext}");
+        op_sheet_write(json!({ "path": out, "sheets": [s], "format": ext }))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -3111,6 +3152,7 @@ export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
+export!(office__sheet_split, op_sheet_split);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

@@ -190,6 +190,14 @@ fn Office::sheet_append ($path, %opts) {
         office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Explode a multi-sheet workbook into one file per sheet, written to $dir as
+## {prefix}{sheet}.{ext}. opts: format => output extension (default: the
+## source's), prefix => filename prefix. Returns { count, files }.
+fn Office::sheet_split ($path, $dir, %opts) {
+    Office::_decode("sheet_split",
+        office__sheet_split(to_json({ path => $path, dir => $dir, format => $opts{format}, prefix => $opts{prefix} })))
+}
+
 ## Fill blank cells. opts: method => "ffill" (default; carry the last non-blank
 ## value down) | "value" (use a constant value => ...), by => column name/index
 ## or arrayref (default: all columns), sheet, output (default: in place),
