@@ -27,6 +27,8 @@ exports = [
     "office__pdf_info",
     "office__pdf_watermark",
     "office__pdf_page_numbers",
+    "office__pdf_form_fields",
+    "office__pdf_fill_form",
     "office__meta_read",
     "office__meta_write",
     "office__extract_images",

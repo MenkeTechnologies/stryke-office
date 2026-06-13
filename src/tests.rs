@@ -2257,6 +2257,160 @@ fn extract_images_from_docx_to_dir() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Build a minimal one-page PDF with an AcroForm holding a text field "name"
+/// and a checkbox "agree", using lopdf directly (no writer produces forms).
+fn make_form_pdf(path: &str) {
+    use lopdf::Dictionary;
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+
+    let name_field = {
+        let mut d = Dictionary::new();
+        d.set("Type", Object::Name(b"Annot".to_vec()));
+        d.set("Subtype", Object::Name(b"Widget".to_vec()));
+        d.set("FT", Object::Name(b"Tx".to_vec()));
+        d.set("T", Object::string_literal("name"));
+        d.set("V", Object::string_literal(""));
+        d.set("Parent", Object::Reference(pages_id)); // placeholder, page set below
+        d.set(
+            "Rect",
+            Object::Array(vec![100.into(), 700.into(), 300.into(), 720.into()]),
+        );
+        doc.add_object(d)
+    };
+    let agree_field = {
+        let mut ap_n = Dictionary::new();
+        ap_n.set("On", Object::Null);
+        ap_n.set("Off", Object::Null);
+        let mut ap = Dictionary::new();
+        ap.set("N", Object::Dictionary(ap_n));
+        let mut d = Dictionary::new();
+        d.set("Type", Object::Name(b"Annot".to_vec()));
+        d.set("Subtype", Object::Name(b"Widget".to_vec()));
+        d.set("FT", Object::Name(b"Btn".to_vec()));
+        d.set("T", Object::string_literal("agree"));
+        d.set("V", Object::Name(b"Off".to_vec()));
+        d.set("AS", Object::Name(b"Off".to_vec()));
+        d.set("AP", Object::Dictionary(ap));
+        d.set(
+            "Rect",
+            Object::Array(vec![100.into(), 660.into(), 116.into(), 676.into()]),
+        );
+        doc.add_object(d)
+    };
+
+    let mut page = Dictionary::new();
+    page.set("Type", Object::Name(b"Page".to_vec()));
+    page.set("Parent", Object::Reference(pages_id));
+    page.set(
+        "MediaBox",
+        Object::Array(vec![0.into(), 0.into(), 612.into(), 792.into()]),
+    );
+    page.set(
+        "Annots",
+        Object::Array(vec![
+            Object::Reference(name_field),
+            Object::Reference(agree_field),
+        ]),
+    );
+    let page_id = doc.add_object(page);
+
+    let mut pages = Dictionary::new();
+    pages.set("Type", Object::Name(b"Pages".to_vec()));
+    pages.set("Kids", Object::Array(vec![Object::Reference(page_id)]));
+    pages.set("Count", 1);
+    doc.objects.insert(pages_id, Object::Dictionary(pages));
+
+    let mut acro = Dictionary::new();
+    acro.set(
+        "Fields",
+        Object::Array(vec![
+            Object::Reference(name_field),
+            Object::Reference(agree_field),
+        ]),
+    );
+    let acro_id = doc.add_object(acro);
+
+    let mut cat = Dictionary::new();
+    cat.set("Type", Object::Name(b"Catalog".to_vec()));
+    cat.set("Pages", Object::Reference(pages_id));
+    cat.set("AcroForm", Object::Reference(acro_id));
+    let cat_id = doc.add_object(cat);
+    doc.trailer.set("Root", Object::Reference(cat_id));
+    doc.save(path).unwrap();
+}
+
+#[test]
+fn pdf_form_fields_list_and_fill() {
+    let path = tmp("form.pdf");
+    make_form_pdf(&path);
+
+    // list
+    let r = call(office__pdf_form_fields, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "two fields: {r}");
+    let names: Vec<&str> = r["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"name") && names.contains(&"agree"),
+        "{names:?}"
+    );
+
+    // fill
+    let out = tmp("form-filled.pdf");
+    let f = call(
+        office__pdf_fill_form,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","values":{{"name":"Jane Doe","agree":true}}}}"#
+        ),
+    );
+    assert_eq!(f["ok"], true, "{f}");
+    assert_eq!(f["filled"], 2, "{f}");
+
+    // read the filled values back
+    let r2 = call(office__pdf_form_fields, &format!(r#"{{"path":"{out}"}}"#));
+    let name_v = r2["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["name"] == "name")
+        .and_then(|f| f["value"].as_str())
+        .unwrap();
+    assert_eq!(name_v, "Jane Doe", "text field filled: {r2}");
+    let agree_v = r2["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["name"] == "agree")
+        .and_then(|f| f["value"].as_str())
+        .unwrap();
+    assert_eq!(agree_v, "On", "checkbox set to its on-state: {r2}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn pdf_form_no_acroform() {
+    // a plain PDF has no form -> empty list, and fill errors
+    let path = tmp("plain.pdf");
+    call(
+        office__pdf_write,
+        &format!(r#"{{"path":"{path}","lines":["hi"]}}"#),
+    );
+    let r = call(office__pdf_form_fields, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 0, "no fields: {r}");
+    let f = call(
+        office__pdf_fill_form,
+        &format!(r#"{{"path":"{path}","values":{{"x":"y"}}}}"#),
+    );
+    assert!(err_of(&f).contains("no AcroForm"), "got: {}", err_of(&f));
+    std::fs::remove_file(&path).ok();
+}
+
 #[test]
 fn replace_text_coalesces_split_runs() {
     // A placeholder split across two w:t runs (the OOXML failure mode a naive

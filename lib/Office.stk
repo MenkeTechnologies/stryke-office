@@ -168,6 +168,22 @@ fn Office::pdf_page_numbers ($path, $output, %opts) {
         office__pdf_page_numbers(to_json({ path => $path, output => $output, format => $opts{format}, size => $opts{size}, color => $opts{color}, y => $opts{y} })))
 }
 
+## List the interactive AcroForm fields in a PDF. Returns { fields => [{ name,
+## type (text/button/choice/signature), value, options? }], count }.
+fn Office::pdf_form_fields ($path) {
+    Office::_decode("pdf_form_fields", office__pdf_form_fields(to_json({ path => $path })))
+}
+
+## Fill a PDF form. $values is a hashref of { field_name => value }; a checkbox
+## takes a boolean (or its explicit on-state name). Sets /NeedAppearances so
+## viewers regenerate appearances. opts: output (defaults to $path). Returns
+## { ok, path, filled }.
+fn Office::pdf_fill_form ($path, $values, %opts) {
+    var %r = { path => $path, values => $values }
+    if exists $opts{output} { $r{output} = $opts{output} }
+    Office::_decode("pdf_fill_form", office__pdf_fill_form(to_json(\%r)))
+}
+
 ## Read document metadata (core/app properties) from any office or PDF file.
 ## Returns whichever of these are present: title, author, subject, keywords,
 ## description, category, last_modified_by, app, producer, company, created,

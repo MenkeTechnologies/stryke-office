@@ -154,6 +154,25 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_info($path)` | `{pages, version, title?, author?, …}` | page count + document metadata |
 | `Office::pdf_watermark($path, $text, $output, %opts)` | `{stamped}` | rotated text watermark on every page; `size`/`color`/`angle` |
 | `Office::pdf_page_numbers($path, $output, %opts)` | `{pages}` | footer page numbers; `format` (`{n}`/`{total}`), `size`/`color`/`y` |
+| `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
+| `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
+
+#### PDF forms
+
+```perl
+# inspect a form, then fill it
+my $f = Office::pdf_form_fields("application.pdf");   # name/type/value per field
+Office::pdf_fill_form("application.pdf", {
+    "applicant_name" => "Jane Doe",
+    "date"           => "2026-06-13",
+    "agree_terms"    => \1,                            # checkbox -> on-state
+}, output => "application-filled.pdf");
+```
+
+Text/choice fields take a string; checkboxes/radios take a boolean (mapped to
+the widget's on-state) or an explicit state name. Filling flips the AcroForm
+`/NeedAppearances` flag so Acrobat and other conformant viewers regenerate the
+visible field content.
 
 ### Rich formatting
 
@@ -579,6 +598,7 @@ stryke-office/
   src/textops.rs         # template text search/replace (run-coalescing)
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
+  src/pdf_form.rs        # PDF AcroForm field list + fill (lopdf)
   stryke.toml            # package manifest + [ffi] table
   lib/Office.stk         # stryke wrapper (use Office)
   assets/DejaVuSans.ttf  # vendored font for image text drawing
