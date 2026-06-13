@@ -1248,6 +1248,82 @@ fn pdf_delete_and_reorder_pages() {
 }
 
 #[test]
+fn pdf_attach_list_and_extract() {
+    let src = tmp("att_src.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[{{"type":"heading","level":1,"text":"Report"}}]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // two payload files
+    let f1 = tmp("data1.csv");
+    let f2 = tmp("data2.txt");
+    std::fs::write(&f1, b"a,b,c\n1,2,3\n").unwrap();
+    std::fs::write(&f2, b"hello attachment").unwrap();
+
+    // attach first, then second (exercises the append path)
+    let a1 = tmp("att1.pdf");
+    let r1 = call(
+        office__pdf_attach,
+        &format!(r#"{{"path":"{src}","file":"{f1}","output":"{a1}","name":"data1.csv"}}"#),
+    );
+    assert_eq!(r1["count"], 1, "first attach -> 1: {r1}");
+    let l1 = call(office__pdf_attachments, &format!(r#"{{"path":"{a1}"}}"#));
+    assert_eq!(l1["count"], 1, "single-attach read-back: {l1}");
+    let a2 = tmp("att2.pdf");
+    let r2 = call(
+        office__pdf_attach,
+        &format!(r#"{{"path":"{a1}","file":"{f2}","output":"{a2}","name":"data2.txt"}}"#),
+    );
+    assert_eq!(r2["count"], 2, "second attach -> 2: {r2}");
+
+    // host PDF still parses
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{a2}"}}"#));
+    assert_eq!(info["pages"], 1, "host pages preserved: {info}");
+
+    // list both
+    let lst = call(office__pdf_attachments, &format!(r#"{{"path":"{a2}"}}"#));
+    assert_eq!(lst["count"], 2, "two attachments: {lst}");
+    let names: Vec<&str> = lst["attachments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"data1.csv") && names.contains(&"data2.txt"),
+        "names: {lst}"
+    );
+
+    // extract and verify bytes round-trip
+    let dir = tmp("att_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let ex = call(
+        office__pdf_attachments,
+        &format!(r#"{{"path":"{a2}","extract_dir":"{dir}"}}"#),
+    );
+    assert_eq!(ex["count"], 2, "extract count: {ex}");
+    assert_eq!(
+        std::fs::read(format!("{dir}/data1.csv")).unwrap(),
+        b"a,b,c\n1,2,3\n",
+        "csv bytes round-trip"
+    );
+    assert_eq!(
+        std::fs::read(format!("{dir}/data2.txt")).unwrap(),
+        b"hello attachment",
+        "txt bytes round-trip"
+    );
+
+    for f in [&src, &f1, &f2, &a1, &a2] {
+        std::fs::remove_file(f).ok();
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn pdf_watermark_and_page_numbers() {
     // 3-page source
     let src = tmp("wm_src.pdf");
