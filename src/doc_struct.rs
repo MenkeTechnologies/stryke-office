@@ -414,6 +414,114 @@ fn op_doc_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "blocks": n }))
 }
 
+// ── full-text search (documents + presentations) ──────────────────────────────
+
+/// Search a document's paragraphs (docx/odt/html/md/rtf/txt) or pdf lines.
+/// opts: path, query (required), ignore_case (default false). Returns
+/// `{ count, matches: [{ paragraph, count, snippet }] }` with 1-based indexes.
+fn op_doc_find(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let query = req_str(&opts, "query")?;
+    if query.is_empty() {
+        return Err(anyhow!("empty query"));
+    }
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let paras: Vec<String> = match ext_of(path).as_str() {
+        "pdf" => {
+            let bytes = std::fs::read(path)?;
+            lo_core::extract_text_from_pdf(&bytes)
+                .map_err(|e| anyhow!("pdf parse: {e}"))?
+                .lines()
+                .map(str::to_string)
+                .collect()
+        }
+        _ => op_doc_read(json!({ "path": path }))?
+            .get("paragraphs")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| p.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
+
+    let needle = if ignore_case {
+        query.to_lowercase()
+    } else {
+        query.to_string()
+    };
+    let mut total = 0usize;
+    let mut matches = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let hay = if ignore_case {
+            p.to_lowercase()
+        } else {
+            p.clone()
+        };
+        let c = hay.matches(&needle).count();
+        if c > 0 {
+            total += c;
+            let idx = hay.find(&needle).unwrap_or(0);
+            matches.push(json!({
+                "paragraph": i + 1,
+                "count": c,
+                "snippet": pdf_snippet(&hay, idx, needle.len()),
+            }));
+        }
+    }
+    Ok(json!({ "count": total, "matches": matches }))
+}
+
+/// Search a presentation's slide text and speaker notes (pptx/odp). opts: path,
+/// query (required), ignore_case (default false). Returns `{ count, matches:
+/// [{ slide, where, value }] }` — `where` is "text" or "notes", slide 1-based.
+fn op_slides_find(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let query = req_str(&opts, "query")?;
+    if query.is_empty() {
+        return Err(anyhow!("empty query"));
+    }
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let needle = if ignore_case {
+        query.to_lowercase()
+    } else {
+        query.to_string()
+    };
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut matches = Vec::new();
+    for (i, slide) in slides.iter().enumerate() {
+        for field in ["text", "notes"] {
+            let Some(lines) = slide.get(field).and_then(Value::as_array) else {
+                continue;
+            };
+            for line in lines.iter().filter_map(Value::as_str) {
+                let hay = if ignore_case {
+                    line.to_lowercase()
+                } else {
+                    line.to_string()
+                };
+                if hay.contains(&needle) {
+                    matches.push(json!({ "slide": i + 1, "where": field, "value": line }));
+                }
+            }
+        }
+    }
+    Ok(json!({ "count": matches.len(), "matches": matches }))
+}
+
 // ── statistics (Word-style word count, across every readable format) ──────────
 
 /// Word-count style statistics for any document we can read as text — docx,

@@ -57,6 +57,8 @@ exports = [
     "office__doc_links",
     "office__doc_stats",
     "office__doc_merge",
+    "office__doc_find",
+    "office__slides_find",
     "office__img_open",
     "office__img_new",
     "office__img_save",

@@ -177,6 +177,22 @@ fn Office::doc_stats ($path) {
     Office::_decode("doc_stats", office__doc_stats(to_json({ path => $path })))
 }
 
+## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts:
+## ignore_case => 1. Returns { count, matches => [{ paragraph, count, snippet }] }
+## with 1-based paragraph indexes.
+fn Office::doc_find ($path, $query, %opts) {
+    Office::_decode("doc_find",
+        office__doc_find(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case} })))
+}
+
+## Search a presentation's slide text and speaker notes (pptx/odp). opts:
+## ignore_case => 1. Returns { count, matches => [{ slide, where, value }] } —
+## where is "text" or "notes", slide is 1-based.
+fn Office::slides_find ($path, $query, %opts) {
+    Office::_decode("slides_find",
+        office__slides_find(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case} })))
+}
+
 ## Concatenate documents into one. $inputs is an arrayref of paths; the target
 ## format comes from $output's extension (so this also converts). opts:
 ## page_breaks => 0 to omit the break between sources (default on),

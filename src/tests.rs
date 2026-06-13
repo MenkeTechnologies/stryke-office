@@ -749,6 +749,53 @@ fn doc_merge_concatenates_and_converts() {
 }
 
 #[test]
+fn doc_find_and_slides_find() {
+    // doc_find over a docx with three paragraphs
+    let dx = tmp("find.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"para","text":"Hello world"}},
+                {{"kind":"para","text":"the world turns"}},
+                {{"kind":"para","text":"goodbye"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "doc write: {w}");
+    let f = call(
+        office__doc_find,
+        &format!(r#"{{"path":"{dx}","query":"world","ignore_case":true}}"#),
+    );
+    assert_eq!(f["count"], 2, "two world hits: {f}");
+    let paras: Vec<u64> = f["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["paragraph"].as_u64().unwrap())
+        .collect();
+    assert_eq!(paras, vec![1, 2], "paragraphs 1 and 2: {f}");
+
+    // slides_find over a written pptx deck
+    let px = tmp("find.pptx");
+    let sw = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{px}","slides":[{{"title":"Intro","body":["alpha","beta"]}}]}}"#),
+    );
+    assert_eq!(sw["ok"], true, "slides write: {sw}");
+    let sf = call(
+        office__slides_find,
+        &format!(r#"{{"path":"{px}","query":"beta"}}"#),
+    );
+    assert_eq!(sf["count"], 1, "one beta hit: {sf}");
+    assert_eq!(sf["matches"][0]["slide"], 1, "slide 1: {sf}");
+    assert_eq!(sf["matches"][0]["where"], "text", "in text: {sf}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&px).ok();
+}
+
+#[test]
 fn doc_blocks_ordered_structural_read() {
     // docx: write headings/paras/table in order, recover the block sequence
     let dx = tmp("blocks.docx");
