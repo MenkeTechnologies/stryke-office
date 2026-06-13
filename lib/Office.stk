@@ -112,6 +112,22 @@ fn Office::pdf_write ($path, $lines) {
     Office::_decode("pdf_write", office__pdf_write(to_json({ path => $path, lines => $lines })))
 }
 
+## Build a multi-page PDF document from $elements (base-14 fonts, no embed).
+## Each element is one of:
+##   { type => "heading", text, level? }          # flowing, bold
+##   { type => "paragraph", text, size?, font?, color? }   # auto-wrapped
+##   { type => "text", x, y, text, size?, font?, color? }  # absolute (top-left)
+##   { type => "image", path|handle, x?, y?, width?, height? }  # JPEG embed
+##   { type => "rect", x, y, width, height, color?, fill? }
+##   { type => "line", x0, y0, x1, y1, color? }
+##   { type => "pagebreak" }
+## opts: page_size => [w, h] (points, default A4 595x842), margin (default 50).
+## Fonts: "helvetica" (default), "bold", "times", "courier".
+fn Office::pdf_build ($path, $elements, %opts) {
+    Office::_decode("pdf_build",
+        office__pdf_build(to_json({ path => $path, elements => $elements, page_size => $opts{page_size}, margin => $opts{margin} })))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new

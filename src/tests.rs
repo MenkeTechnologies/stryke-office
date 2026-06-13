@@ -736,6 +736,39 @@ fn chart_svg_vector_output() {
 }
 
 #[test]
+fn pdf_build_multi_element_document() {
+    // render a chart to an image handle to embed in the PDF
+    let chart = call(office__chart_render, r#"{"type":"bar","width":300,"height":200,"categories":["a","b"],"series":[{"data":[3,7]}]}"#);
+    let ch = chart["handle"].as_u64().expect("chart handle");
+
+    let path = tmp("doc.pdf");
+    let long = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ".repeat(8);
+    let v = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{path}","elements":[
+                {{"type":"heading","level":1,"text":"Quarterly Report"}},
+                {{"type":"paragraph","text":"{long}"}},
+                {{"type":"rect","x":50,"y":120,"width":200,"height":30,"color":[210,225,245]}},
+                {{"type":"image","handle":{ch},"width":260,"height":173}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":2,"text":"Appendix"}},
+                {{"type":"line","x0":50,"y0":120,"x1":300,"y1":120,"color":[150,150,150]}},
+                {{"type":"text","x":50,"y":140,"text":"footnote","size":9}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(v["ok"], true, "pdf_build failed: {v}");
+    assert!(v["pages"].as_u64().unwrap() >= 2, "auto-paginated to >=2 pages: {v}");
+    // re-read the produced PDF with the existing extractor → valid, has text
+    let r = call(office__pdf_read, &format!(r#"{{"path":"{path}"}}"#));
+    let text = r["text"].as_str().unwrap_or("");
+    assert!(text.contains("Quarterly Report") || text.contains("Appendix"), "pdf text round-trips: {:?}", &text[..text.len().min(80)]);
+    call(office__img_close, &format!(r#"{{"handle":{ch}}}"#));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn chart_save_dispatches_by_extension() {
     let spec = r#""type":"bar","series":[{"name":"s","data":[3,6,9]}],"categories":["a","b","c"]"#;
     for (ext, magic) in [("svg", "<svg"), ("png", "PNG"), ("pdf", "%PDF")] {
