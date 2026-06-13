@@ -227,6 +227,42 @@ fn sheet_write_html_and_markdown_tables() {
 }
 
 #[test]
+fn sheet_split_per_sheet() {
+    let path = tmp("wb.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[
+                {{"name":"Alpha","rows":[["a"],[1]]}},
+                {{"name":"Beta","rows":[["b"],[2]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let dir = tmp("wb_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__sheet_split,
+        &format!(r#"{{"path":"{path}","dir":"{dir}"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two per-sheet files: {r}");
+    let a = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{dir}/Alpha.xlsx"}}"#),
+    );
+    assert_eq!(a["sheets"][0]["rows"][0][0], "a", "Alpha file content: {a}");
+    let b = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{dir}/Beta.xlsx"}}"#),
+    );
+    assert_eq!(b["sheets"][0]["rows"][1][0], 2.0, "Beta file value: {b}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn sheet_fill_blanks() {
     let path = tmp("fill.xlsx");
     let w = call(

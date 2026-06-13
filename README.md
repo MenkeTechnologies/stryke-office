@@ -160,6 +160,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_dedupe($path, $output, %opts)` | `{kept, removed}` | drop duplicate rows; `by` key columns, `keep` first/last |
 | `Office::sheet_append($path, %opts)` | `{added, rows}` | append `rows` or header-mapped `records` to a sheet (in place by default) |
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/value, `by` columns, `value` constant |
+| `Office::sheet_split($path, $dir, %opts)` | `{count, files}` | explode a workbook into one file per sheet; `format`/`prefix` opts |
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
