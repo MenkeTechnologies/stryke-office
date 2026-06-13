@@ -20,6 +20,7 @@ exports = [
     "office__sheet_records",
     "office__records_write",
     "office__sheet_sort",
+    "office__sheet_filter",
     "office__doc_read",
     "office__doc_write",
     "office__slides_read",

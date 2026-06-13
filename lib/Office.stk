@@ -113,6 +113,15 @@ fn Office::sheet_sort ($path, $by, $output, %opts) {
         office__sheet_sort(to_json({ path => $path, by => $by, output => $output, sheet => $opts{sheet}, descending => $opts{descending}, numeric => $opts{numeric}, ignore_case => $opts{ignore_case}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Keep only rows whose $by column satisfies a predicate. opts: op => one of
+## eq|ne|contains|not_contains|gt|lt|ge|le (default eq), value => comparison
+## value, sheet, ignore_case => 1, header => 0 if first row is data, format =>
+## override. Returns { ok, path, kept, removed, column }.
+fn Office::sheet_filter ($path, $by, $output, %opts) {
+    Office::_decode("sheet_filter",
+        office__sheet_filter(to_json({ path => $path, by => $by, output => $output, op => $opts{op}, value => $opts{value}, sheet => $opts{sheet}, ignore_case => $opts{ignore_case}, header => $opts{header}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

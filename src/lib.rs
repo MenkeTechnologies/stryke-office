@@ -1469,6 +1469,117 @@ fn op_sheet_sort(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sorted": sorted, "column": col }))
 }
 
+/// Whether a cell satisfies `op` against `value`. String ops: eq, ne, contains,
+/// not_contains (honour `ignore_case`). Numeric ops: gt, lt, ge, le (both sides
+/// must parse as numbers, else no match).
+fn cell_matches(cell: &Value, op: &str, value: &Value, ignore_case: bool) -> bool {
+    match op {
+        "gt" | "lt" | "ge" | "le" => match (sheet_cell_num(cell), sheet_cell_num(value)) {
+            (Some(x), Some(y)) => match op {
+                "gt" => x > y,
+                "lt" => x < y,
+                "ge" => x >= y,
+                _ => x <= y,
+            },
+            _ => false,
+        },
+        _ => {
+            let (mut a, mut b) = (cell_to_string(cell), cell_to_string(value));
+            if ignore_case {
+                a = a.to_lowercase();
+                b = b.to_lowercase();
+            }
+            match op {
+                "eq" => a == b,
+                "ne" => a != b,
+                "contains" => a.contains(&b),
+                "not_contains" => !a.contains(&b),
+                _ => false,
+            }
+        }
+    }
+}
+
+/// Keep only rows whose cell in a column satisfies a predicate, preserving the
+/// header. opts: path, output, by => column name/index (required), op => one of
+/// eq|ne|contains|not_contains|gt|lt|ge|le (default eq), value, sheet, header
+/// (default true), ignore_case, format. Other sheets pass through unchanged.
+/// Returns `{ ok, path, kept, removed, column }`.
+fn op_sheet_filter(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
+    let value = opts.get("value").cloned().unwrap_or(Value::Null);
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array)
+    } else {
+        None
+    };
+    let col = match opts.get("by") {
+        Some(Value::Number(n)) => n.as_u64().ok_or_else(|| anyhow!("bad column index"))? as usize,
+        Some(Value::String(name)) => header_row
+            .and_then(|hr| hr.iter().position(|c| cell_to_string(c) == *name))
+            .ok_or_else(|| anyhow!("column not found: {name}"))?,
+        _ => return Err(anyhow!("missing by (column name or 0-based index)")),
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let total = rows.len() - data_start;
+    let kept: Vec<Value> = rows[data_start..]
+        .iter()
+        .filter(|row| {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(col))
+                .cloned()
+                .unwrap_or(Value::Null);
+            cell_matches(&cell, op, &value, ignore_case)
+        })
+        .cloned()
+        .collect();
+
+    let kept_n = kept.len();
+    let mut new_rows: Vec<Value> = Vec::with_capacity(kept_n + 1);
+    if data_start == 1 {
+        new_rows.push(rows[0].clone());
+    }
+    new_rows.extend(kept);
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(
+        json!({ "ok": true, "path": output, "kept": kept_n, "removed": total - kept_n, "column": col }),
+    )
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -2079,6 +2190,7 @@ export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
 export!(office__sheet_sort, op_sheet_sort);
+export!(office__sheet_filter, op_sheet_filter);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

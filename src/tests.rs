@@ -198,6 +198,43 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_filter_rows() {
+    let path = tmp("filt.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["a",10],["b",20],["c",30]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // numeric: qty >= 20 keeps b,c
+    let ge = tmp("filt_ge.xlsx");
+    let r = call(
+        office__sheet_filter,
+        &format!(r#"{{"path":"{path}","by":"qty","op":"ge","value":20,"output":"{ge}"}}"#),
+    );
+    assert_eq!(r["kept"], 2, "kept 2: {r}");
+    assert_eq!(r["removed"], 1, "removed 1: {r}");
+    let rg = call(office__sheet_read, &format!(r#"{{"path":"{ge}"}}"#));
+    let rows = rg["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2 rows: {rg}");
+    assert_eq!(rows[1][0], "b", "first kept is b: {rg}");
+
+    // string eq: name == "a" keeps 1
+    let eq = tmp("filt_eq.xlsx");
+    let r2 = call(
+        office__sheet_filter,
+        &format!(r#"{{"path":"{path}","by":"name","op":"eq","value":"a","output":"{eq}"}}"#),
+    );
+    assert_eq!(r2["kept"], 1, "eq kept 1: {r2}");
+
+    for f in [&path, &ge, &eq] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_sort_by_column() {
     let path = tmp("sort.xlsx");
     let w = call(
