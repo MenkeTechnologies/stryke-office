@@ -104,6 +104,15 @@ fn Office::records_write ($path, $records, %opts) {
         office__records_write(to_json({ path => $path, records => $records, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
 }
 
+## Sort a sheet's data rows by $by (column name or 0-based index), preserving
+## the header. opts: sheet => name/index, descending => 1, numeric => 1|0
+## (default auto-detect), ignore_case => 1 (text mode), header => 0 if the first
+## row is data, format => override. Returns { ok, path, sorted, column }.
+fn Office::sheet_sort ($path, $by, $output, %opts) {
+    Office::_decode("sheet_sort",
+        office__sheet_sort(to_json({ path => $path, by => $by, output => $output, sheet => $opts{sheet}, descending => $opts{descending}, numeric => $opts{numeric}, ignore_case => $opts{ignore_case}, header => $opts{header}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

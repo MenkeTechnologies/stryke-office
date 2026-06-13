@@ -198,6 +198,45 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_sort_by_column() {
+    let path = tmp("sort.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["c",30],["a",10],["b",20]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // numeric ascending by qty -> 10,20,30 => names a,b,c
+    let asc = tmp("sort_asc.xlsx");
+    let r = call(
+        office__sheet_sort,
+        &format!(r#"{{"path":"{path}","by":"qty","output":"{asc}"}}"#),
+    );
+    assert_eq!(r["sorted"], 3, "sorted 3 rows: {r}");
+    let ra = call(office__sheet_read, &format!(r#"{{"path":"{asc}"}}"#));
+    let rows = &ra["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "name", "header preserved: {ra}");
+    assert_eq!(rows[1][0], "a", "smallest qty first: {ra}");
+    assert_eq!(rows[3][0], "c", "largest qty last: {ra}");
+
+    // text descending by name -> c,b,a
+    let desc = tmp("sort_desc.xlsx");
+    let r2 = call(
+        office__sheet_sort,
+        &format!(r#"{{"path":"{path}","by":"name","output":"{desc}","descending":true}}"#),
+    );
+    assert_eq!(r2["ok"], true, "desc sort: {r2}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{desc}"}}"#));
+    assert_eq!(rd["sheets"][0]["rows"][1][0], "c", "desc name first: {rd}");
+
+    for f in [&path, &asc, &desc] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(
