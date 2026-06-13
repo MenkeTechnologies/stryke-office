@@ -1204,6 +1204,52 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn doc_split_at_headings() {
+    let path = tmp("split.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[
+                {{"kind":"heading","level":1,"text":"Chapter 1"}},
+                {{"kind":"para","text":"alpha"}},
+                {{"kind":"heading","level":1,"text":"Chapter 2"}},
+                {{"kind":"para","text":"bravo"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let dir = tmp("split_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__doc_split,
+        &format!(r#"{{"path":"{path}","dir":"{dir}","prefix":"ch"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two sections: {r}");
+    let s1 = call(
+        office__doc_read,
+        &format!(r#"{{"path":"{dir}/ch-1.docx"}}"#),
+    );
+    let j1 = s1["paragraphs"].to_string();
+    assert!(
+        j1.contains("Chapter 1") && j1.contains("alpha"),
+        "section 1 content: {j1}"
+    );
+    assert!(!j1.contains("Chapter 2"), "section 1 excludes ch2: {j1}");
+    let s2 = call(
+        office__doc_read,
+        &format!(r#"{{"path":"{dir}/ch-2.docx"}}"#),
+    );
+    assert!(
+        s2["paragraphs"].to_string().contains("bravo"),
+        "section 2 content: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn doc_append_blocks() {
     let path = tmp("ap.docx");
     let w = call(

@@ -3223,6 +3223,7 @@ export!(office__doc_links, op_doc_links);
 export!(office__doc_stats, op_doc_stats);
 export!(office__doc_merge, op_doc_merge);
 export!(office__doc_append, op_doc_append);
+export!(office__doc_split, op_doc_split);
 export!(office__doc_wordfreq, op_doc_wordfreq);
 export!(office__doc_find, op_doc_find);
 export!(office__slides_find, op_slides_find);
