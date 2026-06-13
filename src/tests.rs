@@ -769,6 +769,55 @@ fn pdf_build_multi_element_document() {
 }
 
 #[test]
+fn pdf_merge_split_rotate_info() {
+    // make two 2-page source PDFs via pdf_build
+    let a = tmp("a.pdf");
+    let b = tmp("b.pdf");
+    for (path, head) in [(&a, "Alpha"), (&b, "Beta")] {
+        let v = call(
+            office__pdf_build,
+            &format!(
+                r#"{{"path":"{path}","elements":[
+                    {{"type":"heading","level":1,"text":"{head} 1"}},
+                    {{"type":"pagebreak"}},
+                    {{"type":"heading","level":1,"text":"{head} 2"}}
+                ]}}"#
+            ),
+        );
+        assert_eq!(v["ok"], true, "build {head}: {v}");
+    }
+    // info on a source
+    let ia = call(office__pdf_info, &format!(r#"{{"path":"{a}"}}"#));
+    assert_eq!(ia["pages"], 2, "source A has 2 pages: {ia}");
+
+    // merge → 4 pages
+    let merged = tmp("merged.pdf");
+    let m = call(office__pdf_merge, &format!(r#"{{"inputs":["{a}","{b}"],"path":"{merged}"}}"#));
+    assert_eq!(m["ok"], true, "merge: {m}");
+    let im = call(office__pdf_info, &format!(r#"{{"path":"{merged}"}}"#));
+    assert_eq!(im["pages"], 4, "merged has 4 pages: {im}");
+
+    // split → keep pages 1 and 3 → 2 pages
+    let sub = tmp("sub.pdf");
+    let s = call(office__pdf_split, &format!(r#"{{"path":"{merged}","pages":[1,3],"output":"{sub}"}}"#));
+    assert_eq!(s["ok"], true, "split: {s}");
+    let is = call(office__pdf_info, &format!(r#"{{"path":"{sub}"}}"#));
+    assert_eq!(is["pages"], 2, "split kept 2 pages: {is}");
+
+    // rotate all pages 90°
+    let rot = tmp("rot.pdf");
+    let r = call(office__pdf_rotate, &format!(r#"{{"path":"{merged}","angle":90,"output":"{rot}"}}"#));
+    assert_eq!(r["rotated"], 4, "rotated all 4 pages: {r}");
+    // rotated file still parses
+    let ir = call(office__pdf_read, &format!(r#"{{"path":"{rot}"}}"#));
+    assert!(ir["text"].is_string(), "rotated pdf re-reads");
+
+    for f in [&a, &b, &merged, &sub, &rot] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn chart_save_dispatches_by_extension() {
     let spec = r#""type":"bar","series":[{"name":"s","data":[3,6,9]}],"categories":["a","b","c"]"#;
     for (ext, magic) in [("svg", "<svg"), ("png", "PNG"), ("pdf", "%PDF")] {
