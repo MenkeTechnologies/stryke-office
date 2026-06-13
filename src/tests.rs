@@ -1359,6 +1359,32 @@ fn chart_grid_dashboard_and_new_types() {
 }
 
 #[test]
+fn chart_incr32_calendar_parallel_hexbin() {
+    // calendar: needs no series, just values
+    let cal = call(office__chart_render, r#"{"type":"calendar","width":420,"height":160,"values":[1,3,0,5,2,8,4,1,0,6,3,2,7,1,5,2,0,9,3,1]}"#);
+    let ch = cal["handle"].as_u64().expect("calendar handle");
+    call(office__img_close, &format!(r#"{{"handle":{ch}}}"#));
+    let cv = call(office__chart_svg, r#"{"type":"calendar","values":[1,3,0,5,2,8,4,1,0,6]}"#);
+    assert!(cv["svg"].as_str().unwrap_or("").contains("<rect"), "calendar svg cells");
+
+    // parallel coordinates: each series = a row across dimensions
+    let par = r#"[{"data":[5,20,3,80]},{"data":[8,12,9,40]},{"data":[2,18,6,60]}]"#;
+    let pc = call(office__chart_render, &format!(r#"{{"type":"parallel","width":420,"height":300,"categories":["a","b","c","d"],"series":{par}}}"#));
+    let ph = pc["handle"].as_u64().expect("parallel handle");
+    call(office__img_close, &format!(r#"{{"handle":{ph}}}"#));
+    let pv = call(office__chart_svg, &format!(r#"{{"type":"parallel","categories":["a","b","c","d"],"series":{par}}}"#));
+    assert!(pv["svg"].as_str().unwrap_or("").contains("<polyline"), "parallel svg lines");
+
+    // hexbin: scatter points binned
+    let hx = r#"[{"data":[[1,2],[1.1,2.1],[1,2.05],[5,9],[5.1,9],[3,3],[3,3.1],[3.05,3]]}]"#;
+    let hc = call(office__chart_render, &format!(r#"{{"type":"hexbin","width":400,"height":400,"radius":20,"series":{hx}}}"#));
+    let hh = hc["handle"].as_u64().expect("hexbin handle");
+    call(office__img_close, &format!(r#"{{"handle":{hh}}}"#));
+    let hv = call(office__chart_svg, &format!(r#"{{"type":"hexbin","radius":20,"series":{hx}}}"#));
+    assert!(hv["svg"].as_str().unwrap_or("").contains("<polygon"), "hexbin svg cells");
+}
+
+#[test]
 fn chart_legend_and_labels_emit() {
     // legend swatches + value labels appear in the SVG
     let v = call(

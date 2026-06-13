@@ -276,7 +276,10 @@ cumulative-% line), `lollipop`/`dot`, `gantt` (per-series
 `rings => [[..],[..]]` innermost first), `range`/`range_column` (floating bars
 from `data => [[lo,hi],…]`), `percent_stacked` (100%-stacked), `streamgraph`
 (centered stacked area), `waffle` (10×10 share grid), `slope` (before/after),
-`marimekko`/`mosaic` (variable-width stacked), `radial_bar` (concentric arcs).
+`marimekko`/`mosaic` (variable-width stacked), `radial_bar` (concentric arcs),
+`calendar` (GitHub-style heatmap from `values`, no series), `parallel`
+(parallel coordinates — each series a row across dimension axes), `hexbin`
+(scatter density in hexagonal cells).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,

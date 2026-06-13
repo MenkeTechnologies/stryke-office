@@ -48,7 +48,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
     }
 
     let labels = opts.get("labels").and_then(Value::as_bool).unwrap_or(false);
-    let needs_series = !matches!(kind, "sankey" | "gauge" | "heatmap" | "sunburst");
+    let needs_series = !matches!(kind, "sankey" | "gauge" | "heatmap" | "sunburst" | "calendar");
     if needs_series && opts.get("series").and_then(Value::as_array).is_none() {
         return Err(anyhow!("missing series (expected array)"));
     }
@@ -73,6 +73,9 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "slope" => svg_slope(&mut s, series, l, t, r, b),
         "marimekko" | "mosaic" => svg_marimekko(&mut s, series, &cats, l, t, r, b),
         "radial_bar" => svg_radial_bar(&mut s, series, &cats, l, t, r, b),
+        "calendar" => svg_calendar(&mut s, opts, series, l, t, r, b),
+        "parallel" => svg_parallel(&mut s, series, &cats, l, t, r, b),
+        "hexbin" => svg_hexbin(&mut s, opts, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -994,6 +997,108 @@ fn svg_radial_bar(s: &mut String, series: &[Value], cats: &[String], l: f64, t: 
         if let Some(c) = cats.get(i) {
             let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, cx + 4.0, cy - rr, xml_escape(c));
         }
+    }
+}
+
+/// Calendar heatmap (vector): 7 rows × N columns, white→green by value.
+fn svg_calendar(s: &mut String, opts: &Value, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let values: Vec<f64> = opts
+        .get("values")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_f64).collect())
+        .unwrap_or_else(|| series.first().map(series_nums).unwrap_or_default());
+    let n = values.len();
+    if n == 0 {
+        return;
+    }
+    let (lo, hi) = values.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, c), &v| (a.min(v), c.max(v)));
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let cols = opts.get("columns").and_then(Value::as_u64).map(|c| c as usize).unwrap_or(n.div_ceil(7)).max(1);
+    let cell = ((r - l) / cols as f64).min((b - t) / 7.0).max(3.0);
+    for (i, &v) in values.iter().enumerate() {
+        let (col, row) = (i / 7, i % 7);
+        let frac = (v - lo) / span;
+        let color = format!(
+            "#{:02x}{:02x}{:02x}",
+            (255.0 - frac * (255.0 - 0x21 as f64)) as u8,
+            (255.0 - frac * (255.0 - 0x6e as f64)) as u8,
+            (255.0 - frac * (255.0 - 0x39 as f64)) as u8
+        );
+        let x = l + col as f64 * cell + 1.0;
+        let y = t + row as f64 * cell + 1.0;
+        let _ = write!(s, r##"<rect x="{x:.1}" y="{y:.1}" width="{:.1}" height="{:.1}" fill="{color}"/>"##, (cell - 2.0).max(1.0), (cell - 2.0).max(1.0));
+    }
+}
+
+/// Parallel coordinates (vector).
+fn svg_parallel(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let ndim = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0).max(cats.len());
+    if ndim < 2 {
+        return;
+    }
+    let mut dmin = vec![f64::INFINITY; ndim];
+    let mut dmax = vec![f64::NEG_INFINITY; ndim];
+    for ser in series {
+        for (d, v) in series_nums(ser).into_iter().enumerate() {
+            dmin[d] = dmin[d].min(v);
+            dmax[d] = dmax[d].max(v);
+        }
+    }
+    let xat = |d: usize| l + d as f64 / (ndim - 1) as f64 * (r - l);
+    let yat = |d: usize, v: f64| {
+        let span = (dmax[d] - dmin[d]).abs().max(1e-9);
+        b - (v - dmin[d]) / span * (b - t)
+    };
+    for d in 0..ndim {
+        let x = xat(d);
+        let _ = write!(s, r##"<line x1="{x:.1}" y1="{t}" x2="{x:.1}" y2="{b}" stroke="#d2d2d2"/>"##);
+        if let Some(c) = cats.get(d) {
+            let _ = write!(s, r##"<text x="{x:.1}" y="{:.1}" font-size="10" text-anchor="middle" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(c));
+        }
+    }
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let pts: String = series_nums(ser).iter().enumerate().map(|(d, v)| format!("{:.1},{:.1} ", xat(d), yat(d, *v))).collect();
+        let _ = write!(s, r##"<polyline points="{pts}" fill="none" stroke="{col}" stroke-width="1.5" stroke-opacity="0.8"/>"##);
+    }
+}
+
+/// Hexbin (vector): flat-top hex grid colored white→blue by point count.
+fn svg_hexbin(s: &mut String, opts: &Value, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let pts: Vec<(f64, f64)> = series.iter().flat_map(series_points).collect();
+    if pts.is_empty() {
+        return;
+    }
+    let (mut xmn, mut xmx, mut ymn, mut ymx) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for &(x, y) in &pts {
+        xmn = xmn.min(x);
+        xmx = xmx.max(x);
+        ymn = ymn.min(y);
+        ymx = ymx.max(y);
+    }
+    let xspan = (xmx - xmn).abs().max(1e-9);
+    let yspan = (ymx - ymn).abs().max(1e-9);
+    let size = opts.get("radius").and_then(Value::as_f64).unwrap_or(16.0).max(4.0);
+    let to_px = |x: f64, y: f64| ((x - xmn) / xspan * (r - l), (ymx - y) / yspan * (b - t));
+    let mut bins: std::collections::HashMap<(i32, i32), u32> = std::collections::HashMap::new();
+    for &(x, y) in &pts {
+        let (px, py) = to_px(x, y);
+        let (q, rr) = pixel_to_axial(px, py, size);
+        *bins.entry(axial_round(q, rr)).or_insert(0) += 1;
+    }
+    let maxc = bins.values().copied().max().unwrap_or(1) as f64;
+    for (&(q, rr), &cnt) in &bins {
+        let (cx, cy) = axial_to_pixel(q, rr, size);
+        let (cx, cy) = (l + cx, t + cy);
+        let frac = cnt as f64 / maxc;
+        let color = format!("#{:02x}{:02x}ff", (255.0 - frac * 187.0) as u8, (255.0 - frac * 141.0) as u8);
+        let poly: String = (0..6)
+            .map(|i| {
+                let a = std::f64::consts::PI / 3.0 * i as f64;
+                format!("{:.1},{:.1} ", cx + size * a.cos(), cy + size * a.sin())
+            })
+            .collect();
+        let _ = write!(s, r##"<polygon points="{poly}" fill="{color}" stroke="#ffffff" stroke-width="0.5"/>"##);
     }
 }
 
