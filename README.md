@@ -179,15 +179,31 @@ Office::sheet_write("s.xlsx", [{
     conditional => [{ range => [1,0,2,1], rule => "greater_than", value => 80,
                       format => { bold => 1, bg => "#C6EFCE" } }],
     validations => [{ range => [1,1,2,1], list => ["yes","no","maybe"] }],  # dropdown
-}])
+    # page setup + embedded content:
+    protect => 1, landscape => 1, tab_color => "#FF8800", zoom => 120,
+    header => "&CQ Report", footer => "&Lpage &P", print_area => [0,0,2,1],
+    repeat_rows => [0,0], print_gridlines => 1, paper => 9,
+    margins => [0.5,0.5,0.6,0.6,0.3,0.3],          # l,r,t,b,header,footer
+    notes   => [{ row => 1, col => 0, text => "check", author => "qa" }],
+    images  => [{ row => 0, col => 3, path => "logo.png" }],
+}], defined_names => [{ name => "Region", formula => "=S!\$A\$1" }])
 
-# docx structure: tables, inline images, page breaks, page setup
+# read formula strings alongside values
+val $sheets = Office::sheet_read("s.xlsx", formulas => 1)
+# $sheets->[0]{formulas}[0][2]  -> "A1+B1"
+
+# docx structure: tables, inline images, page breaks, page setup, lists,
+# hyperlinks, running header/footer
 Office::doc_write("d.docx", [
+    { kind => "heading", level => 1, text => "Agenda" },
+    { kind => "list", ordered => 1, items => ["First", "Second"] },   # numbered
+    { kind => "list", ordered => 0, items => ["a", "b"] },             # bulleted
+    { kind => "link", url => "https://x.com", text => "see site" },    # hyperlink
     { kind => "table", rows => [["Name","Qty"], ["Widget","3"]] },
     { kind => "image", path => "logo.png", width => 80, height => 80 },
     { kind => "pagebreak" },
     { kind => "para", text => "Next page" },
-], page_size => [11906, 16838])          # A4 in twips
+], page_size => [11906, 16838], header => "My Report", footer => "confidential")
 ```
 
 ### Charting (data → image handle → any format)
@@ -331,9 +347,12 @@ real temp file, so a passing test means the bytes on disk parse back.
 ```
 stryke-office/
   Cargo.toml             # cdylib crate (format crates, all pure Rust)
-  src/lib.rs             # office__* exports + format handlers + tests
+  src/lib.rs             # office__* exports + spreadsheet/doc/slides/pdf handlers + tests
+  src/doc_formats.rs     # csv/tsv + html/md/rtf/txt readers + writers
   src/pptx_write.rs      # minimal OOXML PowerPoint writer
-  src/image_ops.rs       # PIL-style image I/O + manipulation
+  src/image_ops.rs       # PIL-complete image I/O + manipulation
+  src/chart_render.rs    # raster chart renderer (all chart types)
+  src/chart_svg.rs       # vector (SVG/PDF) chart renderer
   stryke.toml            # package manifest + [ffi] table
   lib/Office.stk         # stryke wrapper (use Office)
   assets/DejaVuSans.ttf  # vendored font for image text drawing
@@ -346,9 +365,10 @@ stryke-office/
 
 ## [0x08] Roadmap
 
-- Cell styles / formulas on xlsx write; richer docx styling.
-- Images and tables in documents and slides.
-- Spreadsheet formula evaluation on read (values are already returned).
+- PowerPoint speaker notes + images on slides (notesMaster/notesSlide OOXML).
+- Spreadsheet formula *evaluation* on read (formula **strings** already read
+  via `formulas => 1`; values are computed by the writing app).
+- Per-run styling on ODF (ods/odt) write — blocked on `lo_odf` exposing it.
 - xls (legacy binary) write.
 
 ## [0xFF] License

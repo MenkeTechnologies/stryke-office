@@ -996,6 +996,76 @@ fn xlsx_conditional_format_and_validation() {
 }
 
 #[test]
+fn xlsx_advanced_setup_writes_and_data_round_trips() {
+    let path = tmp("setup.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r##"{{"path":"{path}",
+                "defined_names":[{{"name":"Region","formula":"=Data!$A$1"}}],
+                "sheets":[{{
+                    "name":"Data",
+                    "rows":[["city","sales"],["NYC",100],["LA",80]],
+                    "protect":true,"landscape":true,"tab_color":"#FF8800","zoom":120,
+                    "print_gridlines":true,"paper":9,
+                    "header":"&CQuarterly","footer":"&Lpage &P",
+                    "print_area":[0,0,2,1],"repeat_rows":[0,0],
+                    "margins":[0.5,0.5,0.6,0.6,0.3,0.3],
+                    "notes":[{{"row":1,"col":1,"text":"top city","author":"qa"}}]
+                }}]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "advanced setup write failed: {w}");
+    // The data still parses back (setup metadata doesn't disturb cell values).
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["sheets"][0]["rows"][1][0], "NYC", "data intact with setup");
+    assert_eq!(r["sheets"][0]["rows"][1][1], 100.0, "numeric intact with setup");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn xlsx_formula_write_then_read() {
+    let path = tmp("formula.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[
+                [10,20,{{"f":"=A1+B1"}}]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "formula write failed: {w}");
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}","formulas":true}}"#));
+    let f = r["sheets"][0]["formulas"][0][2].as_str().unwrap_or("");
+    assert!(f.contains("A1") && f.contains("B1"), "formula round-trips, got: {f:?}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn docx_lists_links_headers_round_trip() {
+    let path = tmp("rich_lists.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","header":"My Report","footer":"confidential","blocks":[
+                {{"kind":"heading","level":1,"text":"Agenda"}},
+                {{"kind":"list","ordered":true,"items":["First point","Second point"]}},
+                {{"kind":"list","ordered":false,"items":["bullet a","bullet b"]}},
+                {{"kind":"link","url":"https://example.com","text":"see site"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx rich write failed: {w}");
+    let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
+    let paras = r["paragraphs"].as_array().unwrap();
+    let joined: String = paras.iter().filter_map(|p| p.as_str()).collect::<Vec<_>>().join("\n");
+    assert!(joined.contains("First point"), "ordered list item present: {joined:?}");
+    assert!(joined.contains("bullet a"), "bullet list item present");
+    assert!(joined.contains("see site"), "hyperlink text present");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn chart_missing_series_errors() {
     let v = call(office__chart_render, r#"{"type":"bar"}"#);
     assert!(

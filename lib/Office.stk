@@ -33,15 +33,23 @@ fn Office::version {
 
 ## Read a spreadsheet (xlsx/ods/xls/csv). Returns an arrayref of sheets,
 ## each { name => "...", rows => [[cell, ...], ...] }. Numeric cells come
-## back as numbers, empty cells as undef.
-fn Office::sheet_read ($path) {
-    Office::_decode("sheet_read", office__sheet_read(to_json({ path => $path })))->{sheets}
+## back as numbers, empty cells as undef. opts: formulas => 1 to also attach
+## a { formulas => [[str, ...]] } grid (aligned to rows; "" where none).
+fn Office::sheet_read ($path, %opts) {
+    Office::_decode("sheet_read", office__sheet_read(to_json({ path => $path, formulas => $opts{formulas} })))->{sheets}
 }
 
 ## Write a spreadsheet. $sheets is an arrayref of { name, rows => [[...]] }.
-## opts: format => "xlsx"|"ods" (default: from $path extension).
+## Each sheet may also carry (xlsx): merges, cols, row_heights, freeze,
+## autofilter, table, charts, conditional, validations, plus page setup +
+## embedded content — protect, tab_color, zoom, landscape, paper,
+## print_gridlines, header, footer, print_area => [r1,c1,r2,c2],
+## repeat_rows => [first,last], margins => [l,r,t,b,h,f],
+## notes => [{row,col,text,author?}], images => [{row,col,path}].
+## opts: format => "xlsx"|"ods"|"csv"|"tsv" (default: from extension),
+## defined_names => [{ name, formula }] (workbook-level named ranges).
 fn Office::sheet_write ($path, $sheets, %opts) {
-    val $r = { path => $path, sheets => $sheets, format => $opts{format} }
+    val $r = { path => $path, sheets => $sheets, format => $opts{format}, defined_names => $opts{defined_names} }
     Office::_decode("sheet_write", office__sheet_write(to_json($r)))
 }
 
@@ -56,12 +64,15 @@ fn Office::doc_read ($path) {
 
 ## Write a document. $blocks is an arrayref of blocks:
 ##   { kind => "para"|"heading", level, align, text }  (or runs => [{text, bold, ...}])
+##   { kind => "list", ordered => 1|0, items => [str, ...] }   # numbered/bulleted (docx)
+##   { kind => "link", url => "...", text => "..." }            # hyperlink (docx)
 ##   { kind => "table", rows => [[cell, ...]] }
 ##   { kind => "image", path => "...", width, height }   # px (docx)
 ##   { kind => "pagebreak" }
-## opts: format => "docx"|"odt", page_size => [w, h] (twips, docx).
+## opts: format => "docx"|"odt"|"html"|"md"|"rtf"|"txt"|"pdf",
+## page_size => [w, h] (twips, docx), header => "...", footer => "..." (docx).
 fn Office::doc_write ($path, $blocks, %opts) {
-    val $r = { path => $path, blocks => $blocks, format => $opts{format}, page_size => $opts{page_size} }
+    val $r = { path => $path, blocks => $blocks, format => $opts{format}, page_size => $opts{page_size}, header => $opts{header}, footer => $opts{footer} }
     Office::_decode("doc_write", office__doc_write(to_json($r)))
 }
 

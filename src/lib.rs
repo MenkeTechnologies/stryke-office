@@ -263,6 +263,7 @@ fn op_sheet_read(opts: Value) -> Result<Value> {
         "tsv" => return read_csv(path, '\t'),
         _ => {}
     }
+    let want_formulas = opts.get("formulas").and_then(Value::as_bool).unwrap_or(false);
     let mut wb = open_workbook_auto(path)?;
     let names = wb.sheet_names().to_owned();
     let mut sheets = Vec::new();
@@ -290,7 +291,32 @@ fn op_sheet_read(opts: Value) -> Result<Value> {
                 )
             })
             .collect();
-        sheets.push(json!({"name": name, "rows": rows}));
+        let mut sheet = json!({"name": name, "rows": rows});
+        // When requested, also return formula strings aligned to absolute cell
+        // coordinates (calamine's formula range starts at its own used area, so
+        // we offset by its top-left to line up with `rows`). Empty cell => "".
+        if want_formulas {
+            if let Ok(fr) = wb.worksheet_formula(&name) {
+                let (r0, c0) = fr.start().unwrap_or((0, 0));
+                let mut grid: Vec<Vec<String>> = Vec::new();
+                for (ri, row) in fr.rows().enumerate() {
+                    let abs_r = r0 as usize + ri;
+                    while grid.len() <= abs_r {
+                        grid.push(Vec::new());
+                    }
+                    for (ci, f) in row.iter().enumerate() {
+                        let abs_c = c0 as usize + ci;
+                        let line = &mut grid[abs_r];
+                        while line.len() <= abs_c {
+                            line.push(String::new());
+                        }
+                        line[abs_c] = f.clone();
+                    }
+                }
+                sheet["formulas"] = json!(grid);
+            }
+        }
+        sheets.push(sheet);
     }
     Ok(json!({ "sheets": sheets }))
 }
@@ -402,7 +428,7 @@ fn quad(v: &Value, key: &str) -> Option<[u32; 4]> {
 ///   row_heights:[{row,height}], freeze:[row,col], autofilter:[r1,c1,r2,c2],
 ///   table:[r1,c1,r2,c2]}`. Cells may be scalars, rich objects, or
 /// `{link, v}` hyperlinks.
-fn write_xlsx(path: &str, sheets: &[Value]) -> Result<()> {
+fn write_xlsx(path: &str, sheets: &[Value], opts: &Value) -> Result<()> {
     use rust_xlsxwriter::{Format, Table, Workbook};
     let mut wb = Workbook::new();
     for (i, s) in sheets.iter().enumerate() {
@@ -506,8 +532,96 @@ fn write_xlsx(path: &str, sheets: &[Value]) -> Result<()> {
         }
         write_xlsx_charts(ws, &name, s)?;
         write_xlsx_cond_val(ws, s)?;
+        write_xlsx_setup(ws, s)?;
+    }
+    // Workbook-level defined names: `defined_names:[{name, formula}]`.
+    if let Some(dn) = opts.get("defined_names").and_then(Value::as_array) {
+        for d in dn {
+            if let (Some(name), Some(formula)) = (
+                d.get("name").and_then(Value::as_str),
+                d.get("formula").and_then(Value::as_str),
+            ) {
+                wb.define_name(name, formula)?;
+            }
+        }
     }
     wb.save(path)?;
+    Ok(())
+}
+
+/// Per-sheet page setup, protection, and embedded content:
+///   `protect:bool, tab_color:"#rgb", zoom:u16, landscape:bool, paper:u8,
+///    print_gridlines:bool, print_area:[r1,c1,r2,c2], repeat_rows:[first,last],
+///    header:str, footer:str, margins:[l,r,t,b,h,f],
+///    notes:[{row,col,text,author?}], images:[{row,col,path}]`.
+fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, s: &Value) -> Result<()> {
+    use rust_xlsxwriter::{Image, Note};
+    if s.get("protect").and_then(Value::as_bool) == Some(true) {
+        ws.protect();
+    }
+    if let Some(c) = s.get("tab_color").and_then(Value::as_str) {
+        ws.set_tab_color(xlsx_color(c));
+    }
+    if let Some(z) = s.get("zoom").and_then(Value::as_u64) {
+        ws.set_zoom(z as u16);
+    }
+    if s.get("landscape").and_then(Value::as_bool) == Some(true) {
+        ws.set_landscape();
+    }
+    if let Some(p) = s.get("paper").and_then(Value::as_u64) {
+        ws.set_paper_size(p as u8);
+    }
+    if s.get("print_gridlines").and_then(Value::as_bool) == Some(true) {
+        ws.set_print_gridlines(true);
+    }
+    if let Some(h) = s.get("header").and_then(Value::as_str) {
+        ws.set_header(h);
+    }
+    if let Some(f) = s.get("footer").and_then(Value::as_str) {
+        ws.set_footer(f);
+    }
+    if let Some(a) = quad(s, "print_area") {
+        ws.set_print_area(a[0], a[1] as u16, a[2], a[3] as u16)?;
+    }
+    if let Some(rr) = s.get("repeat_rows").and_then(Value::as_array) {
+        if let (Some(f), Some(l)) = (
+            rr.first().and_then(Value::as_u64),
+            rr.get(1).and_then(Value::as_u64),
+        ) {
+            ws.set_repeat_rows(f as u32, l as u32)?;
+        }
+    }
+    if let Some(m) = s.get("margins").and_then(Value::as_array) {
+        let g = |i: usize, d: f64| m.get(i).and_then(Value::as_f64).unwrap_or(d);
+        ws.set_margins(g(0, 0.7), g(1, 0.7), g(2, 0.75), g(3, 0.75), g(4, 0.3), g(5, 0.3));
+    }
+    if let Some(notes) = s.get("notes").and_then(Value::as_array) {
+        for n in notes {
+            if let (Some(row), Some(col), Some(text)) = (
+                n.get("row").and_then(Value::as_u64),
+                n.get("col").and_then(Value::as_u64),
+                n.get("text").and_then(Value::as_str),
+            ) {
+                let mut note = Note::new(text);
+                if let Some(author) = n.get("author").and_then(Value::as_str) {
+                    note = note.set_author(author);
+                }
+                ws.insert_note(row as u32, col as u16, &note)?;
+            }
+        }
+    }
+    if let Some(imgs) = s.get("images").and_then(Value::as_array) {
+        for im in imgs {
+            if let (Some(row), Some(col), Some(path)) = (
+                im.get("row").and_then(Value::as_u64),
+                im.get("col").and_then(Value::as_u64),
+                im.get("path").and_then(Value::as_str),
+            ) {
+                let image = Image::new(path).map_err(|e| anyhow!("image {path}: {e}"))?;
+                ws.insert_image(row as u32, col as u16, &image)?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -673,7 +787,7 @@ fn op_sheet_write(opts: Value) -> Result<Value> {
                 .get("sheets")
                 .and_then(Value::as_array)
                 .ok_or_else(|| anyhow!("missing sheets (expected array)"))?;
-            write_xlsx(&path, raw)?;
+            write_xlsx(&path, raw, &opts)?;
             raw.len()
         }
         "ods" => {
@@ -814,7 +928,11 @@ fn docx_para(v: &Value) -> docx_rs::Paragraph {
 ///   `{kind:"pagebreak"}`
 /// Doc opts: `page_size:[w,h]` (twips).
 fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
-    use docx_rs::{BreakType, Docx, Paragraph, Pic, Run, Table, TableCell, TableRow};
+    use docx_rs::{
+        AbstractNumbering, BreakType, Docx, Footer, Header, Hyperlink, HyperlinkType, IndentLevel,
+        Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Paragraph, Pic, Run,
+        Start, Table, TableCell, TableRow,
+    };
     let mut docx = Docx::new();
     if let Some(ps) = opts.get("page_size").and_then(Value::as_array) {
         if let (Some(w), Some(h)) = (
@@ -824,8 +942,48 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
             docx = docx.page_size(w as u32, h as u32);
         }
     }
+    // Register numbering definitions once if any list block is present:
+    // num 1 = ordered (decimal), num 2 = bulleted.
+    let has_list = blocks.iter().any(|b| b.get("kind").and_then(Value::as_str) == Some("list"));
+    if has_list {
+        let lvl = |fmt: &str, text: &str| {
+            Level::new(0, Start::new(1), NumberFormat::new(fmt), LevelText::new(text), LevelJc::new("left"))
+        };
+        docx = docx
+            .add_abstract_numbering(AbstractNumbering::new(1).add_level(lvl("decimal", "%1.")))
+            .add_numbering(Numbering::new(1, 1))
+            .add_abstract_numbering(AbstractNumbering::new(2).add_level(lvl("bullet", "•")))
+            .add_numbering(Numbering::new(2, 2));
+    }
+    // Optional running header/footer (plain text).
+    if let Some(h) = opts.get("header").and_then(Value::as_str) {
+        docx = docx.header(Header::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h))));
+    }
+    if let Some(f) = opts.get("footer").and_then(Value::as_str) {
+        docx = docx.footer(Footer::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(f))));
+    }
     for b in blocks {
         match b.get("kind").and_then(Value::as_str).unwrap_or("para") {
+            "list" => {
+                let ordered = b.get("ordered").and_then(Value::as_bool).unwrap_or(false);
+                let num_id = if ordered { 1 } else { 2 };
+                if let Some(items) = b.get("items").and_then(Value::as_array) {
+                    for it in items {
+                        docx = docx.add_paragraph(
+                            Paragraph::new()
+                                .add_run(Run::new().add_text(cell_to_string(it)))
+                                .numbering(NumberingId::new(num_id), IndentLevel::new(0)),
+                        );
+                    }
+                }
+            }
+            "link" => {
+                let url = req_str(b, "url")?;
+                let text = b.get("text").and_then(Value::as_str).unwrap_or(url);
+                let hl = Hyperlink::new(url, HyperlinkType::External)
+                    .add_run(Run::new().add_text(text).color("0563C1").underline("single"));
+                docx = docx.add_paragraph(Paragraph::new().add_hyperlink(hl));
+            }
             "table" => {
                 let mut trows = Vec::new();
                 if let Some(rows) = b.get("rows").and_then(Value::as_array) {
