@@ -644,3 +644,48 @@ fn op_pdf_burst(opts: Value) -> Result<Value> {
     }
     Ok(json!({ "count": files.len(), "files": files }))
 }
+
+/// Split a PDF into fixed-size page chunks. opts: path, dir => output directory,
+/// size => pages per chunk (required, > 0), prefix => filename stem (default:
+/// the source's stem). Files are `{dir}/{prefix}-{n}.pdf` (1-based; the last may
+/// be shorter). Returns `{ count, files }`.
+fn op_pdf_chunk(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let size = opts
+        .get("size")
+        .and_then(Value::as_u64)
+        .filter(|&n| n > 0)
+        .ok_or_else(|| anyhow!("missing size (pages per chunk, > 0)"))? as u32;
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("chunk")
+                .to_string()
+        });
+    let total = Document::load(path)
+        .map_err(|e| anyhow!("load {path}: {e}"))?
+        .get_pages()
+        .len() as u32;
+
+    let mut files = Vec::new();
+    let mut start = 1u32;
+    let mut idx = 1u32;
+    while start <= total {
+        let end = (start + size - 1).min(total);
+        let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+        let remove: Vec<u32> = (1..=total).filter(|&p| p < start || p > end).collect();
+        doc.delete_pages(&remove);
+        let out = format!("{dir}/{prefix}-{idx}.pdf");
+        doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+        files.push(out);
+        start += size;
+        idx += 1;
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
