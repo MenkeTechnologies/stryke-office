@@ -139,7 +139,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let text = el.get("text").and_then(Value::as_str).unwrap_or("");
                 let pdf_y = ph - ty - size;
                 let p = pages.last_mut().unwrap();
-                let _ = write!(p.content, "BT /F2 {size} Tf {r:.3} {g:.3} {b:.3} rg {margin} {pdf_y:.1} Td ({}) Tj ET\n", pdf_escape(text));
+                let _ = writeln!(p.content, "BT /F2 {size} Tf {r:.3} {g:.3} {b:.3} rg {margin} {pdf_y:.1} Td ({}) Tj ET", pdf_escape(text));
                 ty += lh;
             }
             "paragraph" => {
@@ -152,7 +152,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                     ensure(&mut pages, &mut ty, lh);
                     let pdf_y = ph - ty - size;
                     let p = pages.last_mut().unwrap();
-                    let _ = write!(p.content, "BT /{font} {size} Tf {r:.3} {g:.3} {b:.3} rg {margin} {pdf_y:.1} Td ({}) Tj ET\n", pdf_escape(&line));
+                    let _ = writeln!(p.content, "BT /{font} {size} Tf {r:.3} {g:.3} {b:.3} rg {margin} {pdf_y:.1} Td ({}) Tj ET", pdf_escape(&line));
                     ty += lh;
                 }
                 ty += lh * 0.4; // paragraph spacing
@@ -167,7 +167,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let text = el.get("text").and_then(Value::as_str).unwrap_or("");
                 let pdf_y = ph - y - size;
                 let p = pages.last_mut().unwrap();
-                let _ = write!(p.content, "BT /{font} {size} Tf {r:.3} {g:.3} {b:.3} rg {x:.1} {pdf_y:.1} Td ({}) Tj ET\n", pdf_escape(text));
+                let _ = writeln!(p.content, "BT /{font} {size} Tf {r:.3} {g:.3} {b:.3} rg {x:.1} {pdf_y:.1} Td ({}) Tj ET", pdf_escape(text));
             }
             "rect" => {
                 let x = el.get("x").and_then(Value::as_f64).unwrap_or(margin);
@@ -179,9 +179,9 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let pdf_y = ph - y - hh;
                 let p = pages.last_mut().unwrap();
                 if fill {
-                    let _ = write!(p.content, "{r:.3} {g:.3} {b:.3} rg {x:.1} {pdf_y:.1} {w:.1} {hh:.1} re f\n");
+                    let _ = writeln!(p.content, "{r:.3} {g:.3} {b:.3} rg {x:.1} {pdf_y:.1} {w:.1} {hh:.1} re f");
                 } else {
-                    let _ = write!(p.content, "{r:.3} {g:.3} {b:.3} RG {x:.1} {pdf_y:.1} {w:.1} {hh:.1} re S\n");
+                    let _ = writeln!(p.content, "{r:.3} {g:.3} {b:.3} RG {x:.1} {pdf_y:.1} {w:.1} {hh:.1} re S");
                 }
             }
             "line" => {
@@ -191,7 +191,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let y1 = el.get("y1").and_then(Value::as_f64).unwrap_or(ty);
                 let (r, g, b) = pdf_rgb(el.get("color"));
                 let p = pages.last_mut().unwrap();
-                let _ = write!(p.content, "{r:.3} {g:.3} {b:.3} RG {x0:.1} {:.1} m {x1:.1} {:.1} l S\n", ph - y0, ph - y1);
+                let _ = writeln!(p.content, "{r:.3} {g:.3} {b:.3} RG {x0:.1} {:.1} m {x1:.1} {:.1} l S", ph - y0, ph - y1);
             }
             "image" => {
                 let (jpeg, iw, ih) = pdf_element_jpeg(el)?;
@@ -211,7 +211,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let pdf_y = ph - y - hh;
                 let p = pages.last_mut().unwrap();
                 let name = format!("Im{}", p.images.len());
-                let _ = write!(p.content, "q {w:.1} 0 0 {hh:.1} {x:.1} {pdf_y:.1} cm /{name} Do Q\n");
+                let _ = writeln!(p.content, "q {w:.1} 0 0 {hh:.1} {x:.1} {pdf_y:.1} cm /{name} Do Q");
                 p.images.push((name, jpeg, iw, ih));
             }
             other => return Err(anyhow!("unknown pdf element type: {other}")),
