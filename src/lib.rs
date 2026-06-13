@@ -1171,6 +1171,11 @@ export!(office__img_contrast, op_img_contrast);
 export!(office__img_huerotate, op_img_huerotate);
 export!(office__img_invert, op_img_invert);
 export!(office__img_grayscale, op_img_grayscale);
+export!(office__img_gamma, op_img_gamma);
+export!(office__img_threshold, op_img_threshold);
+export!(office__img_posterize, op_img_posterize);
+export!(office__img_sepia, op_img_sepia);
+export!(office__img_tint, op_img_tint);
 
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");

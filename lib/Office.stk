@@ -245,6 +245,31 @@ fn Office::img_grayscale ($handle) {
     Office::_decode("img_grayscale", office__img_grayscale(to_json({ handle => $handle })))
 }
 
+## Gamma correction ($gamma > 1 brightens midtones, < 1 darkens).
+fn Office::img_gamma ($handle, $gamma) {
+    Office::_decode("img_gamma", office__img_gamma(to_json({ handle => $handle, gamma => $gamma })))
+}
+
+## Binarize at luma $level (0-255), default 128.
+fn Office::img_threshold ($handle, %opts) {
+    Office::_decode("img_threshold", office__img_threshold(to_json({ handle => $handle, level => $opts{level} })))
+}
+
+## Reduce each channel to $levels steps (2-256).
+fn Office::img_posterize ($handle, $levels) {
+    Office::_decode("img_posterize", office__img_posterize(to_json({ handle => $handle, levels => $levels })))
+}
+
+## Apply a sepia tone.
+fn Office::img_sepia ($handle) {
+    Office::_decode("img_sepia", office__img_sepia(to_json({ handle => $handle })))
+}
+
+## Multiply colors by $color ("#rrggbb" or [r,g,b]).
+fn Office::img_tint ($handle, $color) {
+    Office::_decode("img_tint", office__img_tint(to_json({ handle => $handle, color => $color })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format

@@ -754,6 +754,31 @@ fn sankey_renders_raster_and_svg() {
 }
 
 #[test]
+fn image_color_processing_ops() {
+    let n = call(
+        office__img_new,
+        r#"{"width":40,"height":40,"color":[120,160,200,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    for (f, arg) in [
+        (
+            office__img_gamma as extern "C" fn(*const c_char) -> *const c_char,
+            r#"{"handle":H,"gamma":1.8}"#,
+        ),
+        (office__img_threshold, r#"{"handle":H,"level":120}"#),
+        (office__img_posterize, r#"{"handle":H,"levels":3}"#),
+        (office__img_sepia, r#"{"handle":H}"#),
+        (office__img_tint, r#"{"handle":H,"color":[255,200,150]}"#),
+    ] {
+        let v = call(f, &arg.replace('H', &h.to_string()));
+        assert_eq!(v["ok"], true, "op failed: {v}");
+    }
+    let info = call(office__img_info, &format!(r#"{{"handle":{h}}}"#));
+    assert_eq!(info["width"], 40, "image intact after color ops");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn chart_radar_and_bubble_render() {
     let c = call(
         office__chart_render,

@@ -433,3 +433,69 @@ fn op_img_grayscale(opts: Value) -> Result<Value> {
     transform(h, |img| Ok(img.grayscale()))?;
     Ok(json!({"ok": true}))
 }
+
+/// Per-pixel RGBA transform helper (alpha preserved unless touched).
+fn pixel_map<F>(h: u64, f: F) -> Result<Value>
+where
+    F: Fn([u8; 4]) -> [u8; 4],
+{
+    transform(h, |img| {
+        let mut buf = img.to_rgba8();
+        for px in buf.pixels_mut() {
+            px.0 = f(px.0);
+        }
+        Ok(image::DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_gamma(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let g = opts.get("gamma").and_then(Value::as_f64).unwrap_or(1.0).max(0.01);
+    let inv = 1.0 / g;
+    let lut: Vec<u8> = (0..256).map(|i| (255.0 * (i as f64 / 255.0).powf(inv)).round() as u8).collect();
+    pixel_map(h, |[r, g2, b, a]| [lut[r as usize], lut[g2 as usize], lut[b as usize], a])
+}
+
+fn op_img_threshold(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let level = opts.get("level").and_then(Value::as_u64).unwrap_or(128) as u32;
+    pixel_map(h, move |[r, g, b, a]| {
+        let luma = (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000;
+        let v = if luma >= level { 255 } else { 0 };
+        [v, v, v, a]
+    })
+}
+
+fn op_img_posterize(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let levels = opts.get("levels").and_then(Value::as_u64).unwrap_or(4).clamp(2, 256) as u32;
+    let step = 255 / (levels - 1);
+    let q = move |c: u8| -> u8 { (((c as u32 + step / 2) / step) * step).min(255) as u8 };
+    pixel_map(h, move |[r, g, b, a]| [q(r), q(g), q(b), a])
+}
+
+fn op_img_sepia(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    pixel_map(h, |[r, g, b, a]| {
+        let (rf, gf, bf) = (r as f64, g as f64, b as f64);
+        let nr = (0.393 * rf + 0.769 * gf + 0.189 * bf).min(255.0) as u8;
+        let ng = (0.349 * rf + 0.686 * gf + 0.168 * bf).min(255.0) as u8;
+        let nb = (0.272 * rf + 0.534 * gf + 0.131 * bf).min(255.0) as u8;
+        [nr, ng, nb, a]
+    })
+}
+
+fn op_img_tint(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let c = parse_color(opts.get("color"));
+    let (tr, tg, tb) = (c.0[0] as u32, c.0[1] as u32, c.0[2] as u32);
+    pixel_map(h, move |[r, g, b, a]| {
+        [
+            (r as u32 * tr / 255) as u8,
+            (g as u32 * tg / 255) as u8,
+            (b as u32 * tb / 255) as u8,
+            a,
+        ]
+    })
+}

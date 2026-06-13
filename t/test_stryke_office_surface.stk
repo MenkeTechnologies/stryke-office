@@ -44,6 +44,11 @@ assert_ok exists &Office::img_contrast, "Office::img_contrast exists"
 assert_ok exists &Office::img_huerotate, "Office::img_huerotate exists"
 assert_ok exists &Office::img_invert, "Office::img_invert exists"
 assert_ok exists &Office::img_grayscale, "Office::img_grayscale exists"
+assert_ok exists &Office::img_gamma, "Office::img_gamma exists"
+assert_ok exists &Office::img_threshold, "Office::img_threshold exists"
+assert_ok exists &Office::img_posterize, "Office::img_posterize exists"
+assert_ok exists &Office::img_sepia, "Office::img_sepia exists"
+assert_ok exists &Office::img_tint, "Office::img_tint exists"
 
 # charting
 assert_ok exists &Office::chart_render, "Office::chart_render exists"
