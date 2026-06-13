@@ -681,7 +681,9 @@ fn Office::img_seam_carve ($handle, $width) {
 ##   scatter accepts trendline => 1 to overlay a least-squares line.
 ## Cross-cutting opts: markers => 1 (line family), reference_lines =>
 ##   [{ y, color? }] (horizontal threshold lines), smooth => 1 (spline lines),
-##   palette => ["#..."] (custom color cycle), background => "#..." (canvas).
+##   palette => ["#..."] (custom color cycle), background => "#..." (canvas),
+##   log_y => 1 (logarithmic Y when all-positive), per-series errors => [e,...]
+##   (error-bar whiskers), annotations => [{ x (data index), y, text, color? }].
 ##   scatter data => [[x, y], ...]; bubble => [[x, y, size], ...];
 ##   ohlc/candlestick => [[open, high, low, close], ...];
 ##   boxplot data => raw numbers (min/q1/median/q3/max computed);

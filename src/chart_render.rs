@@ -344,14 +344,29 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         if scatter && (!xmin.is_finite() || (xmax - xmin).abs() < f64::EPSILON) {
             xmax = xmin + 1.0;
         }
-        let yp = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * ph) as f32;
+        // Optional logarithmic Y (only when the whole range is positive).
+        let logy = opts.get("log_y").and_then(Value::as_bool) == Some(true) && ymin > 0.0;
+        let lmin = ymin.max(1e-9).log10();
+        let lspan = (ymax.max(1e-9).log10() - lmin).max(1e-9);
+        let yp = |v: f64| {
+            let frac = if logy {
+                (v.max(1e-9).log10() - lmin) / lspan
+            } else {
+                (v - ymin) / (ymax - ymin)
+            };
+            (b as f64 - frac * ph) as f32
+        };
 
         // Y gridlines + tick labels (5 ticks).
         for i in 0..=5 {
-            let v = ymin + (ymax - ymin) * (i as f64) / 5.0;
+            let v = if logy {
+                10f64.powf(lmin + lspan * i as f64 / 5.0)
+            } else {
+                ymin + (ymax - ymin) * (i as f64) / 5.0
+            };
             let y = yp(v);
             draw_line_segment_mut(&mut img, (l as f32, y), (r as f32, y), grid);
-            draw_text_mut(&mut img, black, 4, y as i32 - 6, PxScale::from(12.0), &fnt, &format!("{v:.1}"));
+            draw_text_mut(&mut img, black, 4, y as i32 - 6, PxScale::from(12.0), &fnt, &fmt_num(v));
         }
 
         match kind.as_str() {
@@ -415,6 +430,43 @@ fn op_chart_render(opts: Value) -> Result<Value> {
                     let x1 = xmax;
                     let px = |x: f64| l as f64 + (x - xmin) / (xmax - xmin) * pw;
                     draw_line_segment_mut(&mut img, (px(x0) as f32, yp(m * x0 + c)), (px(x1) as f32, yp(m * x1 + c)), color);
+                }
+            }
+        }
+        // error bars: per-series `errors` array parallel to `data`
+        if matches!(kind.as_str(), "bar" | "column" | "line" | "area" | "scatter") {
+            let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0).max(1);
+            for s in series {
+                let Some(errs) = s.get("errors").and_then(Value::as_array) else { continue };
+                let data = series_nums(s);
+                for (ci, e) in errs.iter().filter_map(Value::as_f64).enumerate() {
+                    let Some(&v) = data.get(ci) else { continue };
+                    let x = if scatter {
+                        let pts = series_points(s);
+                        match pts.get(ci) {
+                            Some((px, _)) => l as f64 + (px - xmin) / (xmax - xmin) * pw,
+                            None => continue,
+                        }
+                    } else {
+                        l as f64 + (ci as f64 + 0.5) / ncat as f64 * pw
+                    };
+                    let (yhi, ylo) = (yp(v + e), yp(v - e));
+                    draw_line_segment_mut(&mut img, (x as f32, yhi), (x as f32, ylo), black);
+                    draw_line_segment_mut(&mut img, (x as f32 - 3.0, yhi), (x as f32 + 3.0, yhi), black);
+                    draw_line_segment_mut(&mut img, (x as f32 - 3.0, ylo), (x as f32 + 3.0, ylo), black);
+                }
+            }
+        }
+        // annotations: [{x (data index), y (value), text, color?}]
+        if let Some(anns) = opts.get("annotations").and_then(Value::as_array) {
+            let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(1).max(1);
+            for a in anns {
+                let (Some(xi), Some(yv)) = (a.get("x").and_then(Value::as_f64), a.get("y").and_then(Value::as_f64)) else { continue };
+                let x = l as f64 + if ncat > 1 { xi / (ncat - 1) as f64 * pw } else { pw / 2.0 };
+                let color = parse_color(a.get("color").or(Some(&Value::String("#c0392b".into()))));
+                draw_filled_circle_mut(&mut img, (x as i32, yp(yv) as i32), 4, color);
+                if let Some(txt) = a.get("text").and_then(Value::as_str) {
+                    draw_text_mut(&mut img, black, x as i32 + 6, yp(yv) as i32 - 6, PxScale::from(11.0), &fnt, txt);
                 }
             }
         }

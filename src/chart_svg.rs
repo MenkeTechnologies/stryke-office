@@ -148,16 +148,30 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         if scatter && (!xmin.is_finite() || (xmax - xmin).abs() < f64::EPSILON) {
             xmax = xmin + 1.0;
         }
-        let yp = |v: f64| b - (v - ymin) / (ymax - ymin) * ph;
+        let logy = opts.get("log_y").and_then(Value::as_bool) == Some(true) && ymin > 0.0;
+        let lmin = ymin.max(1e-9).log10();
+        let lspan = (ymax.max(1e-9).log10() - lmin).max(1e-9);
+        let yp = |v: f64| {
+            let frac = if logy {
+                (v.max(1e-9).log10() - lmin) / lspan
+            } else {
+                (v - ymin) / (ymax - ymin)
+            };
+            b - frac * ph
+        };
 
         // axes + gridlines
         let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/>"##);
         let _ = write!(s, r##"<line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
         for i in 0..=5 {
-            let v = ymin + (ymax - ymin) * (i as f64) / 5.0;
+            let v = if logy {
+                10f64.powf(lmin + lspan * i as f64 / 5.0)
+            } else {
+                ymin + (ymax - ymin) * (i as f64) / 5.0
+            };
             let y = yp(v);
             let _ = write!(s, r##"<line x1="{l}" y1="{y}" x2="{r}" y2="{y}" stroke="#d2d2d2"/>"##);
-            let _ = write!(s, r##"<text x="6" y="{}" font-size="11" fill="#1e1e1e">{v:.1}</text>"##, y + 4.0);
+            let _ = write!(s, r##"<text x="6" y="{}" font-size="11" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(v)));
         }
 
         match kind {
@@ -211,6 +225,42 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
                     let col = svg_palette(si);
                     let px = |x: f64| l + (x - xmin) / (xmax - xmin) * pw;
                     let _ = write!(s, r##"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{col}" stroke-width="1.5" stroke-dasharray="5,4"/>"##, px(xmin), yp(m * xmin + c), px(xmax), yp(m * xmax + c));
+                }
+            }
+        }
+        // error bars: per-series `errors` parallel to `data`
+        if matches!(kind, "bar" | "column" | "line" | "area" | "scatter") {
+            let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0).max(1);
+            for ser in series {
+                let Some(errs) = ser.get("errors").and_then(Value::as_array) else { continue };
+                let data = series_nums(ser);
+                for (ci, e) in errs.iter().filter_map(Value::as_f64).enumerate() {
+                    let Some(&v) = data.get(ci) else { continue };
+                    let x = if scatter {
+                        match series_points(ser).get(ci) {
+                            Some((px, _)) => l + (px - xmin) / (xmax - xmin) * pw,
+                            None => continue,
+                        }
+                    } else {
+                        l + (ci as f64 + 0.5) / ncat as f64 * pw
+                    };
+                    let (yhi, ylo) = (yp(v + e), yp(v - e));
+                    let _ = write!(s, r##"<line x1="{x:.1}" y1="{yhi:.1}" x2="{x:.1}" y2="{ylo:.1}" stroke="#1e1e1e"/>"##);
+                    let _ = write!(s, r##"<line x1="{:.1}" y1="{yhi:.1}" x2="{:.1}" y2="{yhi:.1}" stroke="#1e1e1e"/>"##, x - 3.0, x + 3.0);
+                    let _ = write!(s, r##"<line x1="{:.1}" y1="{ylo:.1}" x2="{:.1}" y2="{ylo:.1}" stroke="#1e1e1e"/>"##, x - 3.0, x + 3.0);
+                }
+            }
+        }
+        // annotations
+        if let Some(anns) = opts.get("annotations").and_then(Value::as_array) {
+            let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(1).max(1);
+            for a in anns {
+                let (Some(xi), Some(yv)) = (a.get("x").and_then(Value::as_f64), a.get("y").and_then(Value::as_f64)) else { continue };
+                let x = l + if ncat > 1 { xi / (ncat - 1) as f64 * pw } else { pw / 2.0 };
+                let col = a.get("color").and_then(Value::as_str).unwrap_or("#c0392b");
+                let _ = write!(s, r##"<circle cx="{x:.1}" cy="{:.1}" r="4" fill="{col}"/>"##, yp(yv));
+                if let Some(txt) = a.get("text").and_then(Value::as_str) {
+                    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" fill="#1e1e1e">{}</text>"##, x + 6.0, yp(yv) - 4.0, xml_escape(txt));
                 }
             }
         }
