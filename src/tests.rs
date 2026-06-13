@@ -53,6 +53,64 @@ fn xlsx_write_then_read_round_trips() {
 }
 
 #[test]
+fn sheet_merge_workbooks_and_rows() {
+    // two xlsx, distinct sheet names
+    let a = tmp("wbA.xlsx");
+    let b = tmp("wbB.xlsx");
+    let wa = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{a}","sheets":[{{"name":"S1","rows":[["a","b"],[1,2]]}}]}}"#),
+    );
+    assert_eq!(wa["ok"], true, "write A: {wa}");
+    let wb = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{b}","sheets":[{{"name":"S2","rows":[["c"],[3]]}}]}}"#),
+    );
+    assert_eq!(wb["ok"], true, "write B: {wb}");
+
+    // sheets mode -> one workbook with both sheets
+    let merged = tmp("wbM.xlsx");
+    let m = call(
+        office__sheet_merge,
+        &format!(r#"{{"inputs":["{a}","{b}"],"output":"{merged}"}}"#),
+    );
+    assert_eq!(m["sheets"], 2, "two sheets merged: {m}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{merged}"}}"#));
+    let names: Vec<&str> = rd["sheets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"S1") && names.contains(&"S2"),
+        "both sheet names: {rd}"
+    );
+
+    // rows mode merging two csv into one csv (stacked rows + conversion path)
+    let ca = tmp("cA.csv");
+    let cb = tmp("cB.csv");
+    std::fs::write(&ca, "x,y\n1,2\n").unwrap();
+    std::fs::write(&cb, "3,4\n").unwrap();
+    let cm = tmp("cM.csv");
+    let r = call(
+        office__sheet_merge,
+        &format!(r#"{{"inputs":["{ca}","{cb}"],"output":"{cm}","mode":"rows"}}"#),
+    );
+    assert_eq!(r["ok"], true, "csv rows merge: {r}");
+    let rc = call(office__sheet_read, &format!(r#"{{"path":"{cm}"}}"#));
+    assert_eq!(
+        rc["sheets"][0]["rows"].as_array().unwrap().len(),
+        3,
+        "3 stacked rows: {rc}"
+    );
+
+    for f in [&a, &b, &merged, &ca, &cb, &cm] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn ods_write_then_read_round_trips() {
     let path = tmp("rt.ods");
     let w = call(
@@ -1103,7 +1161,7 @@ fn pdf_build_multi_element_document() {
     );
     let ch = chart["handle"].as_u64().expect("chart handle");
 
-    let path = tmp("doc.pdf");
+    let path = tmp("build.pdf");
     let long = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ".repeat(8);
     let v = call(
         office__pdf_build,
@@ -2801,7 +2859,7 @@ fn extract_images_from_docx_to_dir() {
         &format!(r#"{{"handle":{nh},"path":"{png}"}}"#),
     );
 
-    let docx = tmp("withimg.docx");
+    let docx = tmp("extractimg.docx");
     let w = call(
         office__doc_write,
         &format!(

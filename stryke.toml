@@ -14,6 +14,7 @@ exports = [
     "office__pkg_version",
     "office__sheet_read",
     "office__sheet_write",
+    "office__sheet_merge",
     "office__doc_read",
     "office__doc_write",
     "office__slides_read",

@@ -1038,6 +1038,64 @@ fn op_sheet_write(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": path, "sheets": n}))
 }
 
+/// Combine several spreadsheets into one. opts: inputs => [paths],
+/// output => path, mode => "sheets" (default; every source sheet is carried
+/// over, names de-duplicated) | "rows" (all rows stacked into one "Merged"
+/// sheet — the right mode for csv/tsv targets), format => override. Doubles as
+/// conversion via the output extension. Returns `{ ok, path, sources, sheets }`.
+fn op_sheet_merge(opts: Value) -> Result<Value> {
+    let inputs = opts
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing inputs (expected array of paths)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+    let rows_mode = opts.get("mode").and_then(Value::as_str) == Some("rows");
+
+    let mut sheets: Vec<Value> = Vec::new();
+    let mut combined: Vec<Value> = Vec::new();
+    let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for inp in inputs {
+        let path = inp
+            .as_str()
+            .ok_or_else(|| anyhow!("input path must be a string"))?;
+        let read = op_sheet_read(json!({ "path": path }))?;
+        let src = read
+            .get("sheets")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for s in src {
+            if rows_mode {
+                if let Some(rs) = s.get("rows").and_then(Value::as_array) {
+                    combined.extend(rs.iter().cloned());
+                }
+            } else {
+                let base = s.get("name").and_then(Value::as_str).unwrap_or("Sheet");
+                let mut name = base.to_string();
+                let mut k = 2;
+                while used.contains(&name) {
+                    name = format!("{base} ({k})");
+                    k += 1;
+                }
+                used.insert(name.clone());
+                let rows = s.get("rows").cloned().unwrap_or_else(|| json!([]));
+                sheets.push(json!({ "name": name, "rows": rows }));
+            }
+        }
+    }
+    if rows_mode {
+        sheets.push(json!({ "name": "Merged", "rows": combined }));
+    }
+
+    let n = sheets.len();
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "sheets": n }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -1642,6 +1700,7 @@ pub extern "C" fn office__pkg_version(args: *const c_char) -> *const c_char {
 
 export!(office__sheet_read, op_sheet_read);
 export!(office__sheet_write, op_sheet_write);
+export!(office__sheet_merge, op_sheet_merge);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

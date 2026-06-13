@@ -59,6 +59,16 @@ fn Office::sheet_write ($path, $sheets, %opts) {
     Office::_decode("sheet_write", office__sheet_write(to_json($r)))
 }
 
+## Combine spreadsheets into one. $inputs is an arrayref of paths; the target
+## format comes from $output's extension (so this also converts). opts: mode =>
+## "sheets" (default, keep each source sheet) | "rows" (stack all rows into one
+## sheet — use for csv/tsv targets), format => override. Returns { ok, path,
+## sources, sheets }.
+fn Office::sheet_merge ($inputs, $output, %opts) {
+    Office::_decode("sheet_merge",
+        office__sheet_merge(to_json({ inputs => $inputs, output => $output, mode => $opts{mode}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph
