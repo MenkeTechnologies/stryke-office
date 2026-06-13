@@ -837,6 +837,92 @@ fn pdf_merge_split_rotate_info() {
 }
 
 #[test]
+fn pdf_encrypt_decrypt_compress() {
+    // a 2-page source PDF
+    let src = tmp("sec.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Secret 1"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Secret 2"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // RC4 encrypt with both passwords set so neither is empty
+    let enc = tmp("sec.enc.pdf");
+    let e = call(
+        office__pdf_encrypt,
+        &format!(
+            r#"{{"path":"{src}","output":"{enc}","owner_password":"s3cret","user_password":"s3cret","permissions":["print"]}}"#
+        ),
+    );
+    assert_eq!(e["ok"], true, "encrypt: {e}");
+    assert_eq!(e["method"], "rc4-128", "rc4 method: {e}");
+
+    // wrong password must fail
+    let dec = tmp("sec.dec.pdf");
+    let bad = call(
+        office__pdf_decrypt,
+        &format!(r#"{{"path":"{enc}","output":"{dec}","password":"nope"}}"#),
+    );
+    assert!(
+        !err_of(&bad).is_empty(),
+        "wrong password should error: {bad}"
+    );
+
+    // correct password decrypts to a plaintext, re-readable PDF
+    let good = call(
+        office__pdf_decrypt,
+        &format!(r#"{{"path":"{enc}","output":"{dec}","password":"s3cret"}}"#),
+    );
+    assert_eq!(good["ok"], true, "decrypt: {good}");
+    let id = call(office__pdf_info, &format!(r#"{{"path":"{dec}"}}"#));
+    assert_eq!(id["pages"], 2, "decrypted keeps 2 pages: {id}");
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{dec}"}}"#));
+    assert!(rd["text"].is_string(), "decrypted pdf re-reads: {rd}");
+
+    // AES-128 path
+    let aes = tmp("sec.aes.pdf");
+    let ea = call(
+        office__pdf_encrypt,
+        &format!(
+            r#"{{"path":"{src}","output":"{aes}","owner_password":"s3cret","user_password":"s3cret","aes":true}}"#
+        ),
+    );
+    assert_eq!(ea["method"], "aes-128", "aes method: {ea}");
+    let aesdec = tmp("sec.aes.dec.pdf");
+    let da = call(
+        office__pdf_decrypt,
+        &format!(r#"{{"path":"{aes}","output":"{aesdec}","password":"s3cret"}}"#),
+    );
+    assert_eq!(da["ok"], true, "aes decrypt: {da}");
+    let ida = call(office__pdf_info, &format!(r#"{{"path":"{aesdec}"}}"#));
+    assert_eq!(ida["pages"], 2, "aes decrypted keeps 2 pages: {ida}");
+
+    // compress: output still loads with the same page count
+    let comp = tmp("sec.comp.pdf");
+    let c = call(
+        office__pdf_compress,
+        &format!(r#"{{"path":"{src}","output":"{comp}"}}"#),
+    );
+    assert_eq!(c["ok"], true, "compress: {c}");
+    assert!(
+        c["after"].as_u64().unwrap_or(0) > 0,
+        "compressed has bytes: {c}"
+    );
+    let ic = call(office__pdf_info, &format!(r#"{{"path":"{comp}"}}"#));
+    assert_eq!(ic["pages"], 2, "compressed keeps 2 pages: {ic}");
+
+    for f in [&src, &enc, &dec, &aes, &aesdec, &comp] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_watermark_and_page_numbers() {
     // 3-page source
     let src = tmp("wm_src.pdf");

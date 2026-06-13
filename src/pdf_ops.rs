@@ -316,3 +316,154 @@ fn op_pdf_info(opts: Value) -> Result<Value> {
     }
     Ok(out)
 }
+
+// ── security: encrypt / decrypt ───────────────────────────────────────────────
+
+/// Translate permission-name strings into lopdf `Permissions` bits. A missing
+/// `permissions` key grants everything; an unknown name is ignored. Names:
+/// print, modify, copy, annotate, fill, accessibility, assemble, print_hq.
+fn pdf_permissions(opts: &Value) -> lopdf::Permissions {
+    use lopdf::Permissions;
+    let Some(names) = opts.get("permissions").and_then(Value::as_array) else {
+        return Permissions::all();
+    };
+    let mut perms = Permissions::empty();
+    for name in names.iter().filter_map(Value::as_str) {
+        perms |= match name {
+            "print" => Permissions::PRINTABLE,
+            "modify" => Permissions::MODIFIABLE,
+            "copy" => Permissions::COPYABLE,
+            "annotate" => Permissions::ANNOTABLE,
+            "fill" => Permissions::FILLABLE,
+            "accessibility" => Permissions::COPYABLE_FOR_ACCESSIBILITY,
+            "assemble" => Permissions::ASSEMBLABLE,
+            "print_hq" => Permissions::PRINTABLE_IN_HIGH_QUALITY,
+            _ => continue,
+        };
+    }
+    perms
+}
+
+/// Ensure the trailer carries a file `/ID`. The standard security handler
+/// derives its file-encryption key from the ID, so an ID-less PDF (e.g. one of
+/// our from-scratch builder outputs) can't be encrypted until one exists. The
+/// bytes are a stable hash of `seed` — the PDF spec only asks the ID be a
+/// per-file identifier, not cryptographically random; the password supplies the
+/// security.
+fn ensure_pdf_id(doc: &mut Document, seed: &[u8]) {
+    use lopdf::StringFormat;
+    use std::hash::{Hash, Hasher};
+    if doc.trailer.get(b"ID").is_ok() {
+        return;
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    seed.hash(&mut h);
+    let lo = h.finish();
+    (seed, lo).hash(&mut h);
+    let hi = h.finish();
+    let mut id = Vec::with_capacity(16);
+    id.extend_from_slice(&lo.to_le_bytes());
+    id.extend_from_slice(&hi.to_le_bytes());
+    let s = Object::String(id, StringFormat::Hexadecimal);
+    doc.trailer.set("ID", Object::Array(vec![s.clone(), s]));
+}
+
+/// Password-protect an existing PDF (standard security handler). opts:
+/// path => input, output => path, owner_password (""), user_password (""),
+/// aes => bool (AES-128 / V4; default RC4 / V2), key_length (V2 bits, default
+/// 128), permissions => [names] (default: all granted). Ports the version
+/// selection from lopdf's `examples/encrypt.rs`.
+fn op_pdf_encrypt(opts: Value) -> Result<Value> {
+    use lopdf::encryption::crypt_filters::{Aes128CryptFilter, CryptFilter};
+    use lopdf::{EncryptionState, EncryptionVersion};
+    use std::sync::Arc;
+
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let owner = opts
+        .get("owner_password")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let user = opts
+        .get("user_password")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let aes = opts.get("aes").and_then(Value::as_bool).unwrap_or(false);
+    let key_length = opts
+        .get("key_length")
+        .and_then(Value::as_u64)
+        .unwrap_or(128) as usize;
+    let permissions = pdf_permissions(&opts);
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    if doc.is_encrypted() {
+        return Err(anyhow!("already encrypted"));
+    }
+    ensure_pdf_id(&mut doc, path.as_bytes());
+    let state = if aes {
+        let cf: Arc<dyn CryptFilter> = Arc::new(Aes128CryptFilter);
+        EncryptionState::try_from(EncryptionVersion::V4 {
+            document: &doc,
+            encrypt_metadata: true,
+            crypt_filters: BTreeMap::from([(b"StdCF".to_vec(), cf)]),
+            stream_filter: b"StdCF".to_vec(),
+            string_filter: b"StdCF".to_vec(),
+            owner_password: owner,
+            user_password: user,
+            permissions,
+        })
+        .map_err(|e| anyhow!("build encryption state: {e}"))?
+    } else {
+        EncryptionState::try_from(EncryptionVersion::V2 {
+            document: &doc,
+            owner_password: owner,
+            user_password: user,
+            key_length,
+            permissions,
+        })
+        .map_err(|e| anyhow!("build encryption state: {e}"))?
+    };
+    doc.encrypt(&state).map_err(|e| anyhow!("encrypt: {e}"))?;
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    let method = if aes {
+        "aes-128".to_string()
+    } else {
+        format!("rc4-{key_length}")
+    };
+    Ok(json!({"ok": true, "path": out, "method": method}))
+}
+
+/// Strip password protection from a PDF. opts: path => input, output => path,
+/// password (owner or user; default ""). `load_with_password` authenticates,
+/// decrypts every string/stream, and drops the trailer /Encrypt entry, so the
+/// saved file is plaintext.
+fn op_pdf_decrypt(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let password = opts.get("password").and_then(Value::as_str).unwrap_or("");
+    let mut doc =
+        Document::load_with_password(path, password).map_err(|e| anyhow!("load {path}: {e}"))?;
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({"ok": true, "path": out}))
+}
+
+/// Shrink a PDF: drop unreferenced objects, then deflate content into object
+/// streams. opts: path => input, output => path. Returns byte sizes before /
+/// after and the delta.
+fn op_pdf_compress(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let before = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    doc.prune_objects();
+    doc.compress();
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    let after = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+    Ok(json!({
+        "ok": true,
+        "path": out,
+        "before": before,
+        "after": after,
+        "saved": before.saturating_sub(after),
+    }))
+}

@@ -154,6 +154,9 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_info($path)` | `{pages, version, title?, author?, …}` | page count + document metadata |
 | `Office::pdf_watermark($path, $text, $output, %opts)` | `{stamped}` | rotated text watermark on every page; `size`/`color`/`angle` |
 | `Office::pdf_page_numbers($path, $output, %opts)` | `{pages}` | footer page numbers; `format` (`{n}`/`{total}`), `size`/`color`/`y` |
+| `Office::pdf_encrypt($path, $output, %opts)` | `{method}` | password-protect; `owner_password`/`user_password`, `aes` (AES-128 vs RC4), `key_length`, `permissions` |
+| `Office::pdf_decrypt($path, $output, %opts)` | `{path}` | strip protection given `password` (owner or user) |
+| `Office::pdf_compress($path, $output)` | `{before, after, saved}` | prune unused objects + deflate streams; reports byte savings |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |
@@ -175,6 +178,28 @@ Text/choice fields take a string; checkboxes/radios take a boolean (mapped to
 the widget's on-state) or an explicit state name. Filling flips the AcroForm
 `/NeedAppearances` flag so Acrobat and other conformant viewers regenerate the
 visible field content.
+
+#### PDF security
+
+```perl
+# password-protect with AES-128, allow printing only
+Office::pdf_encrypt("report.pdf", "report-locked.pdf",
+    owner_password => "admin",
+    user_password  => "view",
+    aes            => \1,
+    permissions    => ["print"]);
+
+# later: strip protection back off (owner or user password)
+Office::pdf_decrypt("report-locked.pdf", "report-open.pdf", password => "admin");
+```
+
+The standard security handler is used: `aes => 1` selects AES-128 (V4),
+otherwise RC4 at `key_length` bits (V2, default 128). `permissions` lists the
+operations to *grant* (`print`, `modify`, `copy`, `annotate`, `fill`,
+`accessibility`, `assemble`, `print_hq`); omit it to grant everything. A file
+`/ID` is synthesized when absent so freshly built PDFs can be encrypted.
+`pdf_compress` is the unrelated size pass — it prunes unreferenced objects and
+deflates content into object streams, returning the byte delta.
 
 #### PDF outline (bookmarks)
 
@@ -577,7 +602,7 @@ the cdylib:
 | docx / odt / pptx / odp read | native `zip` + `quick-xml` |
 | pptx write | native `zip` + hand-built OOXML |
 | pdf read + write | `lo_core` (self-contained, no font files) |
-| pdf merge / split / rotate / info | `lopdf` (pure-Rust core, `default-features = false`) |
+| pdf merge / split / rotate / info / encrypt / decrypt / compress | `lopdf` (pure-Rust core, `default-features = false`) |
 | image read + write (all formats) | `image` |
 | image drawing (shapes) | `imageproc` |
 | image text drawing | `ab_glyph` + vendored `assets/DejaVuSans.ttf` |
@@ -617,7 +642,7 @@ stryke-office/
   src/extract.rs         # embedded media extraction (-> image handles)
   src/textops.rs         # template text search/replace (run-coalescing)
   src/pdf_build.rs       # multi-element paginated PDF document builder
-  src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
+  src/pdf_ops.rs         # PDF merge/split/rotate/info/encrypt/decrypt/compress (lopdf)
   src/pdf_form.rs        # PDF AcroForm field list + fill (lopdf)
   src/pdf_outline.rs     # PDF outline/bookmarks read + write (lopdf)
   stryke.toml            # package manifest + [ffi] table

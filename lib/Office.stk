@@ -168,6 +168,30 @@ fn Office::pdf_page_numbers ($path, $output, %opts) {
         office__pdf_page_numbers(to_json({ path => $path, output => $output, format => $opts{format}, size => $opts{size}, color => $opts{color}, y => $opts{y} })))
 }
 
+## Password-protect a PDF (standard security handler). opts: owner_password
+## (""), user_password (""), aes => 1 (AES-128; default RC4-128),
+## key_length (RC4 bits, default 128), permissions => [print, modify, copy,
+## annotate, fill, accessibility, assemble, print_hq] (default: all granted).
+## Returns { ok, path, method }.
+fn Office::pdf_encrypt ($path, $output, %opts) {
+    Office::_decode("pdf_encrypt",
+        office__pdf_encrypt(to_json({ path => $path, output => $output, owner_password => $opts{owner_password}, user_password => $opts{user_password}, aes => $opts{aes}, key_length => $opts{key_length}, permissions => $opts{permissions} })))
+}
+
+## Remove password protection from a PDF. opts: password (owner or user; "").
+## Returns { ok, path }.
+fn Office::pdf_decrypt ($path, $output, %opts) {
+    Office::_decode("pdf_decrypt",
+        office__pdf_decrypt(to_json({ path => $path, output => $output, password => $opts{password} })))
+}
+
+## Shrink a PDF (prune unreferenced objects + deflate content into object
+## streams). Returns { ok, path, before, after, saved } byte counts.
+fn Office::pdf_compress ($path, $output) {
+    Office::_decode("pdf_compress",
+        office__pdf_compress(to_json({ path => $path, output => $output })))
+}
+
 ## List the interactive AcroForm fields in a PDF. Returns { fields => [{ name,
 ## type (text/button/choice/signature), value, options? }], count }.
 fn Office::pdf_form_fields ($path) {
