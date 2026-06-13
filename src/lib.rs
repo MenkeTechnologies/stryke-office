@@ -1866,6 +1866,111 @@ fn op_sheet_pivot(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": n_rows, "cols": n_cols }))
 }
 
+/// Join two spreadsheets on a key column (SQL JOIN). opts: left, right (paths),
+/// output, on => shared key field name (or left_on + right_on), how =>
+/// "inner" (default) | "left", left_sheet / right_sheet => name/index, format.
+/// Output columns are the left fields then the right fields (the right key is
+/// dropped; colliding right names get a `_right` suffix). Returns
+/// `{ ok, path, rows, matched }`.
+fn op_sheet_join(opts: Value) -> Result<Value> {
+    use std::collections::{HashMap, HashSet};
+    let left = req_str(&opts, "left")?;
+    let right = req_str(&opts, "right")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let how = opts.get("how").and_then(Value::as_str).unwrap_or("inner");
+    let on = opts.get("on").and_then(Value::as_str);
+    let left_on = opts
+        .get("left_on")
+        .and_then(Value::as_str)
+        .or(on)
+        .ok_or_else(|| anyhow!("missing on (or left_on/right_on)"))?;
+    let right_on = opts
+        .get("right_on")
+        .and_then(Value::as_str)
+        .or(on)
+        .unwrap_or(left_on);
+
+    let lr = op_sheet_records(json!({ "path": left, "sheet": opts.get("left_sheet") }))?;
+    let rr = op_sheet_records(json!({ "path": right, "sheet": opts.get("right_sheet") }))?;
+    let str_vec = |v: &Value| -> Vec<String> {
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|f| f.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let lfields = str_vec(&lr["fields"]);
+    let rfields = str_vec(&rr["fields"]);
+    let empty: Vec<Value> = Vec::new();
+    let lrecs = lr["records"].as_array().unwrap_or(&empty);
+    let rrecs = rr["records"].as_array().unwrap_or(&empty);
+
+    // Index right records by key value.
+    let mut idx: HashMap<String, Vec<&Value>> = HashMap::new();
+    for r in rrecs {
+        let k = cell_to_string(r.get(right_on).unwrap_or(&Value::Null));
+        idx.entry(k).or_default().push(r);
+    }
+    // Right output columns (drop the key; rename collisions).
+    let lset: HashSet<&str> = lfields.iter().map(String::as_str).collect();
+    let right_extra: Vec<(String, String)> = rfields
+        .iter()
+        .filter(|f| f.as_str() != right_on)
+        .map(|f| {
+            let out = if lset.contains(f.as_str()) {
+                format!("{f}_right")
+            } else {
+                f.clone()
+            };
+            (out, f.clone())
+        })
+        .collect();
+
+    let mut header: Vec<Value> = lfields.iter().map(|f| json!(f)).collect();
+    header.extend(right_extra.iter().map(|(o, _)| json!(o)));
+    let mut out_rows = vec![Value::Array(header)];
+    let mut matched = 0u64;
+    let left_vals = |lrec: &Value| -> Vec<Value> {
+        lfields
+            .iter()
+            .map(|f| lrec.get(f).cloned().unwrap_or(Value::Null))
+            .collect()
+    };
+    for lrec in lrecs {
+        let k = cell_to_string(lrec.get(left_on).unwrap_or(&Value::Null));
+        match idx.get(&k) {
+            Some(rs) => {
+                for r in rs {
+                    matched += 1;
+                    let mut row = left_vals(lrec);
+                    row.extend(
+                        right_extra
+                            .iter()
+                            .map(|(_, src)| r.get(src).cloned().unwrap_or(Value::Null)),
+                    );
+                    out_rows.push(Value::Array(row));
+                }
+            }
+            None if how == "left" => {
+                let mut row = left_vals(lrec);
+                row.extend(right_extra.iter().map(|_| Value::Null));
+                out_rows.push(Value::Array(row));
+            }
+            None => {}
+        }
+    }
+
+    let n = out_rows.len() - 1;
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Join", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n, "matched": matched }))
+}
+
 /// Project/reorder a sheet's columns. opts: path, output, columns => array of
 /// column names or 0-based indices (required, in output order), sheet,
 /// header => bool (names need true; default true), format. Every row (header
@@ -2898,6 +3003,7 @@ export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_pivot, op_sheet_pivot);
+export!(office__sheet_join, op_sheet_join);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
