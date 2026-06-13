@@ -320,6 +320,55 @@ fn image_draw_text_with_vendored_font() {
 }
 
 #[test]
+fn xlsx_rich_cells_and_formula_round_trip() {
+    let path = tmp("rich.xlsx");
+    // Rich cell objects: styled text, a number with format, and a formula.
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r##"{{"path":"{path}","sheets":[{{"name":"R","rows":[
+                [{{"v":"Header","bold":true,"color":"#FF0000","bg":"#FFFF00","align":"center"}}],
+                [{{"v":42,"num_format":"0.00","italic":true}}],
+                [{{"f":"=1+2"}}]
+            ]}}]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "rich xlsx write failed: {w}");
+    // Values must survive (formatting is write-only; calamine returns values).
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["sheets"][0]["rows"][0][0], "Header", "styled text value preserved");
+    assert_eq!(r["sheets"][0]["rows"][1][0], 42.0, "formatted number preserved");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn docx_rich_runs_and_align_round_trip() {
+    let path = tmp("rich.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r##"{{"path":"{path}","blocks":[
+                {{"kind":"para","align":"center","runs":[
+                    {{"text":"Bold","bold":true,"color":"#0000FF","size":18}},
+                    {{"text":" and italic","italic":true}}
+                ]}}
+            ]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "rich docx write failed: {w}");
+    let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
+    let joined = r["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("");
+    assert!(joined.contains("Bold and italic"), "rich runs concatenate: {joined}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn image_unknown_handle_errors() {
     let v = call(office__img_save, r#"{"handle":987654,"path":"/tmp/x.png"}"#);
     assert!(

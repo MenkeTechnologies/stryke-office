@@ -2,7 +2,7 @@
 name = "stryke-office"
 version = "0.1.0"
 edition = "2021"
-description = "Office + image document I/O for stryke — Excel/Calc, Word/Writer, PowerPoint/Impress, PDF (OOXML + ODF) + PIL-style raster images, all native, no external binaries"
+description = "Office + image I/O for stryke: Excel/Word/PowerPoint, OpenDocument, PDF, PIL-style images — all native, no external binaries"
 authors = ["MenkeTechnologies"]
 license = "MIT"
 repository = "https://github.com/MenkeTechnologies/stryke-office"

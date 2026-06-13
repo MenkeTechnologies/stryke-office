@@ -130,6 +130,33 @@ data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
 
+### Rich formatting
+
+Spreadsheet cells and document runs accept styling, not just scalars:
+
+```stryke
+# xlsx: a cell can be a scalar OR a rich object
+Office::sheet_write("r.xlsx", [{ name => "S", rows => [
+    [{ v => "Header", bold => 1, color => "#FF0000", bg => "#FFFF00", align => "center" }],
+    [{ v => 42, num_format => "0.00", italic => 1 }],
+    [{ f => "=A2*2" }],                       # formula cell
+] }])
+# cell keys: v|value, f|formula, bold, italic, underline, font, size,
+#            color, bg, align (left/center/right), num_format, border
+
+# docx: a block can carry styled runs + alignment
+Office::doc_write("r.docx", [
+    { kind => "para", align => "center", runs => [
+        { text => "Bold ", bold => 1, color => "#0000FF", size => 18 },
+        { text => "and italic", italic => 1 },
+    ] },
+])
+# run keys: text, bold, italic, underline, strike, size (pt), color, font, highlight
+```
+
+ODF (ods/odt) and PDF are written unstyled — the `lo_odf`/`lo_core` serializers
+don't expose per-run styling (a documented crate limitation, not faked).
+
 ### Images (handle-based, like a PIL `Image`)
 
 | Function | Returns | Notes |

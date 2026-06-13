@@ -316,6 +316,67 @@ fn json_sheets(opts: &Value) -> Result<Vec<(String, Vec<Vec<Value>>)>> {
     Ok(out)
 }
 
+fn xlsx_color(s: &str) -> rust_xlsxwriter::Color {
+    let n = u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0);
+    rust_xlsxwriter::Color::RGB(n)
+}
+
+/// Build a cell Format from a rich-cell object's styling keys, or None if it
+/// carries no formatting. Keys: bold, italic, underline, font, size, color,
+/// bg, align ("left"/"center"/"right"), num_format, border.
+fn xlsx_format(o: &serde_json::Map<String, Value>) -> Option<rust_xlsxwriter::Format> {
+    use rust_xlsxwriter::{Format, FormatAlign, FormatBorder};
+    let mut f = Format::new();
+    let mut used = false;
+    if o.get("bold").and_then(Value::as_bool) == Some(true) {
+        f = f.set_bold();
+        used = true;
+    }
+    if o.get("italic").and_then(Value::as_bool) == Some(true) {
+        f = f.set_italic();
+        used = true;
+    }
+    if o.get("underline").and_then(Value::as_bool) == Some(true) {
+        f = f.set_underline(rust_xlsxwriter::FormatUnderline::Single);
+        used = true;
+    }
+    if let Some(name) = o.get("font").and_then(Value::as_str) {
+        f = f.set_font_name(name);
+        used = true;
+    }
+    if let Some(sz) = o.get("size").and_then(Value::as_f64) {
+        f = f.set_font_size(sz);
+        used = true;
+    }
+    if let Some(c) = o.get("color").and_then(Value::as_str) {
+        f = f.set_font_color(xlsx_color(c));
+        used = true;
+    }
+    if let Some(c) = o.get("bg").and_then(Value::as_str) {
+        f = f.set_background_color(xlsx_color(c));
+        used = true;
+    }
+    if let Some(a) = o.get("align").and_then(Value::as_str) {
+        let align = match a {
+            "center" => FormatAlign::Center,
+            "right" => FormatAlign::Right,
+            "left" => FormatAlign::Left,
+            _ => FormatAlign::General,
+        };
+        f = f.set_align(align);
+        used = true;
+    }
+    if let Some(nf) = o.get("num_format").and_then(Value::as_str) {
+        f = f.set_num_format(nf);
+        used = true;
+    }
+    if o.get("border").and_then(Value::as_bool) == Some(true) {
+        f = f.set_border(FormatBorder::Thin);
+        used = true;
+    }
+    used.then_some(f)
+}
+
 fn write_xlsx(path: &str, sheets: &[(String, Vec<Vec<Value>>)]) -> Result<()> {
     use rust_xlsxwriter::Workbook;
     let mut wb = Workbook::new();
@@ -325,22 +386,70 @@ fn write_xlsx(path: &str, sheets: &[(String, Vec<Vec<Value>>)]) -> Result<()> {
         for (r, row) in rows.iter().enumerate() {
             for (c, cell) in row.iter().enumerate() {
                 let (r, c) = (r as u32, c as u16);
-                match cell {
-                    Value::Null => {}
-                    Value::Bool(b) => {
-                        ws.write_boolean(r, c, *b)?;
+                write_xlsx_cell(ws, r, c, cell)?;
+            }
+        }
+    }
+    wb.save(path)?;
+    Ok(())
+}
+
+/// Write one cell. A scalar writes plainly; a JSON object is a rich cell —
+/// `{v|value, f|formula, + styling keys}` — written with a Format.
+fn write_xlsx_cell(
+    ws: &mut rust_xlsxwriter::Worksheet,
+    r: u32,
+    c: u16,
+    cell: &Value,
+) -> Result<()> {
+    match cell {
+        Value::Null => {}
+        Value::Bool(b) => {
+            ws.write_boolean(r, c, *b)?;
+        }
+        Value::Number(n) => {
+            ws.write_number(r, c, n.as_f64().unwrap_or(0.0))?;
+        }
+        Value::Object(o) => {
+            let fmt = xlsx_format(o);
+            if let Some(formula) = o.get("f").or_else(|| o.get("formula")).and_then(Value::as_str) {
+                match &fmt {
+                    Some(f) => {
+                        ws.write_formula_with_format(r, c, formula, f)?;
                     }
-                    Value::Number(n) => {
+                    None => {
+                        ws.write_formula(r, c, formula)?;
+                    }
+                }
+            } else {
+                let v = o.get("v").or_else(|| o.get("value")).unwrap_or(&Value::Null);
+                match (v, &fmt) {
+                    (Value::Number(n), Some(f)) => {
+                        ws.write_number_with_format(r, c, n.as_f64().unwrap_or(0.0), f)?;
+                    }
+                    (Value::Number(n), None) => {
                         ws.write_number(r, c, n.as_f64().unwrap_or(0.0))?;
                     }
-                    other => {
+                    (Value::Bool(b), Some(f)) => {
+                        ws.write_boolean_with_format(r, c, *b, f)?;
+                    }
+                    (Value::Bool(b), None) => {
+                        ws.write_boolean(r, c, *b)?;
+                    }
+                    (Value::Null, _) => {}
+                    (other, Some(f)) => {
+                        ws.write_string_with_format(r, c, cell_to_string(other), f)?;
+                    }
+                    (other, None) => {
                         ws.write_string(r, c, cell_to_string(other))?;
                     }
                 }
             }
         }
+        other => {
+            ws.write_string(r, c, cell_to_string(other))?;
+        }
     }
-    wb.save(path)?;
     Ok(())
 }
 
@@ -396,38 +505,90 @@ fn op_doc_read(opts: Value) -> Result<Value> {
     Ok(json!({ "paragraphs": paragraphs }))
 }
 
-/// A doc block: {kind: "para"|"heading", level?: u8, text: string}.
-fn json_blocks(opts: &Value) -> Result<Vec<(String, u8, String)>> {
-    let arr = opts
+fn blocks_of(opts: &Value) -> Result<Vec<Value>> {
+    Ok(opts
         .get("blocks")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("missing blocks (expected array)"))?;
-    Ok(arr
-        .iter()
-        .map(|b| {
-            let kind = b
-                .get("kind")
-                .and_then(Value::as_str)
-                .unwrap_or("para")
-                .to_string();
-            let level = b.get("level").and_then(Value::as_u64).unwrap_or(1) as u8;
-            let text = b
-                .get("text")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            (kind, level, text)
-        })
-        .collect())
+        .ok_or_else(|| anyhow!("missing blocks (expected array)"))?
+        .clone())
 }
 
-fn write_docx(path: &str, blocks: &[(String, u8, String)]) -> Result<()> {
-    use docx_rs::{Docx, Paragraph, Run};
+/// Plain text of a block (concatenating any styled runs) — for the ODF path,
+/// whose serializer is unstyled.
+fn block_plain_text(b: &Value) -> String {
+    if let Some(runs) = b.get("runs").and_then(Value::as_array) {
+        runs.iter()
+            .filter_map(|r| r.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join("")
+    } else {
+        b.get("text").and_then(Value::as_str).unwrap_or("").to_string()
+    }
+}
+
+/// Build a formatted docx Run from `{text, bold, italic, underline, strike,
+/// size (pt), color, font, highlight}`.
+fn docx_run(j: &Value) -> docx_rs::Run {
+    use docx_rs::{Run, RunFonts};
+    let mut run = Run::new().add_text(j.get("text").and_then(Value::as_str).unwrap_or(""));
+    if j.get("bold").and_then(Value::as_bool) == Some(true) {
+        run = run.bold();
+    }
+    if j.get("italic").and_then(Value::as_bool) == Some(true) {
+        run = run.italic();
+    }
+    if j.get("strike").and_then(Value::as_bool) == Some(true) {
+        run = run.strike();
+    }
+    if j.get("underline").and_then(Value::as_bool) == Some(true) {
+        run = run.underline("single");
+    }
+    if let Some(sz) = j.get("size").and_then(Value::as_f64) {
+        run = run.size((sz * 2.0) as usize); // docx sz is half-points
+    }
+    if let Some(c) = j.get("color").and_then(Value::as_str) {
+        run = run.color(c.trim_start_matches('#'));
+    }
+    if let Some(h) = j.get("highlight").and_then(Value::as_str) {
+        run = run.highlight(h);
+    }
+    if let Some(f) = j.get("font").and_then(Value::as_str) {
+        run = run.fonts(RunFonts::new().ascii(f));
+    }
+    run
+}
+
+fn docx_align(a: &str) -> docx_rs::AlignmentType {
+    use docx_rs::AlignmentType;
+    match a {
+        "center" => AlignmentType::Center,
+        "right" => AlignmentType::Right,
+        "both" | "justify" | "justified" => AlignmentType::Both,
+        _ => AlignmentType::Left,
+    }
+}
+
+/// Write docx with rich runs + paragraph alignment. A block is
+/// `{kind: "para"|"heading", level?, align?, text? | runs?: [{text, styling}]}`.
+fn write_docx(path: &str, blocks: &[Value]) -> Result<()> {
+    use docx_rs::{Docx, Paragraph};
     let mut docx = Docx::new();
-    for (kind, level, text) in blocks {
-        let mut p = Paragraph::new().add_run(Run::new().add_text(text));
+    for b in blocks {
+        let kind = b.get("kind").and_then(Value::as_str).unwrap_or("para");
+        let mut p = Paragraph::new();
+        if let Some(runs) = b.get("runs").and_then(Value::as_array) {
+            for rj in runs {
+                p = p.add_run(docx_run(rj));
+            }
+        } else {
+            p = p.add_run(docx_run(b));
+        }
         if kind == "heading" {
-            p = p.style(&format!("Heading{}", (*level).clamp(1, 9)));
+            let level = b.get("level").and_then(Value::as_u64).unwrap_or(1).clamp(1, 9);
+            p = p.style(&format!("Heading{level}"));
+        }
+        if let Some(a) = b.get("align").and_then(Value::as_str) {
+            p = p.align(docx_align(a));
         }
         docx = docx.add_paragraph(p);
     }
@@ -436,14 +597,18 @@ fn write_docx(path: &str, blocks: &[(String, u8, String)]) -> Result<()> {
     Ok(())
 }
 
-fn write_odt(path: &str, blocks: &[(String, u8, String)]) -> Result<()> {
+/// Write odt. lo_odf's serializer is unstyled, so rich runs are flattened to
+/// plain text (per-run formatting is a documented ODF-write limitation).
+fn write_odt(path: &str, blocks: &[Value]) -> Result<()> {
     use lo_core::TextDocument;
     let mut doc = TextDocument::new("stryke-office");
-    for (kind, level, text) in blocks {
-        if kind == "heading" {
-            doc.push_heading(*level, text.clone());
+    for b in blocks {
+        let text = block_plain_text(b);
+        if b.get("kind").and_then(Value::as_str) == Some("heading") {
+            let level = b.get("level").and_then(Value::as_u64).unwrap_or(1) as u8;
+            doc.push_heading(level, text);
         } else {
-            doc.push_paragraph(text.clone());
+            doc.push_paragraph(text);
         }
     }
     lo_odf::save_text_document(path, &doc)?;
@@ -452,7 +617,7 @@ fn write_odt(path: &str, blocks: &[(String, u8, String)]) -> Result<()> {
 
 fn op_doc_write(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?.to_string();
-    let blocks = json_blocks(&opts)?;
+    let blocks = blocks_of(&opts)?;
     match target_ext(&opts, &path).as_str() {
         "docx" => write_docx(&path, &blocks)?,
         "odt" => write_odt(&path, &blocks)?,
