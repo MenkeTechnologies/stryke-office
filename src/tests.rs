@@ -146,6 +146,58 @@ fn sheet_stats_per_column_aggregates() {
 }
 
 #[test]
+fn sheet_find_locates_cells() {
+    let path = tmp("find.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"People","rows":[
+                ["name","city"],
+                ["alice","NYC"],
+                ["bob","LA"],
+                ["Alice","SF"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // case-insensitive substring: both alice/Alice
+    let ci = call(
+        office__sheet_find,
+        &format!(r#"{{"path":"{path}","query":"alice","ignore_case":true}}"#),
+    );
+    assert_eq!(ci["count"], 2, "ci matches both: {ci}");
+    let refs: Vec<&str> = ci["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["ref"].as_str().unwrap())
+        .collect();
+    assert!(
+        refs.contains(&"A2") && refs.contains(&"A4"),
+        "A1 refs: {ci}"
+    );
+
+    // case-sensitive: only "Alice"
+    let cs = call(
+        office__sheet_find,
+        &format!(r#"{{"path":"{path}","query":"Alice"}}"#),
+    );
+    assert_eq!(cs["count"], 1, "cs one match: {cs}");
+    assert_eq!(cs["matches"][0]["ref"], "A4", "cs ref: {cs}");
+
+    // whole-cell match
+    let wh = call(
+        office__sheet_find,
+        &format!(r#"{{"path":"{path}","query":"LA","whole":true}}"#),
+    );
+    assert_eq!(wh["count"], 1, "whole match: {wh}");
+    assert_eq!(wh["matches"][0]["ref"], "B3", "whole ref: {wh}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn ods_write_then_read_round_trips() {
     let path = tmp("rt.ods");
     let w = call(
