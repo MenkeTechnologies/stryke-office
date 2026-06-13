@@ -131,6 +131,14 @@ fn Office::sheet_aggregate ($path, $group_by, $output, %opts) {
         office__sheet_aggregate(to_json({ path => $path, group_by => $group_by, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Project/reorder columns. $columns is an arrayref of column names or 0-based
+## indices in the desired output order. opts: sheet, header => 0 if first row is
+## data, format => override. Returns { ok, path, columns }.
+fn Office::sheet_select ($path, $columns, $output, %opts) {
+    Office::_decode("sheet_select",
+        office__sheet_select(to_json({ path => $path, columns => $columns, output => $output, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph
