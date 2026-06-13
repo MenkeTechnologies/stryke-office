@@ -376,6 +376,22 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_crop_circle($h)` / `img_round_corners($h, %opts)` | circular / rounded mask |
 | `img_drop_shadow($h, %opts)` | soft shadow; `dx`/`dy`/`blur`/`color`/`opacity` |
 
+#### Color science & distortions
+
+| Function | Notes |
+|---|---|
+| `img_levels($h, %opts)` | per-channel `in_black`/`in_white`/`gamma`/`out_black`/`out_white` |
+| `img_curves($h, $points)` | tone curve from `[[x,y],…]` control points |
+| `img_hsl($h, %opts)` | `hue` shift / `saturation` / `lightness` multipliers |
+| `img_temperature($h, $amount)` | warm/cool white balance (−100..100) |
+| `img_channel_mixer($h, $matrix)` | 3×3 RGB mix matrix |
+| `img_swirl($h, %opts)` | swirl; `strength`/`radius` |
+| `img_wave($h, %opts)` | sinusoidal ripple; `amplitude`/`wavelength`/`axis` |
+| `img_fisheye($h, %opts)` | barrel distortion; `strength` |
+| `img_kaleidoscope($h, %opts)` | mirror wedges; `segments` |
+| `img_spritesheet($h, %opts)` | split into `cols`×`rows` handles |
+| `img_seam_carve($h, $width)` | content-aware width reduction |
+
 ## [0x05] No external binaries
 
 Every format is handled by a vendored Rust crate, statically linked into

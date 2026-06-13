@@ -1841,6 +1841,309 @@ fn op_img_round_corners(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true}))
 }
 
+// ── color science + distortions ──────────────────────────────────────────────
+
+/// RGB (0..255) → HSL (h in 0..360, s/l in 0..1).
+fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
+    let (rf, gf, bf) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+    let max = rf.max(gf).max(bf);
+    let min = rf.min(gf).min(bf);
+    let l = (max + min) / 2.0;
+    if (max - min).abs() < 1e-9 {
+        return (0.0, 0.0, l);
+    }
+    let d = max - min;
+    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let h = if max == rf {
+        (gf - bf) / d + if gf < bf { 6.0 } else { 0.0 }
+    } else if max == gf {
+        (bf - rf) / d + 2.0
+    } else {
+        (rf - gf) / d + 4.0
+    };
+    (h * 60.0, s, l)
+}
+
+/// HSL → RGB (0..255).
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> [u8; 3] {
+    let s = s.clamp(0.0, 1.0);
+    let l = l.clamp(0.0, 1.0);
+    if s < 1e-9 {
+        let v = (l * 255.0).round() as u8;
+        return [v, v, v];
+    }
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let hk = (h / 360.0).rem_euclid(1.0);
+    let hue = |mut t: f64| {
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        let v = if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        };
+        (v * 255.0).round() as u8
+    };
+    [hue(hk + 1.0 / 3.0), hue(hk), hue(hk - 1.0 / 3.0)]
+}
+
+/// Per-channel levels: input black/white clip, gamma, output black/white.
+fn op_img_levels(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let ib = opts.get("in_black").and_then(Value::as_f64).unwrap_or(0.0);
+    let iw = opts.get("in_white").and_then(Value::as_f64).unwrap_or(255.0);
+    let gamma = opts.get("gamma").and_then(Value::as_f64).unwrap_or(1.0).max(0.01);
+    let ob = opts.get("out_black").and_then(Value::as_f64).unwrap_or(0.0);
+    let ow = opts.get("out_white").and_then(Value::as_f64).unwrap_or(255.0);
+    let span = (iw - ib).abs().max(1e-6);
+    let lut: Vec<u8> = (0..256)
+        .map(|i| {
+            let t = ((i as f64 - ib) / span).clamp(0.0, 1.0).powf(1.0 / gamma);
+            (ob + (ow - ob) * t).round().clamp(0.0, 255.0) as u8
+        })
+        .collect();
+    pixel_map(h, move |[r, g, b, a]| [lut[r as usize], lut[g as usize], lut[b as usize], a])
+}
+
+/// Tone curve from control `points` ([[x,y],...] in 0..255), linearly
+/// interpolated into a 256-entry LUT applied to RGB.
+fn op_img_curves(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let mut pts: Vec<(f64, f64)> = opts
+        .get("points")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing points [[x,y],...]"))?
+        .iter()
+        .filter_map(|p| {
+            let a = p.as_array()?;
+            Some((a.first()?.as_f64()?, a.get(1)?.as_f64()?))
+        })
+        .collect();
+    if pts.len() < 2 {
+        return Err(anyhow!("curves needs at least 2 points"));
+    }
+    pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let lut: Vec<u8> = (0..256)
+        .map(|i| {
+            let x = i as f64;
+            let y = if x <= pts[0].0 {
+                pts[0].1
+            } else if x >= pts[pts.len() - 1].0 {
+                pts[pts.len() - 1].1
+            } else {
+                let w = pts.windows(2).find(|w| x >= w[0].0 && x <= w[1].0).unwrap();
+                let t = (x - w[0].0) / (w[1].0 - w[0].0).max(1e-6);
+                w[0].1 + (w[1].1 - w[0].1) * t
+            };
+            y.round().clamp(0.0, 255.0) as u8
+        })
+        .collect();
+    pixel_map(h, move |[r, g, b, a]| [lut[r as usize], lut[g as usize], lut[b as usize], a])
+}
+
+/// Adjust HSL. opts: hue (deg shift, default 0), saturation (multiplier,
+/// default 1), lightness (multiplier, default 1).
+fn op_img_hsl(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let hue = opts.get("hue").and_then(Value::as_f64).unwrap_or(0.0);
+    let sat = opts.get("saturation").and_then(Value::as_f64).unwrap_or(1.0);
+    let light = opts.get("lightness").and_then(Value::as_f64).unwrap_or(1.0);
+    pixel_map(h, move |[r, g, b, a]| {
+        let (hh, s, l) = rgb_to_hsl(r, g, b);
+        let rgb = hsl_to_rgb(hh + hue, s * sat, l * light);
+        [rgb[0], rgb[1], rgb[2], a]
+    })
+}
+
+/// White-balance shift. opts: amount -100..100 (positive = warmer: more red,
+/// less blue).
+fn op_img_temperature(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let amt = opts.get("amount").and_then(Value::as_f64).unwrap_or(0.0).clamp(-100.0, 100.0);
+    let d = amt * 0.6;
+    pixel_map(h, move |[r, g, b, a]| {
+        [
+            (r as f64 + d).clamp(0.0, 255.0) as u8,
+            g,
+            (b as f64 - d).clamp(0.0, 255.0) as u8,
+            a,
+        ]
+    })
+}
+
+/// Channel mixer: 9-number row-major matrix mixing source RGB into output RGB
+/// (`out_r = m0*r + m1*g + m2*b`, etc.).
+fn op_img_channel_mixer(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let arr = opts
+        .get("matrix")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing matrix (9 numbers)"))?;
+    if arr.len() < 9 {
+        return Err(anyhow!("matrix must have 9 numbers"));
+    }
+    let mut m = [0.0f64; 9];
+    for (i, slot) in m.iter_mut().enumerate() {
+        *slot = arr[i].as_f64().unwrap_or(0.0);
+    }
+    pixel_map(h, move |[r, g, b, a]| {
+        let (rf, gf, bf) = (r as f64, g as f64, b as f64);
+        let mix = |o: usize| (m[o * 3] * rf + m[o * 3 + 1] * gf + m[o * 3 + 2] * bf).clamp(0.0, 255.0) as u8;
+        [mix(0), mix(1), mix(2), a]
+    })
+}
+
+/// Nearest-neighbor sample with edge clamping.
+fn sample_clamped(buf: &image::RgbaImage, x: f64, y: f64) -> image::Rgba<u8> {
+    let xi = (x.round() as i64).clamp(0, buf.width() as i64 - 1) as u32;
+    let yi = (y.round() as i64).clamp(0, buf.height() as i64 - 1) as u32;
+    *buf.get_pixel(xi, yi)
+}
+
+/// Build a remapped image: `out(x,y) = src(map(x,y))`.
+fn remap<F: Fn(f64, f64) -> (f64, f64)>(src: &image::RgbaImage, map: F) -> image::RgbaImage {
+    let (w, hgt) = (src.width(), src.height());
+    let mut out = image::RgbaImage::new(w, hgt);
+    for (x, y, px) in out.enumerate_pixels_mut() {
+        let (sx, sy) = map(x as f64, y as f64);
+        *px = sample_clamped(src, sx, sy);
+    }
+    out
+}
+
+/// Swirl distortion around the center. opts: strength (radians at center,
+/// default 3), radius (px, default = half the smaller side).
+fn op_img_swirl(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let strength = opts.get("strength").and_then(Value::as_f64).unwrap_or(3.0);
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (cx, cy) = (src.width() as f64 / 2.0, src.height() as f64 / 2.0);
+        let radius = opts.get("radius").and_then(Value::as_f64).unwrap_or(cx.min(cy));
+        Ok(DynamicImage::ImageRgba8(remap(&src, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let r = (dx * dx + dy * dy).sqrt();
+            if r >= radius {
+                return (x, y);
+            }
+            let frac = 1.0 - r / radius;
+            let a = strength * frac * frac;
+            let (s, c) = a.sin_cos();
+            (cx + dx * c - dy * s, cy + dx * s + dy * c)
+        })))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Sinusoidal wave displacement. opts: amplitude (px, 10), wavelength (px,
+/// 40), axis ("x" displaces columns by row, "y" displaces rows by column).
+fn op_img_wave(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let amp = opts.get("amplitude").and_then(Value::as_f64).unwrap_or(10.0);
+    let wav = opts.get("wavelength").and_then(Value::as_f64).unwrap_or(40.0).max(1.0);
+    let axis = opts.get("axis").and_then(Value::as_str).unwrap_or("x").to_string();
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        Ok(DynamicImage::ImageRgba8(remap(&src, |x, y| {
+            if axis == "y" {
+                (x, y + amp * (std::f64::consts::TAU * x / wav).sin())
+            } else {
+                (x + amp * (std::f64::consts::TAU * y / wav).sin(), y)
+            }
+        })))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Fisheye (barrel) distortion. opts: strength 0..1 (default 0.5).
+fn op_img_fisheye(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let strength = opts.get("strength").and_then(Value::as_f64).unwrap_or(0.5).clamp(0.0, 1.0);
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width() as f64, src.height() as f64);
+        let (cx, cy) = (w / 2.0, hgt / 2.0);
+        let rmax = cx.min(cy);
+        Ok(DynamicImage::ImageRgba8(remap(&src, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let r = (dx * dx + dy * dy).sqrt() / rmax;
+            if r >= 1.0 || r < 1e-6 {
+                return (x, y);
+            }
+            // pull samples inward by r^(1+strength)
+            let nr = r.powf(1.0 + strength);
+            let scale = nr / r;
+            (cx + dx * scale, cy + dy * scale)
+        })))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Kaleidoscope: mirror an angular wedge around the center. opts: segments
+/// (default 6).
+fn op_img_kaleidoscope(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let seg = opts.get("segments").and_then(Value::as_u64).unwrap_or(6).max(2) as f64;
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (cx, cy) = (src.width() as f64 / 2.0, src.height() as f64 / 2.0);
+        let wedge = std::f64::consts::TAU / seg;
+        Ok(DynamicImage::ImageRgba8(remap(&src, |x, y| {
+            let (dx, dy) = (x - cx, y - cy);
+            let r = (dx * dx + dy * dy).sqrt();
+            let mut a = dy.atan2(dx).rem_euclid(wedge);
+            if a > wedge / 2.0 {
+                a = wedge - a; // mirror within the wedge
+            }
+            (cx + r * a.cos(), cy + r * a.sin())
+        })))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Split into a grid of sub-images. opts: cols (default 1), rows (default 1).
+/// Returns `{ handles => [...], cols, rows }`.
+fn op_img_spritesheet(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let cols = opts.get("cols").and_then(Value::as_u64).unwrap_or(1).max(1) as u32;
+    let rows = opts.get("rows").and_then(Value::as_u64).unwrap_or(1).max(1) as u32;
+    let src = rgba_of(h)?;
+    let (cw, chh) = (src.width() / cols, src.height() / rows);
+    if cw == 0 || chh == 0 {
+        return Err(anyhow!("grid finer than the image"));
+    }
+    let mut handles = Vec::with_capacity((cols * rows) as usize);
+    for ry in 0..rows {
+        for cx in 0..cols {
+            let cell = image::imageops::crop_imm(&src, cx * cw, ry * chh, cw, chh).to_image();
+            handles.push(insert_image(DynamicImage::ImageRgba8(cell)));
+        }
+    }
+    Ok(json!({"handles": handles, "cols": cols, "rows": rows, "cell_width": cw, "cell_height": chh}))
+}
+
+/// Content-aware width reduction (seam carving) to `width` px.
+fn op_img_seam_carve(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let target = req_u64_img(&opts, "width")? as u32;
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let t = target.min(src.width()).max(1);
+        let out = imageproc::seam_carving::shrink_width(&src, t);
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
 /// Add a soft drop shadow (grows the canvas). opts: dx (6), dy (6), blur
 /// sigma (4), color (black), opacity 0..1 (0.5).
 fn op_img_drop_shadow(opts: Value) -> Result<Value> {

@@ -1000,6 +1000,41 @@ fn image_shapes_fills_masks_analysis() {
 }
 
 #[test]
+fn image_color_science_and_distortions() {
+    let n = call(office__img_new, r#"{"width":48,"height":48,"color":[120,160,200,255]}"#);
+    let h = n["handle"].as_u64().unwrap();
+    for (f, arg) in [
+        (office__img_levels as extern "C" fn(*const c_char) -> *const c_char,
+         r#"{"handle":H,"in_black":20,"in_white":230,"gamma":1.2,"out_black":10,"out_white":250}"#),
+        (office__img_curves, r#"{"handle":H,"points":[[0,0],[128,180],[255,255]]}"#),
+        (office__img_hsl, r#"{"handle":H,"hue":40,"saturation":1.3,"lightness":0.95}"#),
+        (office__img_temperature, r#"{"handle":H,"amount":35}"#),
+        (office__img_channel_mixer, r#"{"handle":H,"matrix":[0.5,0.3,0.2,0.1,0.8,0.1,0.2,0.2,0.6]}"#),
+        (office__img_swirl, r#"{"handle":H,"strength":2.5}"#),
+        (office__img_wave, r#"{"handle":H,"amplitude":6,"wavelength":24,"axis":"x"}"#),
+        (office__img_fisheye, r#"{"handle":H,"strength":0.6}"#),
+        (office__img_kaleidoscope, r#"{"handle":H,"segments":8}"#),
+    ] {
+        let v = call(f, &arg.replace('H', &h.to_string()));
+        assert_eq!(v["ok"], true, "color/distort op failed: {v}");
+    }
+    // seam carve reports the new (smaller) width
+    let sc = call(office__img_seam_carve, &format!(r#"{{"handle":{h},"width":36}}"#));
+    assert_eq!(sc["width"], 36, "seam carve to target width: {sc}");
+    // spritesheet splits into a 2x2 grid of handles
+    let n2 = call(office__img_new, r#"{"width":40,"height":40,"color":[10,20,30,255]}"#);
+    let h2 = n2["handle"].as_u64().unwrap();
+    let ss = call(office__img_spritesheet, &format!(r#"{{"handle":{h2},"cols":2,"rows":2}}"#));
+    let cells = ss["handles"].as_array().unwrap();
+    assert_eq!(cells.len(), 4, "2x2 sprite split: {ss}");
+    for c in cells {
+        call(office__img_close, &format!(r#"{{"handle":{}}}"#, c.as_u64().unwrap()));
+    }
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    call(office__img_close, &format!(r#"{{"handle":{h2}}}"#));
+}
+
+#[test]
 fn chart_radar_and_bubble_render() {
     let c = call(
         office__chart_render,
