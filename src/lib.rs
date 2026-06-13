@@ -2248,6 +2248,108 @@ fn op_sheet_append(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "added": added, "rows": total }))
 }
 
+/// Fill blank cells in a sheet. opts: path, output (default: in place),
+/// method => "ffill" (default; carry the last non-blank value down) | "value"
+/// (use a constant `value`), by => column name/index or array (default: all
+/// columns), value (for the constant method), sheet, header (default true),
+/// format. Returns `{ ok, path, filled }`.
+fn op_sheet_fill(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let method = opts
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("ffill");
+    let fill_value = opts.get("value").cloned().unwrap_or(Value::Null);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let target_cols: Vec<usize> = match opts.get("by") {
+        None | Some(Value::Null) => (0..ncols).collect(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), hr))
+            .collect::<Result<_>>()?,
+        Some(v) => vec![resolve_col(Some(v), hr)?],
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Pad data rows to full width so trimmed trailing blanks are fillable.
+    for row in rows[data_start..].iter_mut() {
+        if let Some(arr) = row.as_array_mut() {
+            while arr.len() < ncols {
+                arr.push(Value::Null);
+            }
+        }
+    }
+
+    let mut last: std::collections::HashMap<usize, Value> = std::collections::HashMap::new();
+    let mut filled = 0u64;
+    for ri in data_start..rows.len() {
+        let Some(arr) = rows[ri].as_array_mut() else {
+            continue;
+        };
+        for &c in &target_cols {
+            if c >= arr.len() {
+                continue;
+            }
+            let blank = sheet_cell_blank(&arr[c]);
+            if method == "value" {
+                if blank {
+                    arr[c] = fill_value.clone();
+                    filled += 1;
+                }
+            } else if blank {
+                if let Some(v) = last.get(&c) {
+                    arr[c] = v.clone();
+                    filled += 1;
+                }
+            } else {
+                last.insert(c, arr[c].clone());
+            }
+        }
+    }
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "filled": filled }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -3008,6 +3110,7 @@ export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
+export!(office__sheet_fill, op_sheet_fill);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

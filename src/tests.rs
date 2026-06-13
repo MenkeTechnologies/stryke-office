@@ -227,6 +227,50 @@ fn sheet_write_html_and_markdown_tables() {
 }
 
 #[test]
+fn sheet_fill_blanks() {
+    let path = tmp("fill.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["",20],
+                ["east",30],
+                ["",40]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // ffill the region column
+    let out = tmp("fill_ff.xlsx");
+    let r = call(
+        office__sheet_fill,
+        &format!(r#"{{"path":"{path}","by":"region","output":"{out}"}}"#),
+    );
+    assert_eq!(r["filled"], 2, "two blanks filled: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[2][0], "west", "row2 ffilled from west: {rd}");
+    assert_eq!(rows[4][0], "east", "row4 ffilled from east: {rd}");
+
+    // constant fill of all blanks
+    let outv = tmp("fill_v.xlsx");
+    let rv = call(
+        office__sheet_fill,
+        &format!(r#"{{"path":"{path}","method":"value","value":"NA","output":"{outv}"}}"#),
+    );
+    assert_eq!(rv["filled"], 2, "two blanks set to NA: {rv}");
+    let rdv = call(office__sheet_read, &format!(r#"{{"path":"{outv}"}}"#));
+    assert_eq!(rdv["sheets"][0]["rows"][2][0], "NA", "blank -> NA: {rdv}");
+
+    for f in [&path, &out, &outv] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_append_rows_and_records() {
     let path = tmp("app.xlsx");
     let w = call(
