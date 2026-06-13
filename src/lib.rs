@@ -532,7 +532,7 @@ fn write_xlsx(path: &str, sheets: &[Value], opts: &Value) -> Result<()> {
         }
         write_xlsx_charts(ws, &name, s)?;
         write_xlsx_cond_val(ws, s)?;
-        write_xlsx_setup(ws, s)?;
+        write_xlsx_setup(ws, &name, s)?;
     }
     // Workbook-level defined names: `defined_names:[{name, formula}]`.
     if let Some(dn) = opts.get("defined_names").and_then(Value::as_array) {
@@ -554,7 +554,7 @@ fn write_xlsx(path: &str, sheets: &[Value], opts: &Value) -> Result<()> {
 ///    print_gridlines:bool, print_area:[r1,c1,r2,c2], repeat_rows:[first,last],
 ///    header:str, footer:str, margins:[l,r,t,b,h,f],
 ///    notes:[{row,col,text,author?}], images:[{row,col,path}]`.
-fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, s: &Value) -> Result<()> {
+fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value) -> Result<()> {
     use rust_xlsxwriter::{Image, Note};
     if s.get("protect").and_then(Value::as_bool) == Some(true) {
         ws.protect();
@@ -621,6 +621,71 @@ fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, s: &Value) -> Result<()
                 ws.insert_image(row as u32, col as u16, &image)?;
             }
         }
+    }
+    write_xlsx_sparklines(ws, sheet, s)?;
+    // Outline grouping: `group_rows:[[first,last],...]`, `group_columns:[...]`.
+    if let Some(g) = s.get("group_rows").and_then(Value::as_array) {
+        for r in g.iter().filter_map(|p| pair_u64(p)) {
+            ws.group_rows(r.0 as u32, r.1 as u32)?;
+        }
+    }
+    if let Some(g) = s.get("group_columns").and_then(Value::as_array) {
+        for c in g.iter().filter_map(|p| pair_u64(p)) {
+            ws.group_columns(c.0 as u16, c.1 as u16)?;
+        }
+    }
+    // Hide individual rows / columns.
+    if let Some(rows) = s.get("hide_rows").and_then(Value::as_array) {
+        for r in rows.iter().filter_map(Value::as_u64) {
+            ws.set_row_hidden(r as u32)?;
+        }
+    }
+    if let Some(cols) = s.get("hide_columns").and_then(Value::as_array) {
+        for c in cols.iter().filter_map(Value::as_u64) {
+            ws.set_column_hidden(c as u16)?;
+        }
+    }
+    if s.get("autofit").and_then(Value::as_bool) == Some(true) {
+        ws.autofit();
+    }
+    Ok(())
+}
+
+/// A `[a, b]` pair of u64s.
+fn pair_u64(v: &Value) -> Option<(u64, u64)> {
+    let a = v.as_array()?;
+    Some((a.first()?.as_u64()?, a.get(1)?.as_u64()?))
+}
+
+/// In-cell sparklines: `sparklines:[{at:[row,col], range:[r1,c1,r2,c2],
+/// type?: "line"|"column"|"winloss", markers?, high?, low?}]`. The data range
+/// references this sheet.
+fn write_xlsx_sparklines(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value) -> Result<()> {
+    use rust_xlsxwriter::{Sparkline, SparklineType};
+    let Some(sparks) = s.get("sparklines").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for sp in sparks {
+        let Some(at) = pair_u64(sp.get("at").unwrap_or(&Value::Null)) else { continue };
+        let Some(rng) = quad(sp, "range") else { continue };
+        let stype = match sp.get("type").and_then(Value::as_str).unwrap_or("line") {
+            "column" => SparklineType::Column,
+            "winloss" | "winlose" => SparklineType::WinLose,
+            _ => SparklineType::Line,
+        };
+        let mut spark = Sparkline::new()
+            .set_range((sheet, rng[0], rng[1] as u16, rng[2], rng[3] as u16))
+            .set_type(stype);
+        if sp.get("markers").and_then(Value::as_bool) == Some(true) {
+            spark = spark.show_markers(true);
+        }
+        if sp.get("high").and_then(Value::as_bool) == Some(true) {
+            spark = spark.show_high_point(true);
+        }
+        if sp.get("low").and_then(Value::as_bool) == Some(true) {
+            spark = spark.show_low_point(true);
+        }
+        ws.add_sparkline(at.0 as u32, at.1 as u16, &spark)?;
     }
     Ok(())
 }

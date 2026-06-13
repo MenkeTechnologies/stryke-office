@@ -1112,6 +1112,30 @@ fn xlsx_advanced_setup_writes_and_data_round_trips() {
 }
 
 #[test]
+fn xlsx_sparklines_grouping_hide_autofit() {
+    let path = tmp("spark.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{
+                "name":"S",
+                "rows":[["q1","q2","q3","q4","trend"],[3,7,2,9,null],[5,1,8,4,null]],
+                "sparklines":[
+                    {{"at":[1,4],"range":[1,0,1,3],"type":"line","markers":true,"high":true,"low":true}},
+                    {{"at":[2,4],"range":[2,0,2,3],"type":"column"}}
+                ],
+                "group_rows":[[1,2]],"group_columns":[[0,3]],
+                "hide_rows":[2],"hide_columns":[3],"autofit":true
+            }}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "sparkline/group write failed: {w}");
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["sheets"][0]["rows"][1][0], 3.0, "data intact with sparklines/grouping");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn xlsx_formula_write_then_read() {
     let path = tmp("formula.xlsx");
     let w = call(

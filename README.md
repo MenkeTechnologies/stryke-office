@@ -186,6 +186,10 @@ Office::sheet_write("s.xlsx", [{
     margins => [0.5,0.5,0.6,0.6,0.3,0.3],          # l,r,t,b,header,footer
     notes   => [{ row => 1, col => 0, text => "check", author => "qa" }],
     images  => [{ row => 0, col => 3, path => "logo.png" }],
+    sparklines => [{ at => [1,4], range => [1,0,1,3], type => "line",
+                     markers => 1, high => 1, low => 1 }],   # in-cell mini chart
+    group_rows => [[1,2]], group_columns => [[0,3]],          # outline grouping
+    hide_rows => [5], hide_columns => [6], autofit => 1,
 }], defined_names => [{ name => "Region", formula => "=S!\$A\$1" }])
 
 # read formula strings alongside values

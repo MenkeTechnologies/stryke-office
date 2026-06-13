@@ -45,7 +45,10 @@ fn Office::sheet_read ($path, %opts) {
 ## embedded content — protect, tab_color, zoom, landscape, paper,
 ## print_gridlines, header, footer, print_area => [r1,c1,r2,c2],
 ## repeat_rows => [first,last], margins => [l,r,t,b,h,f],
-## notes => [{row,col,text,author?}], images => [{row,col,path}].
+## notes => [{row,col,text,author?}], images => [{row,col,path}],
+## sparklines => [{at:[row,col], range:[r1,c1,r2,c2], type?, markers?, high?, low?}],
+## group_rows => [[first,last]], group_columns => [[first,last]],
+## hide_rows => [r], hide_columns => [c], autofit => 1.
 ## opts: format => "xlsx"|"ods"|"csv"|"tsv" (default: from extension),
 ## defined_names => [{ name, formula }] (workbook-level named ranges).
 fn Office::sheet_write ($path, $sheets, %opts) {
