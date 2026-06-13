@@ -1,0 +1,29 @@
+#!/usr/bin/env stryke
+# examples/image.stk — PIL-style image: create, draw, text, save, thumbnail.
+# Run:   s examples/image.stk
+
+use Office
+
+# New 320x120 white canvas.
+val $c = Office::img_new(320, 120, color => "#ffffff")
+val $h = $c->{handle}
+
+# Draw a blue filled rectangle, a red outline circle, and a line.
+Office::img_draw_rect($h, 10, 10, 120, 60, [40, 90, 200, 255])
+Office::img_draw_circle($h, 230, 50, 35, [220, 40, 40, 255], fill => 0)
+Office::img_draw_line($h, 10, 100, 310, 100, [0, 0, 0, 255])
+
+# Draw text with the vendored DejaVu Sans font.
+Office::img_draw_text($h, 16, 80, "stryke-office", [20, 20, 20, 255], size => 22)
+
+val $out = "/tmp/office-image.png"
+Office::img_save($h, $out)
+p "wrote $out (" . $c->{width} . "x" . $c->{height} . ")"
+
+# Make a thumbnail and re-save as JPEG (cross-format).
+Office::img_thumbnail($h, 96)
+val $info = Office::img_info($h)
+Office::img_save($h, "/tmp/office-image-thumb.jpg")
+p "thumbnail " . $info->{width} . "x" . $info->{height} . " -> /tmp/office-image-thumb.jpg"
+
+Office::img_close($h)

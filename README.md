@@ -105,9 +105,16 @@ val $info = Office::pdf_read("out.pdf")   # { pages => [...], text => "..." }
 | Document | docx, odt | yes | yes |
 | Presentation | pptx, odp | yes | yes |
 | PDF | pdf | text + pages | text |
+| Image | png, jpeg, gif, bmp, webp, tiff, … | yes | yes |
 
 The output format is taken from the path extension; override with
 `format => "..."`.
+
+Images get a full PIL-style surface (open/new/save/info, resize/thumbnail/
+crop/rotate/flip/convert/paste, get/put pixel, and ImageDraw-style
+rect/line/circle/text). This complements the stryke core `image_*` filter
+builtins (blur, edge, sharpen, grayscale, …) — those operate on pixel
+data; this package adds the file I/O and manipulation surface.
 
 ## [0x04] API reference
 
@@ -122,6 +129,21 @@ The output format is taken from the path extension; override with
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
+
+### Images (handle-based, like a PIL `Image`)
+
+| Function | Returns | Notes |
+|---|---|---|
+| `Office::img_open($path)` / `img_new($w, $h, %opts)` | `{handle, width, height, mode}` | `color` opt: `"#rrggbb"` or `[r,g,b,a]` |
+| `Office::img_save($handle, $path, %opts)` | hashref | format from extension |
+| `Office::img_info($handle)` | `{handle, width, height, mode}` | |
+| `Office::img_resize($h, $w, $ht, %opts)` / `img_thumbnail($h, $max)` | info | `filter` opt |
+| `Office::img_crop($h, $x, $y, $w, $ht)` / `img_rotate($h, $deg)` / `img_flip($h, $dir)` | info / hashref | rotate 90/180/270 exact |
+| `Office::img_convert($h, $mode)` | info | `L` / `LA` / `RGB` / `RGBA` |
+| `Office::img_paste($h, $src, $x, $y)` | hashref | alpha composite |
+| `Office::img_get_pixel($h, $x, $y)` / `img_put_pixel($h, $x, $y, $color)` | `{r,g,b,a}` / hashref | |
+| `Office::img_draw_rect / img_draw_line / img_draw_circle / img_draw_text` | hashref | `fill` opt; text uses vendored DejaVu Sans or a `font` path |
+| `Office::img_close($handle)` | hashref | release the handle |
 
 ## [0x05] No external binaries
 
@@ -138,6 +160,9 @@ the cdylib:
 | docx / odt / pptx / odp read | native `zip` + `quick-xml` |
 | pptx write | native `zip` + hand-built OOXML |
 | pdf read + write | `lo_core` (self-contained, no font files) |
+| image read + write (all formats) | `image` |
+| image drawing (shapes) | `imageproc` |
+| image text drawing | `ab_glyph` + vendored `assets/DejaVuSans.ttf` |
 
 There is deliberately no call to `soffice` / LibreOffice. That keeps the
 package self-contained and reproducible — `scp` the artifact and it runs.
@@ -163,9 +188,11 @@ stryke-office/
   Cargo.toml             # cdylib crate (format crates, all pure Rust)
   src/lib.rs             # office__* exports + format handlers + tests
   src/pptx_write.rs      # minimal OOXML PowerPoint writer
+  src/image_ops.rs       # PIL-style image I/O + manipulation
   stryke.toml            # package manifest + [ffi] table
   lib/Office.stk         # stryke wrapper (use Office)
-  examples/              # spreadsheet, document_and_pdf, presentation
+  assets/DejaVuSans.ttf  # vendored font for image text drawing
+  examples/              # spreadsheet, document_and_pdf, presentation, image
   t/                     # stryke assertion suites
   tests/                 # docs/readme/polish lint gates
   docs/                  # GitHub Pages content

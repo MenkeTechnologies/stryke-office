@@ -1,7 +1,7 @@
 [package]
 name = "stryke-office"
 version = "0.1.0"
-description = "Office document import/export for stryke. Read+write Excel/Calc (xlsx/ods), Word/Writer (docx/odt), PowerPoint/Impress (pptx/odp), and PDF — all native Rust, no LibreOffice/soffice subprocess. cdylib loaded on first `use Office`."
+description = "Office + image document I/O for stryke. Read+write Excel/Calc (xlsx/ods), Word/Writer (docx/odt), PowerPoint/Impress (pptx/odp), PDF, and a full PIL-style image surface (open/save/crop/resize/convert/paste/draw across png/jpeg/gif/bmp/webp/tiff) — all native Rust, no LibreOffice/soffice subprocess. cdylib loaded on first `use Office`."
 authors = ["MenkeTechnologies"]
 license = "MIT"
 repository = "https://github.com/MenkeTechnologies/stryke-office"
@@ -20,6 +20,24 @@ exports = [
     "office__slides_write",
     "office__pdf_read",
     "office__pdf_write",
+    "office__img_open",
+    "office__img_new",
+    "office__img_save",
+    "office__img_info",
+    "office__img_resize",
+    "office__img_thumbnail",
+    "office__img_crop",
+    "office__img_rotate",
+    "office__img_flip",
+    "office__img_convert",
+    "office__img_paste",
+    "office__img_get_pixel",
+    "office__img_put_pixel",
+    "office__img_draw_rect",
+    "office__img_draw_line",
+    "office__img_draw_circle",
+    "office__img_draw_text",
+    "office__img_close",
 ]
 
 [scripts]

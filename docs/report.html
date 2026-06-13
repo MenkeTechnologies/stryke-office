@@ -60,13 +60,13 @@
     <main class="tutorial-main">
 
       <h2 class="tutorial-title"><span class="step-hash">&gt;_</span>EXECUTIVE SUMMARY</h2>
-      <p class="tutorial-subtitle"><strong>stryke-office</strong> is an opt-in package giving stryke native read+write across the office document landscape — Microsoft OOXML (xlsx/docx/pptx), OpenDocument (ods/odt/odp), and PDF — with no LibreOffice/soffice subprocess.</p>
+      <p class="tutorial-subtitle"><strong>stryke-office</strong> is an opt-in package giving stryke native read+write across the office document landscape — Microsoft OOXML (xlsx/docx/pptx), OpenDocument (ods/odt/odp), PDF, and a full PIL-style raster image surface — with no LibreOffice/soffice subprocess.</p>
       <p class="tutorial-subtitle">Every format maps to a vendored Rust crate statically linked into the cdylib, so the artifact is self-contained: scp it and it runs.</p>
 
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-val">Office</div><div class="stat-label">use namespace</div></div>
         <div class="stat-card"><div class="stat-val cyan">opt-in</div><div class="stat-label">Tier 2</div></div>
-        <div class="stat-card"><div class="stat-val">7</div><div class="stat-label">formats read+write</div></div>
+        <div class="stat-card"><div class="stat-val">7+img</div><div class="stat-label">formats read+write</div></div>
         <div class="stat-card"><div class="stat-val green">0</div><div class="stat-label">external binaries</div></div>
       </div>
 
@@ -83,6 +83,7 @@
           <tr><td>docx / odt / pptx / odp read</td><td>native <code>zip</code> + <code>quick-xml</code> paragraph extraction</td></tr>
           <tr><td>pptx write</td><td>native <code>zip</code> + hand-built OOXML part set</td></tr>
           <tr><td>pdf read + write</td><td><code>lo_core</code> (self-contained, no font files)</td></tr>
+          <tr><td>image read + write (png/jpeg/gif/bmp/webp/tiff)</td><td><code>image</code> + <code>imageproc</code> (draw) + <code>ab_glyph</code> + vendored DejaVu Sans (text)</td></tr>
         </tbody>
       </table>
 

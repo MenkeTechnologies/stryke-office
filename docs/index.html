@@ -108,7 +108,7 @@
 
     <main class="tutorial-main">
       <h2 class="tutorial-title"><span class="step-hash">&gt;_</span>STRYKE-OFFICE</h2>
-      <p class="tutorial-subtitle"><strong>Read and write the whole office suite — no LibreOffice required.</strong> Excel/Calc (xlsx/ods), Word/Writer (docx/odt), PowerPoint/Impress (pptx/odp), and PDF, entirely in native Rust. No <code>soffice</code> / LibreOffice / pandoc subprocess; the cdylib is self-contained.</p>
+      <p class="tutorial-subtitle"><strong>Read and write the whole office suite — no LibreOffice required.</strong> Excel/Calc (xlsx/ods), Word/Writer (docx/odt), PowerPoint/Impress (pptx/odp), PDF, and a full PIL-style image surface (png/jpeg/gif/bmp/webp/tiff — open/save/crop/resize/convert/paste/draw), entirely in native Rust. No <code>soffice</code> / LibreOffice / pandoc subprocess; the cdylib is self-contained.</p>
 
       <section class="tutorial-section">
         <h2>Install</h2>
@@ -155,6 +155,7 @@ Office::pdf_write("out.pdf", ["Line one", "Line two"])</pre>
             <tr><td>Document</td><td>read + write <code>docx</code>, <code>odt</code></td></tr>
             <tr><td>Presentation</td><td>read + write <code>pptx</code>, <code>odp</code></td></tr>
             <tr><td>PDF</td><td>read text + pages &middot; write text (A4)</td></tr>
+            <tr><td>Image</td><td>read + write png/jpeg/gif/bmp/webp/tiff &middot; resize/crop/rotate/convert/paste &middot; draw rect/line/circle/text (PIL-style)</td></tr>
           </tbody>
         </table>
         <p>Output format comes from the path extension; override with <code>format =&gt; "..."</code>.</p>

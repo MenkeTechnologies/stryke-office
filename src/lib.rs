@@ -672,6 +672,28 @@ export!(office__slides_write, op_slides_write);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 
+// PIL-style image I/O + manipulation (image crate)
+include!("image_ops.rs");
+
+export!(office__img_open, op_img_open);
+export!(office__img_new, op_img_new);
+export!(office__img_save, op_img_save);
+export!(office__img_info, op_img_info);
+export!(office__img_resize, op_img_resize);
+export!(office__img_thumbnail, op_img_thumbnail);
+export!(office__img_crop, op_img_crop);
+export!(office__img_rotate, op_img_rotate);
+export!(office__img_flip, op_img_flip);
+export!(office__img_convert, op_img_convert);
+export!(office__img_paste, op_img_paste);
+export!(office__img_get_pixel, op_img_get_pixel);
+export!(office__img_put_pixel, op_img_put_pixel);
+export!(office__img_draw_rect, op_img_draw_rect);
+export!(office__img_draw_line, op_img_draw_line);
+export!(office__img_draw_circle, op_img_draw_circle);
+export!(office__img_draw_text, op_img_draw_text);
+export!(office__img_close, op_img_close);
+
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");
 

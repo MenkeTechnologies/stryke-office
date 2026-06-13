@@ -2,7 +2,7 @@
 name = "stryke-office"
 version = "0.1.0"
 edition = "2021"
-description = "Office document import/export for stryke — Excel/Calc, Word/Writer, PowerPoint/Impress, PDF (OOXML + ODF), all native, no external binaries"
+description = "Office + image document I/O for stryke — Excel/Calc, Word/Writer, PowerPoint/Impress, PDF (OOXML + ODF) + PIL-style raster images, all native, no external binaries"
 authors = ["MenkeTechnologies"]
 license = "MIT"
 repository = "https://github.com/MenkeTechnologies/stryke-office"
@@ -26,6 +26,9 @@ quick-xml = "0.40"         # parse/emit the XML inside those containers
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
 once_cell = "1"
+image = "0.25"           # decode/encode all raster formats + DynamicImage ops (PIL core)
+imageproc = "0.27"       # drawing: text, lines, rects, circles
+ab_glyph = "0.2"         # font rasterization for text drawing
 
 [profile.release]
 opt-level = 3

@@ -90,3 +90,116 @@ fn Office::pdf_write ($path, $lines) {
     die "Office::pdf_write: lines must be arrayref" unless ref($lines) eq "ARRAY"
     Office::_decode("pdf_write", office__pdf_write(to_json({ path => $path, lines => $lines })))
 }
+
+# ── images (PIL-style I/O + manipulation) ───────────────────────────
+#
+# Images are handle-based, like a PIL Image object: img_open / img_new
+# return an integer handle; later ops take that handle; img_save writes it.
+# Colors accept "#rrggbb" / "#rrggbbaa" or [r, g, b] / [r, g, b, a].
+# Complements the stryke core `image_*` filter builtins (blur, edge,
+# sharpen, grayscale, …) with the file-I/O + manipulation surface.
+
+## Open an image file (png/jpeg/gif/bmp/webp/tiff/…). Returns a hashref
+## { handle, width, height, mode }.
+fn Office::img_open ($path) {
+    Office::_decode("img_open", office__img_open(to_json({ path => $path })))
+}
+
+## Create a blank image. opts: color (default opaque black). Returns
+## { handle, width, height, mode }.
+fn Office::img_new ($width, $height, %opts) {
+    Office::_decode("img_new",
+        office__img_new(to_json({ width => $width, height => $height, color => $opts{color} })))
+}
+
+## Save an image handle to a path; format inferred from the extension.
+fn Office::img_save ($handle, $path, %opts) {
+    Office::_decode("img_save",
+        office__img_save(to_json({ handle => $handle, path => $path, format => $opts{format} })))
+}
+
+## Return { handle, width, height, mode } for an open image.
+fn Office::img_info ($handle) {
+    Office::_decode("img_info", office__img_info(to_json({ handle => $handle })))
+}
+
+## Resize to exact dimensions. opts: filter (nearest/triangle/catmullrom/gaussian/lanczos3).
+fn Office::img_resize ($handle, $width, $height, %opts) {
+    Office::_decode("img_resize",
+        office__img_resize(to_json({ handle => $handle, width => $width, height => $height, filter => $opts{filter} })))
+}
+
+## Scale down to fit within a $max box, preserving aspect ratio.
+fn Office::img_thumbnail ($handle, $max, %opts) {
+    Office::_decode("img_thumbnail",
+        office__img_thumbnail(to_json({ handle => $handle, max => $max, filter => $opts{filter} })))
+}
+
+## Crop to a rectangle.
+fn Office::img_crop ($handle, $x, $y, $width, $height) {
+    Office::_decode("img_crop",
+        office__img_crop(to_json({ handle => $handle, x => $x, y => $y, width => $width, height => $height })))
+}
+
+## Rotate by degrees (90/180/270 are exact; other angles fill transparent).
+fn Office::img_rotate ($handle, $degrees) {
+    Office::_decode("img_rotate",
+        office__img_rotate(to_json({ handle => $handle, degrees => $degrees })))
+}
+
+## Flip horizontally ("h") or vertically ("v").
+fn Office::img_flip ($handle, $dir) {
+    Office::_decode("img_flip", office__img_flip(to_json({ handle => $handle, dir => $dir })))
+}
+
+## Convert pixel mode: "L" (grayscale), "LA", "RGB", "RGBA".
+fn Office::img_convert ($handle, $mode) {
+    Office::_decode("img_convert", office__img_convert(to_json({ handle => $handle, mode => $mode })))
+}
+
+## Paste image $src onto $handle at ($x, $y) with alpha compositing.
+fn Office::img_paste ($handle, $src, $x, $y) {
+    Office::_decode("img_paste",
+        office__img_paste(to_json({ handle => $handle, src => $src, x => $x, y => $y })))
+}
+
+## Read a pixel; returns { r, g, b, a }.
+fn Office::img_get_pixel ($handle, $x, $y) {
+    Office::_decode("img_get_pixel",
+        office__img_get_pixel(to_json({ handle => $handle, x => $x, y => $y })))
+}
+
+## Set a pixel to $color.
+fn Office::img_put_pixel ($handle, $x, $y, $color) {
+    Office::_decode("img_put_pixel",
+        office__img_put_pixel(to_json({ handle => $handle, x => $x, y => $y, color => $color })))
+}
+
+## Draw a rectangle. opts: fill => 1 (default) or 0 for outline.
+fn Office::img_draw_rect ($handle, $x, $y, $width, $height, $color, %opts) {
+    Office::_decode("img_draw_rect",
+        office__img_draw_rect(to_json({ handle => $handle, x => $x, y => $y, width => $width, height => $height, color => $color, fill => $opts{fill} })))
+}
+
+## Draw a line segment from ($x0,$y0) to ($x1,$y1).
+fn Office::img_draw_line ($handle, $x0, $y0, $x1, $y1, $color) {
+    Office::_decode("img_draw_line",
+        office__img_draw_line(to_json({ handle => $handle, x0 => $x0, y0 => $y0, x1 => $x1, y1 => $y1, color => $color })))
+}
+
+## Draw a circle centered at ($x,$y). opts: fill => 1 (default) or 0.
+fn Office::img_draw_circle ($handle, $x, $y, $radius, $color, %opts) {
+    Office::_decode("img_draw_circle",
+        office__img_draw_circle(to_json({ handle => $handle, x => $x, y => $y, radius => $radius, color => $color, fill => $opts{fill} })))
+}
+
+## Draw text. opts: size (default 16), font => "/path.ttf" (default: vendored DejaVu Sans).
+fn Office::img_draw_text ($handle, $x, $y, $text, $color, %opts) {
+    Office::_decode("img_draw_text",
+        office__img_draw_text(to_json({ handle => $handle, x => $x, y => $y, text => $text, color => $color, size => $opts{size}, font => $opts{font} })))
+}
+
+## Release an image handle.
+fn Office::img_close ($handle) {
+    Office::_decode("img_close", office__img_close(to_json({ handle => $handle })))
+}

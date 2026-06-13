@@ -66,4 +66,25 @@ val $pr = Office::pdf_read($pdf)
 assert_ok ($pr->{text} =~ /First line/), "pdf: written text extracts back"
 unlink $pdf
 
+# ── image: new, draw, save, reopen, pixel ───────────────────────────
+val $png = "$dir/$tag.png"
+val $img = Office::img_new(64, 48, color => [255, 0, 0, 255])
+Office::img_draw_rect($img->{handle}, 4, 4, 20, 10, [0, 0, 255, 255])
+Office::img_save($img->{handle}, $png)
+val $re = Office::img_open($png)
+assert_eq $re->{width}, 64, "image: width round-trips"
+val $px = Office::img_get_pixel($re->{handle}, 10, 8)
+assert_eq $px->{b}, 255, "image: drawn blue pixel round-trips"
+Office::img_close($img->{handle})
+Office::img_close($re->{handle})
+unlink $png
+
+# ── image: resize + grayscale convert ───────────────────────────────
+val $im2 = Office::img_new(100, 80, color => "#0a141e")
+val $rz = Office::img_resize($im2->{handle}, 50, 40)
+assert_eq $rz->{width}, 50, "image: resize to exact width"
+val $gr = Office::img_convert($im2->{handle}, "L")
+assert_eq $gr->{mode}, "L", "image: convert to grayscale"
+Office::img_close($im2->{handle})
+
 test_run

@@ -199,3 +199,132 @@ fn malformed_json_does_not_panic() {
     let v = call(office__sheet_read, "not-json-{[}");
     assert_eq!(err_of(&v), "missing path");
 }
+
+// ── image (PIL surface) ──────────────────────────────────────────────
+
+#[test]
+fn image_new_draw_save_reopen_round_trips() {
+    let path = tmp("img.png");
+    // New 64x48 red canvas.
+    let n = call(
+        office__img_new,
+        r#"{"width":64,"height":48,"color":[255,0,0,255]}"#,
+    );
+    let h = n["handle"].as_u64().expect("handle");
+    assert_eq!(n["width"], 64);
+    assert_eq!(n["mode"], "RGBA");
+
+    // Draw a filled blue rectangle, then save as PNG.
+    call(
+        office__img_draw_rect,
+        &format!(r#"{{"handle":{h},"x":4,"y":4,"width":20,"height":10,"color":[0,0,255,255]}}"#),
+    );
+    let s = call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{path}"}}"#),
+    );
+    assert_eq!(s["ok"], true, "save failed: {s}");
+
+    // Reopen and verify dimensions + a drawn pixel.
+    let o = call(office__img_open, &format!(r#"{{"path":"{path}"}}"#));
+    let h2 = o["handle"].as_u64().unwrap();
+    assert_eq!(o["width"], 64);
+    assert_eq!(o["height"], 48);
+    let px = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{h2},"x":10,"y":8}}"#),
+    );
+    assert_eq!(px["b"], 255, "drawn blue pixel present");
+    assert_eq!(px["r"], 0);
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    call(office__img_close, &format!(r#"{{"handle":{h2}}}"#));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn image_resize_crop_convert() {
+    let n = call(
+        office__img_new,
+        r#"{"width":100,"height":80,"color":[10,20,30,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    let r = call(
+        office__img_resize,
+        &format!(r#"{{"handle":{h},"width":50,"height":40}}"#),
+    );
+    assert_eq!(r["width"], 50);
+    assert_eq!(r["height"], 40);
+    let c = call(
+        office__img_crop,
+        &format!(r#"{{"handle":{h},"x":0,"y":0,"width":20,"height":20}}"#),
+    );
+    assert_eq!(c["width"], 20);
+    let g = call(
+        office__img_convert,
+        &format!(r#"{{"handle":{h},"mode":"L"}}"#),
+    );
+    assert_eq!(g["mode"], "L", "converted to grayscale");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
+fn image_cross_format_png_to_jpeg() {
+    let png = tmp("x.png");
+    let jpg = tmp("x.jpg");
+    let n = call(
+        office__img_new,
+        r#"{"width":32,"height":32,"color":[200,100,50,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{png}"}}"#),
+    );
+    // Re-save the same handle as JPEG (format inferred from extension).
+    let s = call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{jpg}"}}"#),
+    );
+    assert_eq!(s["ok"], true);
+    let o = call(office__img_open, &format!(r#"{{"path":"{jpg}"}}"#));
+    assert_eq!(o["width"], 32, "jpeg reopened at right size");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    call(
+        office__img_close,
+        &format!(r#"{{"handle":{}}}"#, o["handle"].as_u64().unwrap()),
+    );
+    std::fs::remove_file(&png).ok();
+    std::fs::remove_file(&jpg).ok();
+}
+
+#[test]
+fn image_draw_text_with_vendored_font() {
+    let path = tmp("text.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":200,"height":60,"color":[255,255,255,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    let d = call(
+        office__img_draw_text,
+        &format!(r#"{{"handle":{h},"x":10,"y":10,"text":"Hello","size":32,"color":[0,0,0,255]}}"#),
+    );
+    assert_eq!(d["ok"], true, "draw_text (vendored font) succeeded: {d}");
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{path}"}}"#),
+    );
+    assert!(std::fs::metadata(&path).is_ok(), "text image written");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn image_unknown_handle_errors() {
+    let v = call(office__img_save, r#"{"handle":987654,"path":"/tmp/x.png"}"#);
+    assert!(
+        err_of(&v).starts_with("unknown image handle"),
+        "got: {}",
+        err_of(&v)
+    );
+}
