@@ -1478,6 +1478,55 @@ fn pdf_delete_and_reorder_pages() {
 }
 
 #[test]
+fn pdf_search_finds_text_per_page() {
+    let src = tmp("search.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Apple Banana"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Cherry"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"apple pie apple"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // case-insensitive "apple": page 1 (1) + page 3 (2) = 3 across 2 pages
+    let r = call(
+        office__pdf_search,
+        &format!(r#"{{"path":"{src}","query":"apple","ignore_case":true}}"#),
+    );
+    assert_eq!(r["matched_pages"], 2, "two pages matched: {r}");
+    let pages: Vec<u64> = r["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["page"].as_u64().unwrap())
+        .collect();
+    assert!(
+        pages.contains(&1) && pages.contains(&3),
+        "pages 1 and 3: {r}"
+    );
+    assert!(
+        r["count"].as_u64().unwrap() >= 3,
+        "at least 3 occurrences: {r}"
+    );
+
+    // case-sensitive "Cherry" -> only page 2
+    let c = call(
+        office__pdf_search,
+        &format!(r#"{{"path":"{src}","query":"Cherry"}}"#),
+    );
+    assert_eq!(c["matched_pages"], 1, "one page: {c}");
+    assert_eq!(c["pages"][0]["page"], 2, "page 2: {c}");
+
+    std::fs::remove_file(&src).ok();
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(

@@ -1905,6 +1905,7 @@ export!(office__pdf_decrypt, op_pdf_decrypt);
 export!(office__pdf_compress, op_pdf_compress);
 export!(office__pdf_delete, op_pdf_delete);
 export!(office__pdf_reorder, op_pdf_reorder);
+export!(office__pdf_search, op_pdf_search);
 
 // PDF file attachments (embedded files): embed + list/extract
 include!("pdf_attach.rs");
