@@ -260,6 +260,14 @@ fn Office::pdf_compress ($path, $output) {
         office__pdf_compress(to_json({ path => $path, output => $output })))
 }
 
+## Search a PDF's text page by page. opts: ignore_case => 1. Returns
+## { count, matched_pages, pages => [{ page, count, snippet }] } — count is the
+## total number of occurrences; page numbers are 1-based.
+fn Office::pdf_search ($path, $query, %opts) {
+    Office::_decode("pdf_search",
+        office__pdf_search(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case} })))
+}
+
 ## Delete pages from a PDF. $pages is an arrayref of 1-based page numbers to
 ## remove. Returns { ok, path, pages } (remaining count).
 fn Office::pdf_delete ($path, $pages, $output) {

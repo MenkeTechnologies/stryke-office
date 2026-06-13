@@ -547,3 +547,64 @@ fn op_pdf_reorder(opts: Value) -> Result<Value> {
     doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
     Ok(json!({"ok": true, "path": out, "pages": count}))
 }
+
+// ── full-text search ──────────────────────────────────────────────────────────
+
+/// A short, char-safe, newline-flattened context window around a match.
+fn pdf_snippet(text: &str, idx: usize, match_len: usize) -> String {
+    let start = text[..idx]
+        .char_indices()
+        .rev()
+        .take(30)
+        .last()
+        .map_or(idx, |(i, _)| i);
+    let mut end = (idx + match_len + 40).min(text.len());
+    while end < text.len() && !text.is_char_boundary(end) {
+        end += 1;
+    }
+    text[start..end].split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Search a PDF's text page by page. opts: path, query (required),
+/// ignore_case (default false). Returns `{ count, matched_pages,
+/// pages: [{ page, count, snippet }] }` — `count` is total occurrences,
+/// page numbers are 1-based.
+fn op_pdf_search(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let query = req_str(&opts, "query")?;
+    if query.is_empty() {
+        return Err(anyhow!("empty query"));
+    }
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let bytes = std::fs::read(path)?;
+    let pages = lo_core::extract_pages_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
+    let needle = if ignore_case {
+        query.to_lowercase()
+    } else {
+        query.to_string()
+    };
+
+    let mut total = 0usize;
+    let mut hits = Vec::new();
+    for (i, page) in pages.iter().enumerate() {
+        let hay = if ignore_case {
+            page.to_lowercase()
+        } else {
+            page.clone()
+        };
+        let c = hay.matches(&needle).count();
+        if c > 0 {
+            total += c;
+            let idx = hay.find(&needle).unwrap_or(0);
+            hits.push(json!({
+                "page": i + 1,
+                "count": c,
+                "snippet": pdf_snippet(&hay, idx, needle.len()),
+            }));
+        }
+    }
+    Ok(json!({ "count": total, "matched_pages": hits.len(), "pages": hits }))
+}
