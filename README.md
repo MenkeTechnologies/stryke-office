@@ -331,6 +331,22 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_warp($h, $matrix)` | 3×3 projective (affine/perspective); 9 numbers |
 | `img_to_base64($h, %opts)` / `img_from_base64($b64)` | encode/decode (`format` opt); embed images as strings |
 
+#### Shapes, fills, masks, color analysis
+
+| Function | Notes |
+|---|---|
+| `img_draw_rounded_rect($h, $x, $y, $w, $ht, $color, %opts)` | `radius`/`fill`/`stroke` |
+| `img_draw_polyline($h, $points, $color)` | open polyline through `[[x,y],…]` |
+| `img_draw_arc($h, $x, $y, $r, $start, $end, $color, %opts)` | degrees; `fill` → wedge |
+| `img_flood_fill($h, $x, $y, $color, %opts)` | bucket fill; `tolerance` |
+| `img_replace_color($h, $from, $to, %opts)` | global color replace; `tolerance` |
+| `img_swap_channels($h, $order)` | permute r/g/b/a, e.g. `"bgr"` |
+| `img_dominant_colors($h, %opts)` | top-`count` palette → `[{r,g,b,hex,count}]` |
+| `img_compare($h, $other, %opts)` | `{mse,rmse,max_diff,identical}`; `diff` → `diff_handle` |
+| `img_text_size($text, %opts)` | measure → `{width,height}` |
+| `img_crop_circle($h)` / `img_round_corners($h, %opts)` | circular / rounded mask |
+| `img_drop_shadow($h, %opts)` | soft shadow; `dx`/`dy`/`blur`/`color`/`opacity` |
+
 ## [0x05] No external binaries
 
 Every format is handled by a vendored Rust crate, statically linked into

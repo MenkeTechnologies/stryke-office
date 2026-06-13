@@ -1464,6 +1464,20 @@ export!(office__img_warp, op_img_warp);
 export!(office__img_to_base64, op_img_to_base64);
 export!(office__img_from_base64, op_img_from_base64);
 
+// shapes, fills, masks, color analysis
+export!(office__img_draw_rounded_rect, op_img_draw_rounded_rect);
+export!(office__img_draw_polyline, op_img_draw_polyline);
+export!(office__img_draw_arc, op_img_draw_arc);
+export!(office__img_flood_fill, op_img_flood_fill);
+export!(office__img_replace_color, op_img_replace_color);
+export!(office__img_swap_channels, op_img_swap_channels);
+export!(office__img_dominant_colors, op_img_dominant_colors);
+export!(office__img_compare, op_img_compare);
+export!(office__img_text_size, op_img_text_size);
+export!(office__img_crop_circle, op_img_crop_circle);
+export!(office__img_round_corners, op_img_round_corners);
+export!(office__img_drop_shadow, op_img_drop_shadow);
+
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
 include!("chart_svg.rs");

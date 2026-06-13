@@ -1535,3 +1535,343 @@ fn op_img_from_base64(opts: Value) -> Result<Value> {
     let handle = insert_image(img);
     with_image(handle, |img| Ok(info_json(handle, img)))
 }
+
+// ── shapes, fills, masks, color analysis ─────────────────────────────────────
+
+/// Is point (px,py) inside the rounded rect [x,x+w)×[y,y+h) with corner `r`?
+fn in_rrect(px: i64, py: i64, x: i64, y: i64, w: i64, h: i64, r: i64) -> bool {
+    if px < x || py < y || px >= x + w || py >= y + h {
+        return false;
+    }
+    let r = r.min(w / 2).min(h / 2).max(0);
+    // corner centers
+    let (lx, rx) = (x + r, x + w - 1 - r);
+    let (ty, by) = (y + r, y + h - 1 - r);
+    let cx = if px < lx { lx } else if px > rx { rx } else { px };
+    let cy = if py < ty { ty } else if py > by { by } else { py };
+    let (dx, dy) = (px - cx, py - cy);
+    dx * dx + dy * dy <= r * r
+}
+
+/// Draw a rounded rectangle. opts: fill => 1 (default) or 0 (outline,
+/// `stroke` px wide, default 2).
+fn op_img_draw_rounded_rect(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let x = opt_i64(&opts, "x", 0);
+    let y = opt_i64(&opts, "y", 0);
+    let w = req_u64_img(&opts, "width")? as i64;
+    let ht = req_u64_img(&opts, "height")? as i64;
+    let r = opts.get("radius").and_then(Value::as_i64).unwrap_or(8);
+    let color = parse_color(opts.get("color"));
+    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let stroke = opts.get("stroke").and_then(Value::as_i64).unwrap_or(2).max(1);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let (iw, ih) = (buf.width() as i64, buf.height() as i64);
+        for py in y.max(0)..(y + ht).min(ih) {
+            for px in x.max(0)..(x + w).min(iw) {
+                let inside = in_rrect(px, py, x, y, w, ht, r);
+                let draw = if fill {
+                    inside
+                } else {
+                    inside && !in_rrect(px, py, x + stroke, y + stroke, w - 2 * stroke, ht - 2 * stroke, (r - stroke).max(0))
+                };
+                if draw {
+                    buf.put_pixel(px as u32, py as u32, color);
+                }
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Draw an open polyline through $points (`[[x,y],...]`).
+fn op_img_draw_polyline(opts: Value) -> Result<Value> {
+    use imageproc::drawing::draw_line_segment_mut;
+    let h = req_u64_img(&opts, "handle")?;
+    let color = parse_color(opts.get("color"));
+    let pts: Vec<(f32, f32)> = opts
+        .get("points")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing points"))?
+        .iter()
+        .filter_map(|p| {
+            let a = p.as_array()?;
+            Some((a.first()?.as_f64()? as f32, a.get(1)?.as_f64()? as f32))
+        })
+        .collect();
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        for w in pts.windows(2) {
+            draw_line_segment_mut(&mut buf, w[0], w[1], color);
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Draw a circular arc from `start` to `end` degrees. opts: fill => 1 draws a
+/// wedge; otherwise a stroked arc.
+fn op_img_draw_arc(opts: Value) -> Result<Value> {
+    use imageproc::drawing::{draw_line_segment_mut, draw_polygon_mut};
+    use imageproc::point::Point;
+    let h = req_u64_img(&opts, "handle")?;
+    let cx = opt_i64(&opts, "x", 0) as i32;
+    let cy = opt_i64(&opts, "y", 0) as i32;
+    let r = req_u64_img(&opts, "radius")? as f64;
+    let a0 = opts.get("start").and_then(Value::as_f64).unwrap_or(0.0).to_radians();
+    let a1 = opts.get("end").and_then(Value::as_f64).unwrap_or(90.0).to_radians();
+    let color = parse_color(opts.get("color"));
+    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(false);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let steps = (((a1 - a0).abs() / 0.05).ceil().max(2.0)) as usize;
+        let pt = |a: f64| (cx as f64 + r * a.cos(), cy as f64 + r * a.sin());
+        if fill {
+            let mut poly: Vec<Point<i32>> = vec![Point::new(cx, cy)];
+            for k in 0..=steps {
+                let (x, y) = pt(a0 + (a1 - a0) * k as f64 / steps as f64);
+                poly.push(Point::new(x as i32, y as i32));
+            }
+            poly.dedup();
+            if poly.len() >= 3 {
+                draw_polygon_mut(&mut buf, &poly, color);
+            }
+        } else {
+            for k in 0..steps {
+                let p0 = pt(a0 + (a1 - a0) * k as f64 / steps as f64);
+                let p1 = pt(a0 + (a1 - a0) * (k + 1) as f64 / steps as f64);
+                draw_line_segment_mut(&mut buf, (p0.0 as f32, p0.1 as f32), (p1.0 as f32, p1.1 as f32), color);
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Bucket flood fill from a seed pixel. opts: tolerance (default 0).
+fn op_img_flood_fill(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let sx = req_u64_img(&opts, "x")? as i64;
+    let sy = req_u64_img(&opts, "y")? as i64;
+    let color = parse_color(opts.get("color"));
+    let tol = opts.get("tolerance").and_then(Value::as_i64).unwrap_or(0);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let (w, ht) = (buf.width() as i64, buf.height() as i64);
+        if sx < 0 || sy < 0 || sx >= w || sy >= ht {
+            return Ok(DynamicImage::ImageRgba8(buf));
+        }
+        let target = buf.get_pixel(sx as u32, sy as u32).0;
+        let matches = |p: &[u8; 4]| (0..4).all(|c| (p[c] as i64 - target[c] as i64).abs() <= tol);
+        if color.0 == target {
+            return Ok(DynamicImage::ImageRgba8(buf));
+        }
+        let mut stack = vec![(sx, sy)];
+        while let Some((x, y)) = stack.pop() {
+            if x < 0 || y < 0 || x >= w || y >= ht {
+                continue;
+            }
+            let px = buf.get_pixel_mut(x as u32, y as u32);
+            if !matches(&px.0) {
+                continue;
+            }
+            *px = color;
+            stack.push((x + 1, y));
+            stack.push((x - 1, y));
+            stack.push((x, y + 1));
+            stack.push((x, y - 1));
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Replace every pixel near $from with $to. opts: tolerance (default 16).
+fn op_img_replace_color(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let from = parse_color(opts.get("from"));
+    let to = parse_color(opts.get("to"));
+    let tol = opts.get("tolerance").and_then(Value::as_i64).unwrap_or(16);
+    pixel_map(h, move |p| {
+        if (0..3).all(|c| (p[c] as i64 - from.0[c] as i64).abs() <= tol) {
+            to.0
+        } else {
+            p
+        }
+    })
+}
+
+/// Permute channels by an `order` string over r/g/b/a, e.g. "bgr", "grba".
+fn op_img_swap_channels(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let order = req_str(&opts, "order")?.to_ascii_lowercase();
+    let idx = |c: char| match c {
+        'r' => 0usize,
+        'g' => 1,
+        'b' => 2,
+        'a' => 3,
+        _ => 0,
+    };
+    let map: Vec<usize> = order.chars().map(idx).collect();
+    pixel_map(h, move |p| {
+        let mut out = p;
+        for (i, &src) in map.iter().enumerate().take(4) {
+            out[i] = p[src];
+        }
+        out
+    })
+}
+
+/// Top-K dominant colors via coarse 16-level bucketing. opts: count
+/// (default 5). Returns `{ colors => [{r,g,b,hex,count}] }`.
+fn op_img_dominant_colors(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let count = opts.get("count").and_then(Value::as_u64).unwrap_or(5).clamp(1, 64) as usize;
+    with_image(h, |img| {
+        let buf = img.to_rgba8();
+        let mut hist: HashMap<u16, u32> = HashMap::new();
+        for px in buf.pixels() {
+            // 4 bits per channel → 12-bit bucket key
+            let key = (((px.0[0] >> 4) as u16) << 8) | (((px.0[1] >> 4) as u16) << 4) | ((px.0[2] >> 4) as u16);
+            *hist.entry(key).or_insert(0) += 1;
+        }
+        let mut v: Vec<(u16, u32)> = hist.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1));
+        let colors: Vec<Value> = v
+            .into_iter()
+            .take(count)
+            .map(|(key, cnt)| {
+                let r = (((key >> 8) & 0xf) as u8) << 4 | 0x8;
+                let g = (((key >> 4) & 0xf) as u8) << 4 | 0x8;
+                let b = ((key & 0xf) as u8) << 4 | 0x8;
+                json!({"r": r, "g": g, "b": b, "hex": format!("#{r:02x}{g:02x}{b:02x}"), "count": cnt})
+            })
+            .collect();
+        Ok(json!({"colors": colors}))
+    })
+}
+
+/// Compare two image handles (src resized to base). Returns `{mse, rmse,
+/// max_diff, identical}`. opt `diff => 1` also returns a `diff_handle`
+/// (per-pixel absolute difference).
+fn op_img_compare(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let other = req_u64_img(&opts, "other")?;
+    let want_diff = opts.get("diff").and_then(Value::as_bool).unwrap_or(false);
+    let a = rgba_of(h)?;
+    let mut b = rgba_of(other)?;
+    if b.width() != a.width() || b.height() != a.height() {
+        b = image::imageops::resize(&b, a.width(), a.height(), image::imageops::FilterType::Triangle);
+    }
+    let mut sum_sq = 0f64;
+    let mut max_diff = 0i64;
+    let mut diff = want_diff.then(|| image::RgbaImage::new(a.width(), a.height()));
+    for (i, (pa, pb)) in a.pixels().zip(b.pixels()).enumerate() {
+        let mut dpx = [0u8, 0, 0, 255];
+        for c in 0..3 {
+            let d = (pa.0[c] as i64 - pb.0[c] as i64).abs();
+            sum_sq += (d * d) as f64;
+            max_diff = max_diff.max(d);
+            dpx[c] = d as u8;
+        }
+        if let Some(d) = diff.as_mut() {
+            d.put_pixel((i as u32) % a.width(), (i as u32) / a.width(), image::Rgba(dpx));
+        }
+    }
+    let n = (a.width() * a.height()) as f64 * 3.0;
+    let mse = if n > 0.0 { sum_sq / n } else { 0.0 };
+    let mut out = json!({"mse": mse, "rmse": mse.sqrt(), "max_diff": max_diff, "identical": max_diff == 0});
+    if let Some(d) = diff {
+        out["diff_handle"] = json!(insert_image(DynamicImage::ImageRgba8(d)));
+    }
+    Ok(out)
+}
+
+/// Measure rendered text. opts: size (16), font. Returns `{width, height}`.
+fn op_img_text_size(opts: Value) -> Result<Value> {
+    use ab_glyph::{FontRef, PxScale};
+    let text = req_str(&opts, "text")?;
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(16.0) as f32;
+    let font_bytes: Vec<u8> = match opts.get("font").and_then(Value::as_str) {
+        Some(p) => std::fs::read(p).map_err(|e| anyhow!("font {p}: {e}"))?,
+        None => FONT_BYTES.to_vec(),
+    };
+    let font = FontRef::try_from_slice(&font_bytes).map_err(|_| anyhow!("invalid font"))?;
+    let (w, h) = imageproc::drawing::text_size(PxScale::from(size), &font, text);
+    Ok(json!({"width": w, "height": h}))
+}
+
+/// Mask to the inscribed circle (transparent outside).
+fn op_img_crop_circle(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |img| {
+        let mut buf = img.to_rgba8();
+        let (w, ht) = (buf.width() as f64, buf.height() as f64);
+        let (cx, cy) = (w / 2.0, ht / 2.0);
+        let r = cx.min(cy);
+        for (x, y, px) in buf.enumerate_pixels_mut() {
+            let d = ((x as f64 + 0.5 - cx).powi(2) + (y as f64 + 0.5 - cy).powi(2)).sqrt();
+            if d > r {
+                px.0[3] = 0;
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Round the image corners (transparent outside the rounded rect).
+fn op_img_round_corners(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let r = opts.get("radius").and_then(Value::as_i64).unwrap_or(16);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let (w, ht) = (buf.width() as i64, buf.height() as i64);
+        for y in 0..ht {
+            for x in 0..w {
+                if !in_rrect(x, y, 0, 0, w, ht, r) {
+                    buf.get_pixel_mut(x as u32, y as u32).0[3] = 0;
+                }
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Add a soft drop shadow (grows the canvas). opts: dx (6), dy (6), blur
+/// sigma (4), color (black), opacity 0..1 (0.5).
+fn op_img_drop_shadow(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let dx = opts.get("dx").and_then(Value::as_i64).unwrap_or(6);
+    let dy = opts.get("dy").and_then(Value::as_i64).unwrap_or(6);
+    let sigma = opts.get("blur").and_then(Value::as_f64).unwrap_or(4.0) as f32;
+    let sc = parse_color(opts.get("color"));
+    let opacity = opts.get("opacity").and_then(Value::as_f64).unwrap_or(0.5).clamp(0.0, 1.0);
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (w, ht) = (src.width(), src.height());
+        let pad = (sigma as i64 * 3 + dx.abs().max(dy.abs())).max(1) as u32;
+        let cw = w + 2 * pad;
+        let ch = ht + 2 * pad;
+        // shadow silhouette from src alpha, tinted, then blurred
+        let mut shadow = image::RgbaImage::new(cw, ch);
+        for (x, y, px) in src.enumerate_pixels() {
+            if px.0[3] > 0 {
+                let a = (px.0[3] as f64 * opacity) as u8;
+                let tx = x as i64 + pad as i64 + dx;
+                let ty = y as i64 + pad as i64 + dy;
+                if tx >= 0 && ty >= 0 && (tx as u32) < cw && (ty as u32) < ch {
+                    shadow.put_pixel(tx as u32, ty as u32, image::Rgba([sc.0[0], sc.0[1], sc.0[2], a]));
+                }
+            }
+        }
+        let blurred = image::imageops::blur(&shadow, sigma);
+        let mut canvas = DynamicImage::ImageRgba8(blurred).to_rgba8();
+        image::imageops::overlay(&mut canvas, &src, pad as i64, pad as i64);
+        Ok(DynamicImage::ImageRgba8(canvas))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}

@@ -505,6 +505,79 @@ fn Office::img_from_base64 ($base64) {
     Office::_decode("img_from_base64", office__img_from_base64(to_json({ base64 => $base64 })))
 }
 
+# ── shapes, fills, masks, color analysis ────────────────────────────
+
+## Draw a rounded rectangle. opts: radius (8), fill => 1 (default) or 0
+## (outline, stroke px wide).
+fn Office::img_draw_rounded_rect ($handle, $x, $y, $width, $height, $color, %opts) {
+    Office::_decode("img_draw_rounded_rect",
+        office__img_draw_rounded_rect(to_json({ handle => $handle, x => $x, y => $y, width => $width, height => $height, radius => $opts{radius}, color => $color, fill => $opts{fill}, stroke => $opts{stroke} })))
+}
+
+## Draw an open polyline through $points ([[x,y],...]).
+fn Office::img_draw_polyline ($handle, $points, $color) {
+    Office::_decode("img_draw_polyline",
+        office__img_draw_polyline(to_json({ handle => $handle, points => $points, color => $color })))
+}
+
+## Draw an arc from $start to $end degrees, radius $r at ($x,$y). opts:
+## fill => 1 draws a filled wedge.
+fn Office::img_draw_arc ($handle, $x, $y, $r, $start, $end, $color, %opts) {
+    Office::_decode("img_draw_arc",
+        office__img_draw_arc(to_json({ handle => $handle, x => $x, y => $y, radius => $r, start => $start, end => $end, color => $color, fill => $opts{fill} })))
+}
+
+## Bucket flood fill from seed ($x,$y). opts: tolerance (default 0).
+fn Office::img_flood_fill ($handle, $x, $y, $color, %opts) {
+    Office::_decode("img_flood_fill",
+        office__img_flood_fill(to_json({ handle => $handle, x => $x, y => $y, color => $color, tolerance => $opts{tolerance} })))
+}
+
+## Replace pixels near $from with $to. opts: tolerance (default 16).
+fn Office::img_replace_color ($handle, $from, $to, %opts) {
+    Office::_decode("img_replace_color",
+        office__img_replace_color(to_json({ handle => $handle, from => $from, to => $to, tolerance => $opts{tolerance} })))
+}
+
+## Permute channels by an $order string over r/g/b/a (e.g. "bgr", "grba").
+fn Office::img_swap_channels ($handle, $order) {
+    Office::_decode("img_swap_channels", office__img_swap_channels(to_json({ handle => $handle, order => $order })))
+}
+
+## Top-K dominant colors. opts: count (default 5). Returns { colors =>
+## [{r,g,b,hex,count}] }.
+fn Office::img_dominant_colors ($handle, %opts) {
+    Office::_decode("img_dominant_colors", office__img_dominant_colors(to_json({ handle => $handle, count => $opts{count} })))
+}
+
+## Compare two handles ($other resized to base). Returns { mse, rmse,
+## max_diff, identical }; opts: diff => 1 to also return a diff_handle.
+fn Office::img_compare ($handle, $other, %opts) {
+    Office::_decode("img_compare", office__img_compare(to_json({ handle => $handle, other => $other, diff => $opts{diff} })))
+}
+
+## Measure rendered text. opts: size (16), font. Returns { width, height }.
+fn Office::img_text_size ($text, %opts) {
+    Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))
+}
+
+## Mask to the inscribed circle (transparent outside).
+fn Office::img_crop_circle ($handle) {
+    Office::_decode("img_crop_circle", office__img_crop_circle(to_json({ handle => $handle })))
+}
+
+## Round the image corners (transparent outside). opts: radius (default 16).
+fn Office::img_round_corners ($handle, %opts) {
+    Office::_decode("img_round_corners", office__img_round_corners(to_json({ handle => $handle, radius => $opts{radius} })))
+}
+
+## Add a soft drop shadow (grows the canvas). opts: dx (6), dy (6), blur
+## sigma (4), color (black), opacity 0..1 (0.5).
+fn Office::img_drop_shadow ($handle, %opts) {
+    Office::_decode("img_drop_shadow",
+        office__img_drop_shadow(to_json({ handle => $handle, dx => $opts{dx}, dy => $opts{dy}, blur => $opts{blur}, color => $opts{color}, opacity => $opts{opacity} })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format

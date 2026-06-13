@@ -926,6 +926,47 @@ fn image_animation_drawing_transform_base64() {
 }
 
 #[test]
+fn image_shapes_fills_masks_analysis() {
+    let n = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let h = n["handle"].as_u64().unwrap();
+    for (f, arg) in [
+        (office__img_draw_rounded_rect as extern "C" fn(*const c_char) -> *const c_char,
+         r#"{"handle":H,"x":4,"y":4,"width":40,"height":24,"radius":8,"color":[200,40,40,255]}"#),
+        (office__img_draw_polyline, r#"{"handle":H,"points":[[2,2],[20,40],[50,10]],"color":[0,0,255,255]}"#),
+        (office__img_draw_arc, r#"{"handle":H,"x":32,"y":32,"radius":20,"start":0,"end":270,"fill":true,"color":[0,128,0,200]}"#),
+        (office__img_replace_color, r#"{"handle":H,"from":[255,255,255],"to":[240,240,200],"tolerance":4}"#),
+        (office__img_flood_fill, r#"{"handle":H,"x":0,"y":0,"color":[180,220,255,255],"tolerance":8}"#),
+        (office__img_swap_channels, r#"{"handle":H,"order":"bgr"}"#),
+        (office__img_crop_circle, r#"{"handle":H}"#),
+    ] {
+        let v = call(f, &arg.replace('H', &h.to_string()));
+        assert_eq!(v["ok"], true, "shape/fill op failed: {v}");
+    }
+    // round_corners + drop_shadow report new geometry
+    let rc = call(office__img_round_corners, &format!(r#"{{"handle":{h},"radius":12}}"#));
+    assert_eq!(rc["ok"], true, "round_corners: {rc}");
+    let ds = call(office__img_drop_shadow, &format!(r#"{{"handle":{h},"dx":5,"dy":5,"blur":3}}"#));
+    assert!(ds["width"].as_u64().unwrap() > 64, "drop_shadow grows canvas: {ds}");
+
+    // dominant colors
+    let dc = call(office__img_dominant_colors, &format!(r#"{{"handle":{h},"count":3}}"#));
+    assert!(dc["colors"].as_array().map(|a| !a.is_empty()).unwrap_or(false), "dominant colors: {dc}");
+
+    // text measurement (no handle)
+    let ts = call(office__img_text_size, r#"{"text":"Hello","size":20}"#);
+    assert!(ts["width"].as_u64().unwrap() > 0, "text width measured: {ts}");
+
+    // compare against a copy → identical
+    let copy = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let ch = copy["handle"].as_u64().unwrap();
+    let cmp = call(office__img_compare, &format!(r#"{{"handle":{ch},"other":{ch}}}"#));
+    assert_eq!(cmp["identical"], true, "self-compare identical: {cmp}");
+
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    call(office__img_close, &format!(r#"{{"handle":{ch}}}"#));
+}
+
+#[test]
 fn chart_radar_and_bubble_render() {
     let c = call(
         office__chart_render,
