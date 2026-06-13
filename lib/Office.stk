@@ -184,6 +184,21 @@ fn Office::pdf_fill_form ($path, $values, %opts) {
     Office::_decode("pdf_fill_form", office__pdf_fill_form(to_json(\%r)))
 }
 
+## Read the PDF document outline (bookmarks) as a nested tree. Returns
+## { outline => [{ title, page?, children? }], count }.
+fn Office::pdf_outline ($path) {
+    Office::_decode("pdf_outline", office__pdf_outline(to_json({ path => $path })))
+}
+
+## Set the PDF outline (replacing any existing one). $outline is an arrayref of
+## { title, page (1-based), bold?, italic?, color? [r,g,b 0..1], children? }
+## nodes. opts: output (defaults to $path). Returns { ok, path, count }.
+fn Office::pdf_set_outline ($path, $outline, %opts) {
+    var %r = { path => $path, outline => $outline }
+    if exists $opts{output} { $r{output} = $opts{output} }
+    Office::_decode("pdf_set_outline", office__pdf_set_outline(to_json(\%r)))
+}
+
 ## Read document metadata (core/app properties) from any office or PDF file.
 ## Returns whichever of these are present: title, author, subject, keywords,
 ## description, category, last_modified_by, app, producer, company, created,

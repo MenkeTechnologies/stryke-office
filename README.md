@@ -156,6 +156,8 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_page_numbers($path, $output, %opts)` | `{pages}` | footer page numbers; `format` (`{n}`/`{total}`), `size`/`color`/`y` |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
+| `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |
+| `Office::pdf_set_outline($path, $outline, %opts)` | `{count}` | set bookmarks from a nested `{title,page,children?}` spec |
 
 #### PDF forms
 
@@ -173,6 +175,24 @@ Text/choice fields take a string; checkboxes/radios take a boolean (mapped to
 the widget's on-state) or an explicit state name. Filling flips the AcroForm
 `/NeedAppearances` flag so Acrobat and other conformant viewers regenerate the
 visible field content.
+
+#### PDF outline (bookmarks)
+
+```perl
+# add a navigation tree to a generated report
+Office::pdf_set_outline("report.pdf", [
+    { title => "Summary",  page => 1 },
+    { title => "Details",  page => 2, bold => \1, children => [
+        { title => "Q1", page => 2 },
+        { title => "Q2", page => 4 },
+    ]},
+]);
+my $toc = Office::pdf_outline("report.pdf");   # nested { title, page, children }
+```
+
+Page numbers are 1-based and resolved to page destinations; nodes nest via
+`children`. Reading decodes UTF-16BE titles and follows `/Dest` and `/A` GoTo
+actions back to a page number.
 
 ### Rich formatting
 
@@ -599,6 +619,7 @@ stryke-office/
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
   src/pdf_form.rs        # PDF AcroForm field list + fill (lopdf)
+  src/pdf_outline.rs     # PDF outline/bookmarks read + write (lopdf)
   stryke.toml            # package manifest + [ffi] table
   lib/Office.stk         # stryke wrapper (use Office)
   assets/DejaVuSans.ttf  # vendored font for image text drawing

@@ -73,4 +73,8 @@ assert_ok exists &Office::replace_text, "Office::replace_text exists"
 assert_ok exists &Office::pdf_form_fields, "Office::pdf_form_fields exists"
 assert_ok exists &Office::pdf_fill_form, "Office::pdf_fill_form exists"
 
+# pdf outline
+assert_ok exists &Office::pdf_outline, "Office::pdf_outline exists"
+assert_ok exists &Office::pdf_set_outline, "Office::pdf_set_outline exists"
+
 test_run
