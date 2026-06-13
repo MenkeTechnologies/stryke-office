@@ -309,6 +309,82 @@ fn doc_tables_extracted_from_docx_and_odt() {
 }
 
 #[test]
+fn doc_blocks_ordered_structural_read() {
+    // docx: write headings/paras/table in order, recover the block sequence
+    let dx = tmp("blocks.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Title"}},
+                {{"kind":"para","text":"Body text."}},
+                {{"kind":"table","rows":[["A","B"],["1","2"]]}},
+                {{"kind":"heading","level":2,"text":"Sub"}},
+                {{"kind":"para","text":"End."}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx write: {w}");
+    let b = call(office__doc_blocks, &format!(r#"{{"path":"{dx}"}}"#));
+    let bl = b["blocks"].as_array().expect("blocks array");
+    assert_eq!(b["count"], 5, "five blocks in order: {b}");
+    assert_eq!(bl[0]["kind"], "heading");
+    assert_eq!(bl[0]["level"], 1);
+    assert_eq!(bl[0]["text"], "Title");
+    assert_eq!(bl[1]["kind"], "para");
+    assert_eq!(bl[1]["text"], "Body text.");
+    assert_eq!(bl[2]["kind"], "table");
+    assert_eq!(bl[2]["rows"][1][0], "1", "table cell in order: {b}");
+    assert_eq!(bl[3]["kind"], "heading");
+    assert_eq!(bl[3]["level"], 2);
+    assert_eq!(bl[4]["text"], "End.");
+
+    // odt: hand-built content.xml with heading / para / table in order
+    let od = tmp("blocks.odt");
+    {
+        use std::io::Write as _;
+        use zip::write::SimpleFileOptions;
+        let f = std::fs::File::create(&od).unwrap();
+        let mut zw = zip::ZipWriter::new(f);
+        let opt = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zw.start_file("content.xml", opt).unwrap();
+        zw.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:text>
+  <text:h text:outline-level="1">Heading One</text:h>
+  <text:p>A paragraph.</text:p>
+  <table:table>
+   <table:table-row>
+    <table:table-cell><text:p>x</text:p></table:table-cell>
+    <table:table-cell><text:p>y</text:p></table:table-cell>
+   </table:table-row>
+  </table:table>
+ </office:text></office:body>
+</office:document-content>"#,
+        )
+        .unwrap();
+        zw.finish().unwrap();
+    }
+    let ob = call(office__doc_blocks, &format!(r#"{{"path":"{od}"}}"#));
+    let obl = ob["blocks"].as_array().expect("odt blocks array");
+    assert_eq!(ob["count"], 3, "odt three blocks: {ob}");
+    assert_eq!(obl[0]["kind"], "heading");
+    assert_eq!(obl[0]["level"], 1);
+    assert_eq!(obl[0]["text"], "Heading One");
+    assert_eq!(obl[1]["kind"], "para");
+    assert_eq!(obl[1]["text"], "A paragraph.");
+    assert_eq!(obl[2]["kind"], "table");
+    assert_eq!(obl[2]["rows"][0][1], "y", "odt table cell: {ob}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&od).ok();
+}
+
+#[test]
 fn missing_path_errors_cleanly() {
     let v = call(office__sheet_read, "{}");
     assert_eq!(err_of(&v), "missing path");

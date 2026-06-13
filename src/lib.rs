@@ -1546,6 +1546,7 @@ export!(office__replace_text, op_replace_text);
 // structured document reads (tables) — read-side mirror of doc_write blocks
 include!("doc_struct.rs");
 export!(office__doc_tables, op_doc_tables);
+export!(office__doc_blocks, op_doc_blocks);
 
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");
