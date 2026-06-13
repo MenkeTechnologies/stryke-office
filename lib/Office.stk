@@ -285,6 +285,12 @@ fn Office::slides_merge ($inputs, $output, %opts) {
         office__slides_merge(to_json({ inputs => $inputs, output => $output, format => $opts{format} })))
 }
 
+## Statistics for a presentation (pptx/odp). Returns { slides, words (in slide
+## text), notes_words, per_slide => [{ words, notes_words }] }.
+fn Office::slides_stats ($path) {
+    Office::_decode("slides_stats", office__slides_stats(to_json({ path => $path })))
+}
+
 # ── pdf ─────────────────────────────────────────────────────────────
 
 ## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.

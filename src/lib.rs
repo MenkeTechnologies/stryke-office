@@ -2537,6 +2537,44 @@ fn op_slides_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "slides": n }))
 }
 
+/// Statistics for a presentation (pptx/odp). opts: path. Returns `{ slides,
+/// words (in slide text), notes_words, per_slide: [{ words, notes_words }] }`.
+fn op_slides_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let count_words = |s: &Value, field: &str| -> u64 {
+        s.get(field)
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(|t| t.split_whitespace().count() as u64)
+                    .sum()
+            })
+            .unwrap_or(0)
+    };
+    let (mut words, mut notes_words) = (0u64, 0u64);
+    let mut per_slide = Vec::with_capacity(slides.len());
+    for s in &slides {
+        let w = count_words(s, "text");
+        let nw = count_words(s, "notes");
+        words += w;
+        notes_words += nw;
+        per_slide.push(json!({ "words": w, "notes_words": nw }));
+    }
+    Ok(json!({
+        "slides": slides.len(),
+        "words": words,
+        "notes_words": notes_words,
+        "per_slide": per_slide,
+    }))
+}
+
 // ── pdf (self-contained, via lo_core) ────────────────────────────────────────
 
 fn op_pdf_read(opts: Value) -> Result<Value> {
@@ -2634,6 +2672,7 @@ export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
 export!(office__slides_merge, op_slides_merge);
+export!(office__slides_stats, op_slides_stats);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 
