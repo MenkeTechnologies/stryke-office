@@ -168,6 +168,23 @@ fn Office::pdf_page_numbers ($path, $output, %opts) {
         office__pdf_page_numbers(to_json({ path => $path, output => $output, format => $opts{format}, size => $opts{size}, color => $opts{color}, y => $opts{y} })))
 }
 
+## Read document metadata (core/app properties) from any office or PDF file.
+## Returns whichever of these are present: title, author, subject, keywords,
+## description, category, last_modified_by, app, producer, company, created,
+## modified.
+fn Office::meta_read ($path) {
+    Office::_decode("meta_read", office__meta_read(to_json({ path => $path })))
+}
+
+## Set document metadata, leaving the rest of the file intact. $props is a
+## hashref of the canonical keys (see meta_read). opts: output (defaults to
+## $path, edit in place). Works for OOXML (xlsx/docx/pptx), ODF, and PDF.
+fn Office::meta_write ($path, $props, %opts) {
+    var %r = { path => $path, props => $props }
+    if exists $opts{output} { $r{output} = $opts{output} }
+    Office::_decode("meta_write", office__meta_write(to_json(\%r)))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new
