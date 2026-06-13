@@ -465,6 +465,63 @@ fn slides_read_extracts_speaker_notes() {
 }
 
 #[test]
+fn doc_links_extracted_from_docx_and_odt() {
+    // docx: write a hyperlink block, recover {text,url} via the rels map
+    let dx = tmp("links.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"para","text":"see"}},
+                {{"kind":"link","url":"https://example.com/path","text":"Example"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx write: {w}");
+    let l = call(office__doc_links, &format!(r#"{{"path":"{dx}"}}"#));
+    assert_eq!(l["count"], 1, "one link: {l}");
+    assert_eq!(l["links"][0]["text"], "Example", "link text: {l}");
+    assert_eq!(
+        l["links"][0]["url"], "https://example.com/path",
+        "link url: {l}"
+    );
+
+    // odt: hand-built content.xml with a text:a whose href contains an entity
+    let od = tmp("links.odt");
+    {
+        use std::io::Write as _;
+        use zip::write::SimpleFileOptions;
+        let f = std::fs::File::create(&od).unwrap();
+        let mut zw = zip::ZipWriter::new(f);
+        let opt = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zw.start_file("content.xml", opt).unwrap();
+        zw.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink">
+ <office:body><office:text>
+  <text:p>go <text:a xlink:href="https://ex.com/?a=1&amp;b=2">here</text:a></text:p>
+ </office:text></office:body>
+</office:document-content>"#,
+        )
+        .unwrap();
+        zw.finish().unwrap();
+    }
+    let ol = call(office__doc_links, &format!(r#"{{"path":"{od}"}}"#));
+    assert_eq!(ol["count"], 1, "odt one link: {ol}");
+    assert_eq!(ol["links"][0]["text"], "here", "odt link text: {ol}");
+    assert_eq!(
+        ol["links"][0]["url"], "https://ex.com/?a=1&b=2",
+        "odt href unescaped: {ol}"
+    );
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&od).ok();
+}
+
+#[test]
 fn missing_path_errors_cleanly() {
     let v = call(office__sheet_read, "{}");
     assert_eq!(err_of(&v), "missing path");

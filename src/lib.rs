@@ -113,6 +113,42 @@ fn rels_relationship_target(rels_xml: &[u8], type_suffix: &str) -> Option<String
     }
 }
 
+/// Build an `Id` → `Target` map of every `Relationship` in a `.rels` part.
+/// `Target` values are XML-unescaped (so `&amp;` in a URL comes back as `&`).
+fn rels_id_target_map(rels_xml: &[u8]) -> std::collections::HashMap<String, String> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(rels_xml);
+    let mut buf = Vec::new();
+    let mut map = std::collections::HashMap::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Empty(e)) | Ok(Event::Start(e)) if e.name().as_ref() == b"Relationship" => {
+                let mut id = None;
+                let mut target = None;
+                for a in e.attributes().flatten() {
+                    match a.key.as_ref() {
+                        b"Id" => id = Some(String::from_utf8_lossy(&a.value).into_owned()),
+                        b"Target" => {
+                            target = a
+                                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .ok()
+                                .map(|c| c.into_owned())
+                        }
+                        _ => {}
+                    }
+                }
+                if let (Some(i), Some(t)) = (id, target) {
+                    map.insert(i, t);
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    map
+}
+
 /// Resolve a relationship `Target` (which may be `../`-relative or root-absolute
 /// `/...`) against the directory of the part that referenced it, into a
 /// zip-entry path (e.g. base `ppt/slides`, target `../notesSlides/n1.xml` →
@@ -1656,6 +1692,7 @@ export!(office__replace_text, op_replace_text);
 include!("doc_struct.rs");
 export!(office__doc_tables, op_doc_tables);
 export!(office__doc_blocks, op_doc_blocks);
+export!(office__doc_links, op_doc_links);
 
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");

@@ -341,6 +341,123 @@ fn extract_blocks_odt(xml: &[u8]) -> Vec<Value> {
     blocks
 }
 
+// ── hyperlinks ────────────────────────────────────────────────────────────────
+
+/// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display
+/// text inline; the URL lives in `word/_rels/document.xml.rels` keyed by that
+/// id. Internal `w:anchor` links return `#anchor` as the URL.
+fn extract_links_docx(doc_xml: &[u8], rels_xml: &[u8]) -> Vec<Value> {
+    use quick_xml::events::Event;
+    let map = rels_id_target_map(rels_xml);
+    let mut reader = quick_xml::Reader::from_reader(doc_xml);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut url = String::new();
+    let mut text = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) if e.name().as_ref() == b"w:hyperlink" => {
+                depth += 1;
+                if depth == 1 {
+                    text.clear();
+                    url = match attr(&e, b"r:id") {
+                        Some(rid) => map.get(&rid).cloned().unwrap_or_default(),
+                        None => attr(&e, b"w:anchor").map(|a| format!("#{a}")).unwrap_or_default(),
+                    };
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if depth > 0 {
+                    if let Ok(t) = e.xml10_content() {
+                        text.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::End(e)) if e.name().as_ref() == b"w:hyperlink" => {
+                depth -= 1;
+                if depth == 0 {
+                    out.push(json!({
+                        "text": std::mem::take(&mut text),
+                        "url": std::mem::take(&mut url),
+                    }));
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// Extract hyperlinks from an odt: `<text:a xlink:href="…">display</text:a>`.
+fn extract_links_odt(xml: &[u8]) -> Vec<Value> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut url = String::new();
+    let mut text = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) if e.name().as_ref() == b"text:a" => {
+                depth += 1;
+                if depth == 1 {
+                    text.clear();
+                    url = e
+                        .attributes()
+                        .flatten()
+                        .find(|a| a.key.as_ref() == b"xlink:href")
+                        .and_then(|a| {
+                            a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .ok()
+                                .map(|c| c.into_owned())
+                        })
+                        .unwrap_or_default();
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if depth > 0 {
+                    if let Ok(t) = e.xml10_content() {
+                        text.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::End(e)) if e.name().as_ref() == b"text:a" => {
+                depth -= 1;
+                if depth == 0 {
+                    out.push(json!({
+                        "text": std::mem::take(&mut text),
+                        "url": std::mem::take(&mut url),
+                    }));
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// Extract every hyperlink from a docx/odt as `{ links: [{text, url}], count }`.
+fn op_doc_links(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let bytes = std::fs::read(path)?;
+    let links = match ext_of(path).as_str() {
+        "docx" => {
+            let doc = read_zip_entry(&bytes, "word/document.xml")?;
+            let rels = read_zip_entry(&bytes, "word/_rels/document.xml.rels").unwrap_or_default();
+            extract_links_docx(&doc, &rels)
+        }
+        "odt" => extract_links_odt(&read_zip_entry(&bytes, "content.xml")?),
+        other => return Err(anyhow!("unsupported document link format: {other}")),
+    };
+    Ok(json!({ "links": links, "count": links.len() }))
+}
+
 /// Ordered structural read of a docx/odt: `{ blocks: [{kind:"heading",level,
 /// text} | {kind:"para",text} | {kind:"table",rows}], count }`, in document
 /// order. The read-side mirror of `doc_write`'s block model.
