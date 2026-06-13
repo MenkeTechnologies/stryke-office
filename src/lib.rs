@@ -502,6 +502,7 @@ fn write_xlsx(path: &str, sheets: &[Value]) -> Result<()> {
             ws.add_table(t[0], t[1] as u16, t[2], t[3] as u16, &Table::new())?;
         }
         write_xlsx_charts(ws, &name, s)?;
+        write_xlsx_cond_val(ws, s)?;
     }
     wb.save(path)?;
     Ok(())

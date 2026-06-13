@@ -700,6 +700,61 @@ fn sankey_renders_raster_and_svg() {
 }
 
 #[test]
+fn chart_radar_and_bubble_render() {
+    let c = call(
+        office__chart_render,
+        r#"{"type":"radar","width":400,"height":400,"categories":["a","b","c","d","e"],"series":[{"name":"s","data":[4,8,2,6,5]}]}"#,
+    );
+    let h = c["handle"].as_u64().expect("radar handle");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    let v = call(
+        office__chart_svg,
+        r#"{"type":"radar","categories":["a","b","c"],"series":[{"data":[3,5,2]},{"data":[4,1,6]}]}"#,
+    );
+    assert!(
+        v["svg"].as_str().unwrap_or("").contains("<polygon"),
+        "radar svg polygons"
+    );
+    let cb = call(
+        office__chart_render,
+        r#"{"type":"bubble","series":[{"data":[[1,2,10],[3,5,30],[6,1,20]]}]}"#,
+    );
+    let hb = cb["handle"].as_u64().expect("bubble handle");
+    call(office__img_close, &format!(r#"{{"handle":{hb}}}"#));
+    let vb = call(
+        office__chart_svg,
+        r#"{"type":"bubble","series":[{"data":[[1,2,10],[3,5,30]]}]}"#,
+    );
+    assert!(
+        vb["svg"].as_str().unwrap_or("").contains("<circle"),
+        "bubble svg circles"
+    );
+}
+
+#[test]
+fn xlsx_conditional_format_and_validation() {
+    let path = tmp("cv.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r##"{{"path":"{path}","sheets":[{{
+                "name":"S",
+                "rows":[["score"],[95],[40],[70]],
+                "conditional":[{{"range":[1,0,3,0],"rule":"greater_than","value":80,"format":{{"bold":true,"bg":"#C6EFCE"}}}}],
+                "validations":[{{"range":[1,1,3,1],"list":["yes","no","maybe"]}}]
+            }}]}}"##
+        ),
+    );
+    assert_eq!(w["ok"], true, "conditional/validation write failed: {w}");
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(
+        r["sheets"][0]["rows"][1][0], 95.0,
+        "data intact with conditional+validation"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn chart_missing_series_errors() {
     let v = call(office__chart_render, r#"{"type":"bar"}"#);
     assert!(

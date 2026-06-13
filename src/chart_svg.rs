@@ -57,17 +57,22 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         s.push_str("</svg>");
         return Ok(s);
     }
+    if kind == "radar" {
+        svg_radar(&mut s, series, &cats, w, h);
+        s.push_str("</svg>");
+        return Ok(s);
+    }
 
     let (l, r, t, b) = (60.0, w - 24.0, 44.0, h - 40.0);
     let pw = (r - l).max(1.0);
     let ph = (b - t).max(1.0);
-    let scatter = kind == "scatter";
+    let scatter = kind == "scatter" || kind == "bubble";
 
     let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
     let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
     if scatter {
         for ser in series {
-            for (x, y) in series_points(ser) {
+            for (x, y, _) in series_points3(ser) {
                 ymin = ymin.min(y);
                 ymax = ymax.max(y);
                 xmin = xmin.min(x);
@@ -104,6 +109,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
     match kind {
         "line" | "area" => svg_line_area(&mut s, series, l, pw, &yp, b, kind == "area"),
         "scatter" => svg_scatter(&mut s, series, l, pw, xmin, xmax, &yp),
+        "bubble" => svg_bubble(&mut s, series, l, pw, xmin, xmax, &yp),
         "histogram" => svg_histogram(&mut s, series, opts, l, pw, t, b),
         "stacked" | "stacked_bar" => svg_bars(&mut s, series, &cats, l, pw, &yp, true),
         _ => svg_bars(&mut s, series, &cats, l, pw, &yp, false),
@@ -179,6 +185,50 @@ fn svg_scatter(s: &mut String, series: &[Value], l: f64, pw: f64, xmin: f64, xma
             let px = l + (x - xmin) / (xmax - xmin) * pw;
             let _ = write!(s, r##"<circle cx="{px:.1}" cy="{:.1}" r="4" fill="{col}"/>"##, yp(y));
         }
+    }
+}
+
+fn svg_bubble(s: &mut String, series: &[Value], l: f64, pw: f64, xmin: f64, xmax: f64, yp: &dyn Fn(f64) -> f64) {
+    let maxs = series.iter().flat_map(series_points3).map(|(_, _, z)| z).fold(1.0f64, f64::max);
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        for (x, y, z) in series_points3(ser) {
+            let px = l + (x - xmin) / (xmax - xmin) * pw;
+            let r = ((z / maxs).sqrt() * 24.0).max(2.0);
+            let _ = write!(s, r##"<circle cx="{px:.1}" cy="{:.1}" r="{r:.1}" fill="{col}" fill-opacity="0.6"/>"##, yp(y));
+        }
+    }
+}
+
+fn svg_radar(s: &mut String, series: &[Value], cats: &[String], w: f64, h: f64) {
+    let nax = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0).max(cats.len());
+    if nax < 3 {
+        return;
+    }
+    let (cx, cy) = (w / 2.0, h / 2.0 + 8.0);
+    let radius = (w.min(h) / 2.0 - 40.0).max(20.0);
+    let maxv = series.iter().flat_map(series_nums).fold(1.0f64, f64::max);
+    let ang = |i: usize| -std::f64::consts::FRAC_PI_2 + i as f64 / nax as f64 * std::f64::consts::TAU;
+    for ring in 1..=4 {
+        let rr = radius * ring as f64 / 4.0;
+        let pts: String = (0..nax).map(|i| format!("{:.1},{:.1} ", cx + rr * ang(i).cos(), cy + rr * ang(i).sin())).collect();
+        let _ = write!(s, r##"<polygon points="{pts}" fill="none" stroke="#d2d2d2"/>"##);
+    }
+    for i in 0..nax {
+        let (x, y) = (cx + radius * ang(i).cos(), cy + radius * ang(i).sin());
+        let _ = write!(s, r##"<line x1="{cx:.1}" y1="{cy:.1}" x2="{x:.1}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        if let Some(c) = cats.get(i) {
+            let _ = write!(s, r##"<text x="{x:.1}" y="{y:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, xml_escape(c));
+        }
+    }
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let data = series_nums(ser);
+        let pts: String = data.iter().enumerate().map(|(i, v)| {
+            let rr = v / maxv * radius;
+            format!("{:.1},{:.1} ", cx + rr * ang(i).cos(), cy + rr * ang(i).sin())
+        }).collect();
+        let _ = write!(s, r##"<polygon points="{pts}" fill="{col}" fill-opacity="0.3" stroke="{col}" stroke-width="2"/>"##);
     }
 }
 

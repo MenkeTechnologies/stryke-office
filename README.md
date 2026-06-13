@@ -170,6 +170,9 @@ Office::sheet_write("s.xlsx", [{
     freeze      => [1, 0],               # freeze top row
     autofilter  => [0,0,2,1],
     table       => [0,0,2,1],            # styled worksheet table
+    conditional => [{ range => [1,0,2,1], rule => "greater_than", value => 80,
+                      format => { bold => 1, bg => "#C6EFCE" } }],
+    validations => [{ range => [1,1,2,1], list => ["yes","no","maybe"] }],  # dropdown
 }])
 
 # docx structure: tables, inline images, page breaks, page setup
@@ -204,8 +207,8 @@ for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
 ```
 
 Chart types: `bar`/`column`, `stacked`, `line`, `area`, `scatter` (`data` is
-`[[x,y],…]`), `pie`, `donut`, `histogram` (opt `bins`), `sankey`
-(`nodes`/`links` instead of series). opts: `title`, `width` (800), `height`
+`[[x,y],…]`), `bubble` (`[[x,y,size],…]`), `pie`, `donut`, `histogram` (opt
+`bins`), `radar`, `sankey` (`nodes`/`links` instead of series). opts: `title`, `width` (800), `height`
 (600), `categories`, per-series `color`.
 
 **Raster and vector output, any format.** Three entry points:

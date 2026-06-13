@@ -38,6 +38,25 @@ fn series_nums(s: &Value) -> Vec<f64> {
         .unwrap_or_default()
 }
 
+/// Bubble points of a series (`data:[[x,y,size],...]`).
+fn series_points3(s: &Value) -> Vec<(f64, f64, f64)> {
+    s.get("data")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| {
+                    let p = p.as_array()?;
+                    Some((
+                        p.first()?.as_f64()?,
+                        p.get(1)?.as_f64()?,
+                        p.get(2).and_then(Value::as_f64).unwrap_or(6.0),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Scatter points of a series (`data:[[x,y],...]`).
 fn series_points(s: &Value) -> Vec<(f64, f64)> {
     s.get("data")
@@ -58,6 +77,46 @@ fn series_color(s: &Value, i: usize) -> Rgba<u8> {
         Some(c) => parse_color(Some(c)),
         None => palette(i),
     }
+}
+
+/// Conditional formatting + data validation declared on a sheet:
+/// `conditional:[{range:[r1,c1,r2,c2], rule, value, value2?, format:{…}}]`
+/// `validations:[{range:[r1,c1,r2,c2], list:[strings]}]`.
+fn write_xlsx_cond_val(ws: &mut rust_xlsxwriter::Worksheet, s: &Value) -> Result<()> {
+    use rust_xlsxwriter::{ConditionalFormatCell, ConditionalFormatCellRule, DataValidation};
+    if let Some(conds) = s.get("conditional").and_then(Value::as_array) {
+        for c in conds {
+            let Some(rng) = quad(c, "range") else { continue };
+            let v = c.get("value").and_then(Value::as_f64).unwrap_or(0.0);
+            let v2 = c.get("value2").and_then(Value::as_f64).unwrap_or(0.0);
+            let rule = match c.get("rule").and_then(Value::as_str).unwrap_or("greater_than") {
+                "less_than" => ConditionalFormatCellRule::LessThan(v),
+                "greater_equal" => ConditionalFormatCellRule::GreaterThanOrEqualTo(v),
+                "less_equal" => ConditionalFormatCellRule::LessThanOrEqualTo(v),
+                "equal" => ConditionalFormatCellRule::EqualTo(v),
+                "not_equal" => ConditionalFormatCellRule::NotEqualTo(v),
+                "between" => ConditionalFormatCellRule::Between(v, v2),
+                "not_between" => ConditionalFormatCellRule::NotBetween(v, v2),
+                _ => ConditionalFormatCellRule::GreaterThan(v),
+            };
+            let mut cf = ConditionalFormatCell::new().set_rule(rule);
+            if let Some(fmt) = c.get("format").and_then(Value::as_object).and_then(xlsx_format) {
+                cf = cf.set_format(fmt);
+            }
+            ws.add_conditional_format(rng[0], rng[1] as u16, rng[2], rng[3] as u16, &cf)?;
+        }
+    }
+    if let Some(vals) = s.get("validations").and_then(Value::as_array) {
+        for v in vals {
+            let Some(rng) = quad(v, "range") else { continue };
+            if let Some(list) = v.get("list").and_then(Value::as_array) {
+                let items: Vec<String> = list.iter().map(cell_to_string).collect();
+                let dv = DataValidation::new().allow_list_strings(&items)?;
+                ws.add_data_validation(rng[0], rng[1] as u16, rng[2], rng[3] as u16, &dv)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn op_chart_render(opts: Value) -> Result<Value> {
@@ -95,6 +154,11 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     if opts.get("series").and_then(Value::as_array).is_none() {
         return Err(anyhow!("missing series (expected array)"));
     }
+    if kind == "radar" {
+        render_radar(&mut img, &fnt, series, &cats, l, t, r, b, black, grid);
+        let handle = insert_image(DynamicImage::ImageRgba8(img));
+        return Ok(json!({"handle": handle, "width": w, "height": h, "type": kind}));
+    }
     if kind == "pie" || kind == "donut" || kind == "doughnut" {
         render_pie(&mut img, series, l, t, r, b, kind != "pie");
         let handle = insert_image(DynamicImage::ImageRgba8(img));
@@ -105,12 +169,12 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     draw_line_segment_mut(&mut img, (l as f32, b as f32), (r as f32, b as f32), black); // x axis
     draw_line_segment_mut(&mut img, (l as f32, t as f32), (l as f32, b as f32), black); // y axis
 
-    let scatter = kind == "scatter";
+    let scatter = kind == "scatter" || kind == "bubble";
     let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
     let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
     if scatter {
         for s in series {
-            for (x, y) in series_points(s) {
+            for (x, y, _) in series_points3(s) {
                 ymin = ymin.min(y);
                 ymax = ymax.max(y);
                 xmin = xmin.min(x);
@@ -145,6 +209,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     match kind.as_str() {
         "line" | "area" => render_line_area(&mut img, series, l, r, b, ymin, ymax, kind == "area"),
         "scatter" => render_scatter(&mut img, series, l as f64, pw, xmin, xmax, yp),
+        "bubble" => render_bubble(&mut img, series, l as f64, pw, xmin, xmax, yp),
         "histogram" => render_histogram(&mut img, &fnt, series, &opts, l, pw, t, b, black),
         "stacked" | "stacked_bar" => {
             render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black, true)
@@ -329,6 +394,91 @@ fn render_scatter(
         for (x, y) in series_points(s) {
             let px = l + (x - xmin) / (xmax - xmin) * pw;
             draw_filled_circle_mut(img, (px as i32, yp(y) as i32), 4, color);
+        }
+    }
+}
+
+fn render_bubble(
+    img: &mut RgbaImage,
+    series: &[Value],
+    l: f64,
+    pw: f64,
+    xmin: f64,
+    xmax: f64,
+    yp: impl Fn(f64) -> f32,
+) {
+    let maxs = series
+        .iter()
+        .flat_map(series_points3)
+        .map(|(_, _, s)| s)
+        .fold(1.0f64, f64::max);
+    for (si, s) in series.iter().enumerate() {
+        let mut color = series_color(s, si);
+        color.0[3] = 150;
+        for (x, y, sz) in series_points3(s) {
+            let px = l + (x - xmin) / (xmax - xmin) * pw;
+            let r = (sz / maxs).sqrt() * 24.0;
+            draw_filled_circle_mut(img, (px as i32, yp(y) as i32), r.max(2.0) as i32, color);
+        }
+    }
+}
+
+/// Radar/spider chart: each category is a spoke; each series is a polygon of
+/// its values around the spokes.
+#[allow(clippy::too_many_arguments)]
+fn render_radar(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    cats: &[String],
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let nax = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0).max(cats.len());
+    if nax < 3 {
+        return;
+    }
+    let cx = (l + r) / 2;
+    let cy = (t + b) / 2;
+    let radius = ((r - l).min(b - t) / 2 - 20).max(20) as f64;
+    let maxv = series.iter().flat_map(series_nums).fold(1.0f64, f64::max);
+    let ang = |i: usize| -std::f64::consts::FRAC_PI_2 + i as f64 / nax as f64 * std::f64::consts::TAU;
+    // rings + spokes
+    for ring in 1..=4 {
+        let rr = radius * ring as f64 / 4.0;
+        let pts: Vec<Point<i32>> = (0..nax)
+            .map(|i| Point::new(cx + (rr * ang(i).cos()) as i32, cy + (rr * ang(i).sin()) as i32))
+            .collect();
+        for i in 0..nax {
+            let a = pts[i];
+            let bb = pts[(i + 1) % nax];
+            draw_line_segment_mut(img, (a.x as f32, a.y as f32), (bb.x as f32, bb.y as f32), grid);
+        }
+    }
+    for i in 0..nax {
+        let x = cx + (radius * ang(i).cos()) as i32;
+        let y = cy + (radius * ang(i).sin()) as i32;
+        draw_line_segment_mut(img, (cx as f32, cy as f32), (x as f32, y as f32), grid);
+        if let Some(c) = cats.get(i) {
+            draw_text_mut(img, black, x - 10, y - 6, PxScale::from(11.0), fnt, c);
+        }
+    }
+    // series polygons (outline via line segments)
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        let data = series_nums(s);
+        let pt = |i: usize, v: f64| {
+            let rr = v / maxv * radius;
+            (cx as f32 + (rr * ang(i).cos()) as f32, cy as f32 + (rr * ang(i).sin()) as f32)
+        };
+        for i in 0..data.len() {
+            let a = pt(i, data[i]);
+            let bb = pt((i + 1) % data.len(), data[(i + 1) % data.len()]);
+            draw_line_segment_mut(img, a, bb, color);
         }
     }
 }
