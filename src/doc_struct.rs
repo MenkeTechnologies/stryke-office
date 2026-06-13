@@ -447,6 +447,57 @@ fn op_doc_append(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "blocks": total, "added": added }))
 }
 
+/// Split a document into multiple files at headings of a given level. opts:
+/// path, dir => output directory, level => heading level to split at (default
+/// 1), format => output extension (default: the source's), prefix => filename
+/// stem (default: the source's). Each section starts at a split heading; any
+/// content before the first heading becomes its own file. Files are
+/// `{dir}/{prefix}-{n}.{ext}`. Returns `{ count, files }`.
+fn op_doc_split(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let level = opts.get("level").and_then(Value::as_u64).unwrap_or(1);
+    let ext = opts
+        .get("format")
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| ext_of(path));
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("section")
+                .to_string()
+        });
+
+    let blocks = doc_blocks_or_paras(path)?;
+    let mut sections: Vec<Vec<Value>> = Vec::new();
+    let mut cur: Vec<Value> = Vec::new();
+    for b in blocks {
+        let is_split = b.get("kind").and_then(Value::as_str) == Some("heading")
+            && b.get("level").and_then(Value::as_u64) == Some(level);
+        if is_split && !cur.is_empty() {
+            sections.push(std::mem::take(&mut cur));
+        }
+        cur.push(b);
+    }
+    if !cur.is_empty() {
+        sections.push(cur);
+    }
+
+    let mut files = Vec::new();
+    for (i, sec) in sections.into_iter().enumerate() {
+        let out = format!("{dir}/{prefix}-{}.{ext}", i + 1);
+        op_doc_write(json!({ "path": out, "blocks": sec, "format": ext }))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
+
 // ── full-text search (documents + presentations) ──────────────────────────────
 
 /// Search a document's paragraphs (docx/odt/html/md/rtf/txt) or pdf lines.
