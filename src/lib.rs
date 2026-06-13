@@ -1961,6 +1961,70 @@ fn op_sheet_dedupe(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "kept": kept_n, "removed": total - kept_n }))
 }
 
+/// Append rows to an existing sheet. opts: path, output (default: in place),
+/// sheet => name/index (default first), and either `rows` => [[…], …] (raw rows)
+/// or `records` => [{…}] (mapped to the sheet's existing header field order),
+/// format. Returns `{ ok, path, added, rows }` (rows = new total).
+fn op_sheet_append(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let to_add: Vec<Value> = if let Some(raw) = opts.get("rows").and_then(Value::as_array) {
+        raw.clone()
+    } else if let Some(recs) = opts.get("records").and_then(Value::as_array) {
+        let fields: Vec<String> = rows
+            .first()
+            .and_then(Value::as_array)
+            .map(|h| h.iter().map(cell_to_string).collect())
+            .unwrap_or_default();
+        recs.iter()
+            .map(|rec| {
+                Value::Array(
+                    fields
+                        .iter()
+                        .map(|f| rec.get(f).cloned().unwrap_or(Value::Null))
+                        .collect(),
+                )
+            })
+            .collect()
+    } else {
+        return Err(anyhow!("need rows or records to append"));
+    };
+
+    let added = to_add.len();
+    rows.extend(to_add);
+    let total = rows.len();
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "added": added, "rows": total }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -2667,6 +2731,7 @@ export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
+export!(office__sheet_append, op_sheet_append);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

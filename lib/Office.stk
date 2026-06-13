@@ -161,6 +161,15 @@ fn Office::sheet_transpose ($path, $output, %opts) {
         office__sheet_transpose(to_json({ path => $path, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Append rows to an existing sheet. Provide either rows => [[...], ...] (raw)
+## or records => [{...}] (mapped to the sheet's header). opts: output (default:
+## in place), sheet => name/index, format => override. Returns { ok, path,
+## added, rows }.
+fn Office::sheet_append ($path, %opts) {
+    Office::_decode("sheet_append",
+        office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns

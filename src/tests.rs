@@ -227,6 +227,45 @@ fn sheet_write_html_and_markdown_tables() {
 }
 
 #[test]
+fn sheet_append_rows_and_records() {
+    let path = tmp("app.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["a",1]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // append raw rows
+    let out = tmp("app_rows.xlsx");
+    let r = call(
+        office__sheet_append,
+        &format!(r#"{{"path":"{path}","rows":[["b",2],["c",3]],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["added"], 2, "added 2: {r}");
+    assert_eq!(r["rows"], 4, "4 total rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(rd["sheets"][0]["rows"][3][0], "c", "appended row c: {rd}");
+
+    // append records mapped to header (note column order honored)
+    let out2 = tmp("app_recs.xlsx");
+    let r2 = call(
+        office__sheet_append,
+        &format!(r#"{{"path":"{path}","records":[{{"qty":9,"name":"z"}}],"output":"{out2}"}}"#),
+    );
+    assert_eq!(r2["added"], 1, "added 1 record: {r2}");
+    let rd2 = call(office__sheet_read, &format!(r#"{{"path":"{out2}"}}"#));
+    let last = &rd2["sheets"][0]["rows"][2];
+    assert_eq!(last[0], "z", "record name -> col0: {rd2}");
+    assert_eq!(last[1], 9.0, "record qty -> col1: {rd2}");
+
+    for f in [&path, &out, &out2] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_dedupe_rows() {
     let path = tmp("dedup.xlsx");
     let w = call(
