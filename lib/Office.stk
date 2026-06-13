@@ -336,6 +336,14 @@ fn Office::pdf_search ($path, $query, %opts) {
         office__pdf_search(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case} })))
 }
 
+## Split a PDF into one file per page, written to $dir as {prefix}-{n}.pdf.
+## opts: prefix => filename stem (default: the source's stem). Returns
+## { count, files }.
+fn Office::pdf_burst ($path, $dir, %opts) {
+    Office::_decode("pdf_burst",
+        office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
+}
+
 ## Delete pages from a PDF. $pages is an arrayref of 1-based page numbers to
 ## remove. Returns { ok, path, pages } (remaining count).
 fn Office::pdf_delete ($path, $pages, $output) {

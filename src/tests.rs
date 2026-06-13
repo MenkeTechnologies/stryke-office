@@ -1784,6 +1784,47 @@ fn pdf_search_finds_text_per_page() {
 }
 
 #[test]
+fn pdf_burst_one_file_per_page() {
+    let src = tmp("burst.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Alpha"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Bravo"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Charlie"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let dir = tmp("burst_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__pdf_burst,
+        &format!(r#"{{"path":"{src}","dir":"{dir}","prefix":"pg"}}"#),
+    );
+    assert_eq!(r["count"], 3, "three files: {r}");
+
+    // each output is a single page; page 2 carries Bravo
+    let files = r["files"].as_array().unwrap();
+    for f in files {
+        let info = call(office__pdf_info, &format!(r#"{{"path":{f}}}"#));
+        assert_eq!(info["pages"], 1, "single page each: {info}");
+    }
+    let p2 = call(office__pdf_read, &format!(r#"{{"path":"{dir}/pg-2.pdf"}}"#));
+    assert!(
+        p2["text"].as_str().unwrap_or("").contains("Bravo"),
+        "page 2 file holds Bravo: {p2}"
+    );
+
+    std::fs::remove_file(&src).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(
