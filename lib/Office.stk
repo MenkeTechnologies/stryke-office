@@ -78,6 +78,15 @@ fn Office::sheet_stats ($path, %opts) {
         office__sheet_stats(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Find cells matching $query across a workbook. opts: ignore_case => 1,
+## whole => 1 (exact cell match instead of substring), sheet => restrict to one
+## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
+## with 1-based row/col and an A1-style ref.
+fn Office::sheet_find ($path, $query, %opts) {
+    Office::_decode("sheet_find",
+        office__sheet_find(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case}, whole => $opts{whole}, sheet => $opts{sheet} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

@@ -1193,6 +1193,87 @@ fn op_sheet_stats(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
+fn col_letters(mut c: usize) -> String {
+    let mut s = String::new();
+    loop {
+        s.insert(0, (b'A' + (c % 26) as u8) as char);
+        if c < 26 {
+            break;
+        }
+        c = c / 26 - 1;
+    }
+    s
+}
+
+/// Find cells matching a query across a workbook. opts: path, query (required),
+/// ignore_case (default false), whole (exact cell match vs substring; default
+/// false), sheet (restrict to one sheet name). Returns `{ matches: [{ sheet,
+/// row, col, ref, value }], count }` with 1-based row/col and an A1 `ref`.
+fn op_sheet_find(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let query = req_str(&opts, "query")?;
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let whole = opts.get("whole").and_then(Value::as_bool).unwrap_or(false);
+    let restrict = opts.get("sheet").and_then(Value::as_str);
+    let needle = if ignore_case {
+        query.to_lowercase()
+    } else {
+        query.to_string()
+    };
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut matches = Vec::new();
+    for s in &sheets {
+        let sname = s["name"].as_str().unwrap_or("");
+        if restrict.is_some_and(|r| r != sname) {
+            continue;
+        }
+        let Some(rows) = s["rows"].as_array() else {
+            continue;
+        };
+        for (ri, row) in rows.iter().enumerate() {
+            let Some(cells) = row.as_array() else {
+                continue;
+            };
+            for (ci, cell) in cells.iter().enumerate() {
+                let val = cell_to_string(cell);
+                if val.is_empty() {
+                    continue;
+                }
+                let hay = if ignore_case {
+                    val.to_lowercase()
+                } else {
+                    val.clone()
+                };
+                let hit = if whole {
+                    hay == needle
+                } else {
+                    hay.contains(&needle)
+                };
+                if hit {
+                    matches.push(json!({
+                        "sheet": sname,
+                        "row": ri + 1,
+                        "col": ci + 1,
+                        "ref": format!("{}{}", col_letters(ci), ri + 1),
+                        "value": val,
+                    }));
+                }
+            }
+        }
+    }
+    Ok(json!({ "count": matches.len(), "matches": matches }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -1799,6 +1880,7 @@ export!(office__sheet_read, op_sheet_read);
 export!(office__sheet_write, op_sheet_write);
 export!(office__sheet_merge, op_sheet_merge);
 export!(office__sheet_stats, op_sheet_stats);
+export!(office__sheet_find, op_sheet_find);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
