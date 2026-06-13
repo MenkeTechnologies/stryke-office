@@ -1671,6 +1671,110 @@ fn barcode_1d_symbologies() {
 }
 
 #[test]
+fn meta_xlsx_round_trips() {
+    let path = tmp("meta.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["a",1]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "{w}");
+    let m = call(
+        office__meta_write,
+        &format!(
+            r#"{{"path":"{path}","props":{{"title":"Q2 Report","author":"Jacob","subject":"sales","keywords":"q2,sales","company":"MenkeTechnologies"}}}}"#
+        ),
+    );
+    assert_eq!(m["ok"], true, "meta_write: {m}");
+    let r = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["title"], "Q2 Report", "{r}");
+    assert_eq!(r["author"], "Jacob");
+    assert_eq!(r["subject"], "sales");
+    assert_eq!(r["keywords"], "q2,sales");
+    assert_eq!(r["company"], "MenkeTechnologies", "app.xml company: {r}");
+    // file is still a readable workbook after the rewrite
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["sheets"][0]["rows"][0][1], 1.0, "data intact: {s}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn meta_docx_merges_without_clobber() {
+    let path = tmp("meta.docx");
+    call(
+        office__doc_write,
+        &format!(r#"{{"path":"{path}","blocks":[{{"kind":"para","text":"hi"}}]}}"#),
+    );
+    // set title only ...
+    call(
+        office__meta_write,
+        &format!(r#"{{"path":"{path}","props":{{"title":"First"}}}}"#),
+    );
+    // ... then author only; title must survive the second rewrite
+    call(
+        office__meta_write,
+        &format!(r#"{{"path":"{path}","props":{{"author":"JM"}}}}"#),
+    );
+    let r = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["title"], "First", "title preserved across merge: {r}");
+    assert_eq!(r["author"], "JM", "{r}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn meta_pdf_info_dict() {
+    let path = tmp("meta.pdf");
+    call(
+        office__pdf_write,
+        &format!(r#"{{"path":"{path}","lines":["body"]}}"#),
+    );
+    let out = tmp("meta-out.pdf");
+    let m = call(
+        office__meta_write,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","props":{{"title":"Spec","author":"JM","created":"2026-06-13T12:00:00Z"}}}}"#
+        ),
+    );
+    assert_eq!(m["ok"], true, "{m}");
+    let r = call(office__meta_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(r["title"], "Spec", "{r}");
+    assert_eq!(r["author"], "JM");
+    assert_eq!(r["created"], "D:20260613120000", "iso -> pdf date: {r}");
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn meta_ods_round_trips() {
+    let path = tmp("meta.ods");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["a","b"]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "{w}");
+    let m = call(
+        office__meta_write,
+        &format!(r#"{{"path":"{path}","props":{{"title":"Ledger","author":"JM"}}}}"#),
+    );
+    assert_eq!(m["ok"], true, "meta_write ods: {m}");
+    let r = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["title"], "Ledger", "{r}");
+    assert_eq!(r["author"], "JM");
+    // still a readable spreadsheet
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["sheets"][0]["rows"][0][0], "a", "ods data intact: {s}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn meta_unsupported_format_errors() {
+    let path = tmp("meta.txt");
+    std::fs::write(&path, "x").ok();
+    let r = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert!(err_of(&r).contains("unsupported format"), "got: {}", err_of(&r));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn barcode_invalid_inputs_error() {
     // EAN-13 needs digits only -> error surfaced, not a panic.
     let v = call(office__barcode_1d, r#"{"symbology":"ean13","data":"not-digits"}"#);

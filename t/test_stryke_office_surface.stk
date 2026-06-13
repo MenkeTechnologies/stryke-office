@@ -59,4 +59,8 @@ assert_ok exists &Office::chart_save, "Office::chart_save exists"
 assert_ok exists &Office::barcode_qr, "Office::barcode_qr exists"
 assert_ok exists &Office::barcode_1d, "Office::barcode_1d exists"
 
+# metadata
+assert_ok exists &Office::meta_read, "Office::meta_read exists"
+assert_ok exists &Office::meta_write, "Office::meta_write exists"
+
 test_run

@@ -1473,6 +1473,11 @@ export!(office__pdf_info, op_pdf_info);
 export!(office__pdf_watermark, op_pdf_watermark);
 export!(office__pdf_page_numbers, op_pdf_page_numbers);
 
+// document metadata (core/app properties) read + write across all formats
+include!("meta_ops.rs");
+export!(office__meta_read, op_meta_read);
+export!(office__meta_write, op_meta_write);
+
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");
 

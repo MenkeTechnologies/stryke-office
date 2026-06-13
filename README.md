@@ -241,6 +241,39 @@ Office::doc_write("d.docx", [
 ], page_size => [11906, 16838], header => "My Report", footer => "confidential")
 ```
 
+### Document metadata (read + write, every format)
+
+Core/app properties live in format-specific parts — OOXML `docProps/core.xml`
++ `docProps/app.xml`, ODF `meta.xml`, PDF Info dictionary. `meta_read` returns
+a normalized key set from any of them; `meta_write` sets the keys you supply
+and leaves the rest of the file byte-for-byte intact (lossless zip raw-copy for
+containers, in-place Info-dict edit for PDF). Works on **xlsx/docx/pptx**,
+**ods/odt/odp**, and **pdf**.
+
+```perl
+# read whatever the file carries
+my $m = Office::meta_read("report.xlsx");
+# $m->{title}, $m->{author}, $m->{company}, $m->{created}, ...
+
+# set some keys, edit in place; existing properties are merged, not clobbered
+Office::meta_write("report.xlsx", {
+    title    => "Q2 Report",
+    author   => "Jacob Menke",
+    subject  => "sales",
+    keywords => "q2,sales,forecast",
+    company  => "MenkeTechnologies",
+});
+
+# or write to a new file and convert ISO dates to the PDF date format
+Office::meta_write("in.pdf", { title => "Spec", created => "2026-06-13T12:00:00Z" },
+    output => "out.pdf");
+```
+
+Canonical keys: `title`, `author`, `subject`, `keywords`, `description`,
+`category`, `last_modified_by`, `app`, `producer`, `company`, `created`,
+`modified`. Each maps onto the right element/dict-key per format; keys a format
+doesn't support are ignored.
+
 ### Charting (data → image handle → any format)
 
 `Office::chart_render` rasterizes a chart and returns an **image handle**, so
@@ -491,6 +524,7 @@ stryke-office/
   src/chart_render.rs    # raster chart renderer (all chart types)
   src/chart_svg.rs       # vector (SVG/PDF) chart renderer
   src/barcode.rs         # QR + 1D barcode generation (-> image handle)
+  src/meta_ops.rs        # document metadata read/write (OOXML/ODF/PDF)
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info (lopdf)
   stryke.toml            # package manifest + [ffi] table
