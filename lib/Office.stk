@@ -69,6 +69,15 @@ fn Office::sheet_merge ($inputs, $output, %opts) {
         office__sheet_merge(to_json({ inputs => $inputs, output => $output, mode => $opts{mode}, format => $opts{format} })))
 }
 
+## Per-column descriptive statistics for one sheet. opts: sheet => name or
+## 0-based index (default first), header => 0 if the first row is data (default
+## treats it as column names). Returns { sheet, rows, columns => [{ name, count,
+## numeric, blanks, sum?, min?, max?, mean? }] }.
+fn Office::sheet_stats ($path, %opts) {
+    Office::_decode("sheet_stats",
+        office__sheet_stats(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

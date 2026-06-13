@@ -1096,6 +1096,103 @@ fn op_sheet_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "sheets": n }))
 }
 
+/// A cell's numeric value, if it is a number or a numeric-looking string.
+fn sheet_cell_num(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => {
+            let t = s.trim();
+            (!t.is_empty()).then(|| t.parse().ok()).flatten()
+        }
+        _ => None,
+    }
+}
+
+/// Whether a cell is blank (null or empty/whitespace text).
+fn sheet_cell_blank(v: &Value) -> bool {
+    match v {
+        Value::Null => true,
+        Value::String(s) => s.trim().is_empty(),
+        _ => false,
+    }
+}
+
+/// Per-column descriptive statistics for one sheet. opts: path, sheet => name or
+/// 0-based index (default: first), header => bool (first row is column names;
+/// default true). Returns `{ sheet, rows, columns: [{ name, count, numeric,
+/// blanks, sum?, min?, max?, mean? }] }` — sum/min/max/mean only when the column
+/// has numeric cells.
+fn op_sheet_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    let mut columns = Vec::with_capacity(ncols);
+    for c in 0..ncols {
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        let (mut count, mut numeric, mut blanks) = (0u64, 0u64, 0u64);
+        let (mut sum, mut min, mut max) = (0f64, f64::INFINITY, f64::NEG_INFINITY);
+        for row in data {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(c))
+                .unwrap_or(&Value::Null);
+            if sheet_cell_blank(cell) {
+                blanks += 1;
+                continue;
+            }
+            count += 1;
+            if let Some(x) = sheet_cell_num(cell) {
+                numeric += 1;
+                sum += x;
+                min = min.min(x);
+                max = max.max(x);
+            }
+        }
+        let mut col =
+            json!({ "name": cname, "count": count, "numeric": numeric, "blanks": blanks });
+        if numeric > 0 {
+            col["sum"] = json!(sum);
+            col["min"] = json!(min);
+            col["max"] = json!(max);
+            col["mean"] = json!(sum / numeric as f64);
+        }
+        columns.push(col);
+    }
+    Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -1701,6 +1798,7 @@ pub extern "C" fn office__pkg_version(args: *const c_char) -> *const c_char {
 export!(office__sheet_read, op_sheet_read);
 export!(office__sheet_write, op_sheet_write);
 export!(office__sheet_merge, op_sheet_merge);
+export!(office__sheet_stats, op_sheet_stats);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
