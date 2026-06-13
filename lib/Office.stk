@@ -412,6 +412,15 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Split a PDF into one file per page range. $ranges is an arrayref of
+## [start, end] pairs (1-based, inclusive), written to $dir as {prefix}-{n}.pdf.
+## opts: prefix => filename stem (default: the source's stem). Returns
+## { count, files }.
+fn Office::pdf_split_ranges ($path, $ranges, $dir, %opts) {
+    Office::_decode("pdf_split_ranges",
+        office__pdf_split_ranges(to_json({ path => $path, ranges => $ranges, dir => $dir, prefix => $opts{prefix} })))
+}
+
 ## Split a PDF into fixed-size page chunks of $size pages, written to $dir as
 ## {prefix}-{n}.pdf (the last chunk may be shorter). opts: prefix => filename
 ## stem (default: the source's stem). Returns { count, files }.

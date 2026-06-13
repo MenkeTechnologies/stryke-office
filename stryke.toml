@@ -51,6 +51,7 @@ exports = [
     "office__pdf_crop",
     "office__pdf_burst",
     "office__pdf_chunk",
+    "office__pdf_split_ranges",
     "office__pdf_attach",
     "office__pdf_attachments",
     "office__pdf_form_fields",

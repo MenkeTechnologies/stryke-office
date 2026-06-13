@@ -775,3 +775,51 @@ fn op_pdf_chunk(opts: Value) -> Result<Value> {
     }
     Ok(json!({ "count": files.len(), "files": files }))
 }
+
+/// Split a PDF into one file per page range. opts: path, dir => output
+/// directory, ranges => [[start, end], …] (1-based, inclusive), prefix =>
+/// filename stem (default: the source's stem). Files are `{dir}/{prefix}-{n}.pdf`
+/// in range order. Returns `{ count, files }`.
+fn op_pdf_split_ranges(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let ranges = opts
+        .get("ranges")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing ranges (expected [[start,end],…])"))?;
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("range")
+                .to_string()
+        });
+    let total = Document::load(path)
+        .map_err(|e| anyhow!("load {path}: {e}"))?
+        .get_pages()
+        .len() as u32;
+
+    let mut files = Vec::new();
+    for (i, rg) in ranges.iter().enumerate() {
+        let a = rg
+            .as_array()
+            .ok_or_else(|| anyhow!("range must be [start, end]"))?;
+        let s = a
+            .first()
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("range start must be a number"))? as u32;
+        let e = a.get(1).and_then(Value::as_u64).unwrap_or(s as u64) as u32;
+        let (s, e) = (s.min(e), s.max(e));
+        let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+        let remove: Vec<u32> = (1..=total).filter(|&p| p < s || p > e).collect();
+        doc.delete_pages(&remove);
+        let out = format!("{dir}/{prefix}-{}.pdf", i + 1);
+        doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
