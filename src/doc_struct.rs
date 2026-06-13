@@ -341,6 +341,54 @@ fn extract_blocks_odt(xml: &[u8]) -> Vec<Value> {
     blocks
 }
 
+// ── statistics (Word-style word count, across every readable format) ──────────
+
+/// Word-count style statistics for any document we can read as text — docx,
+/// odt, html, md, rtf, txt, and pdf. Returns `{ words, characters,
+/// characters_no_spaces, lines, paragraphs, pages? }` (pages only for pdf).
+/// Mirrors Word's "Word Count" dialog.
+fn op_doc_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let mut pages: Option<usize> = None;
+    let paras: Vec<String> = match ext_of(path).as_str() {
+        "pdf" => {
+            let bytes = std::fs::read(path)?;
+            pages = lo_core::extract_pages_from_pdf(&bytes).ok().map(|p| p.len());
+            let text =
+                lo_core::extract_text_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
+            text.lines().map(str::to_string).collect()
+        }
+        _ => op_doc_read(json!({ "path": path }))?
+            .get("paragraphs")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| p.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
+
+    let paragraphs = paras.iter().filter(|p| !p.trim().is_empty()).count();
+    let text = paras.join("\n");
+    let words = text.split_whitespace().count();
+    let characters = text.chars().count();
+    let characters_no_spaces = text.chars().filter(|c| !c.is_whitespace()).count();
+    let lines = if text.is_empty() { 0 } else { text.lines().count() };
+
+    let mut out = json!({
+        "words": words,
+        "characters": characters,
+        "characters_no_spaces": characters_no_spaces,
+        "lines": lines,
+        "paragraphs": paragraphs,
+    });
+    if let Some(p) = pages {
+        out["pages"] = json!(p);
+    }
+    Ok(out)
+}
+
 // ── hyperlinks ────────────────────────────────────────────────────────────────
 
 /// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display

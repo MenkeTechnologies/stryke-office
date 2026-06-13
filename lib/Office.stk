@@ -90,6 +90,13 @@ fn Office::doc_links ($path) {
     Office::_decode("doc_links", office__doc_links(to_json({ path => $path })))
 }
 
+## Word-count statistics for any readable document (docx/odt/html/md/rtf/txt/
+## pdf). Returns { words, characters, characters_no_spaces, lines, paragraphs,
+## pages? } — pages only for pdf. Mirrors Word's "Word Count".
+fn Office::doc_stats ($path) {
+    Office::_decode("doc_stats", office__doc_stats(to_json({ path => $path })))
+}
+
 ## Write a document. $blocks is an arrayref of blocks:
 ##   { kind => "para"|"heading", level, align, text }  (or runs => [{text, bold, ...}])
 ##   { kind => "list", ordered => 1|0, items => [str, ...] }   # numbered/bulleted (docx)
