@@ -248,6 +248,67 @@ fn doc_write_to_pdf() {
 }
 
 #[test]
+fn doc_tables_extracted_from_docx_and_odt() {
+    // docx: write a table via doc_write, recover its grid via doc_tables
+    let dx = tmp("tbl.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"para","text":"Intro"}},
+                {{"kind":"table","rows":[["Name","Qty"],["Widget","3"],["Gadget","7"]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx write: {w}");
+    let t = call(office__doc_tables, &format!(r#"{{"path":"{dx}"}}"#));
+    assert_eq!(t["count"], 1, "one table found: {t}");
+    assert_eq!(t["tables"][0]["rows"][0][0], "Name", "header cell: {t}");
+    assert_eq!(t["tables"][0]["rows"][1][1], "3", "body cell: {t}");
+    assert_eq!(t["tables"][0]["rows"][2][0], "Gadget", "last row: {t}");
+
+    // odt: hand-build a minimal content.xml with a table inside an odt zip
+    let od = tmp("tbl.odt");
+    {
+        use std::io::Write as _;
+        use zip::write::SimpleFileOptions;
+        let f = std::fs::File::create(&od).unwrap();
+        let mut zw = zip::ZipWriter::new(f);
+        let opt = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zw.start_file("content.xml", opt).unwrap();
+        zw.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:text>
+  <table:table>
+   <table:table-row>
+    <table:table-cell><text:p>A1</text:p></table:table-cell>
+    <table:table-cell><text:p>B1</text:p></table:table-cell>
+   </table:table-row>
+   <table:table-row>
+    <table:table-cell><text:p>A2</text:p></table:table-cell>
+    <table:table-cell><text:p>B2</text:p></table:table-cell>
+   </table:table-row>
+  </table:table>
+ </office:text></office:body>
+</office:document-content>"#,
+        )
+        .unwrap();
+        zw.finish().unwrap();
+    }
+    let ot = call(office__doc_tables, &format!(r#"{{"path":"{od}"}}"#));
+    assert_eq!(ot["count"], 1, "odt one table: {ot}");
+    assert_eq!(ot["tables"][0]["rows"][0][1], "B1", "odt cell B1: {ot}");
+    assert_eq!(ot["tables"][0]["rows"][1][0], "A2", "odt cell A2: {ot}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&od).ok();
+}
+
+#[test]
 fn missing_path_errors_cleanly() {
     let v = call(office__sheet_read, "{}");
     assert_eq!(err_of(&v), "missing path");
