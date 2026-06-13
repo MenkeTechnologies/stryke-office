@@ -2437,6 +2437,57 @@ fn op_slides_write(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": path, "slides": slides.len()}))
 }
 
+/// Concatenate presentations into one deck. opts: inputs => [paths],
+/// output => path, format => override. Each source slide's first text line
+/// becomes the title and the rest the body; the target format follows the
+/// output extension (so merge also converts pptx<->odp). Note: only slide text
+/// is carried (the write side does not emit speaker notes or media). Returns
+/// `{ ok, path, sources, slides }`.
+fn op_slides_merge(opts: Value) -> Result<Value> {
+    let inputs = opts
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing inputs (expected array of paths)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let mut out_slides: Vec<Value> = Vec::new();
+    for inp in inputs {
+        let path = inp
+            .as_str()
+            .ok_or_else(|| anyhow!("input path must be a string"))?;
+        let read = op_slides_read(json!({ "path": path }))?;
+        let slides = read
+            .get("slides")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for s in &slides {
+            let text: Vec<String> = s
+                .get("text")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|t| t.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let (title, body) = text
+                .split_first()
+                .map(|(h, rest)| (h.clone(), rest.to_vec()))
+                .unwrap_or_default();
+            out_slides.push(json!({ "title": title, "body": body }));
+        }
+    }
+
+    let n = out_slides.len();
+    let mut wopts = json!({ "path": output, "slides": out_slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "slides": n }))
+}
+
 // ── pdf (self-contained, via lo_core) ────────────────────────────────────────
 
 fn op_pdf_read(opts: Value) -> Result<Value> {
@@ -2531,6 +2582,7 @@ export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
+export!(office__slides_merge, op_slides_merge);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 

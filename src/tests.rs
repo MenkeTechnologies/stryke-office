@@ -835,6 +835,38 @@ fn doc_merge_concatenates_and_converts() {
 }
 
 #[test]
+fn slides_merge_combines_decks() {
+    let a = tmp("deckA.pptx");
+    let b = tmp("deckB.pptx");
+    let wa = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{a}","slides":[{{"title":"A1","body":["abody"]}}]}}"#),
+    );
+    assert_eq!(wa["ok"], true, "deck A: {wa}");
+    let wb = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{b}","slides":[{{"title":"B1","body":["bbody"]}}]}}"#),
+    );
+    assert_eq!(wb["ok"], true, "deck B: {wb}");
+
+    let merged = tmp("deckM.pptx");
+    let m = call(
+        office__slides_merge,
+        &format!(r#"{{"inputs":["{a}","{b}"],"output":"{merged}"}}"#),
+    );
+    assert_eq!(m["slides"], 2, "two merged slides: {m}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{merged}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read 2 slides: {rd}");
+    assert_eq!(slides[0]["text"][0], "A1", "first slide title: {rd}");
+    assert_eq!(slides[1]["text"][0], "B1", "second slide title: {rd}");
+
+    for f in [&a, &b, &merged] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn doc_find_and_slides_find() {
     // doc_find over a docx with three paragraphs
     let dx = tmp("find.docx");
