@@ -144,6 +144,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_read($path)` | arrayref of `{name, rows}` | numbers stay numbers, empty cells `undef` |
 | `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; `format` opt |
 | `Office::sheet_merge($inputs, $output, %opts)` | `{sources, sheets}` | combine workbooks into one; `mode => "rows"` stacks; target ext converts |
+| `Office::sheet_stats($path, %opts)` | `{sheet, rows, columns:[{name,count,numeric,blanks,sum?,min?,max?,mean?}]}` | per-column descriptive stats; `sheet`/`header` opts |
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |

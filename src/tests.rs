@@ -111,6 +111,41 @@ fn sheet_merge_workbooks_and_rows() {
 }
 
 #[test]
+fn sheet_stats_per_column_aggregates() {
+    let path = tmp("stats.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"Data","rows":[
+                ["name","qty","note"],
+                ["a",10,"x"],
+                ["b",20,""],
+                ["c",30,"y"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(office__sheet_stats, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["rows"], 3, "3 data rows: {s}");
+    let cols = s["columns"].as_array().unwrap();
+    assert_eq!(cols[0]["name"], "name", "header name");
+    assert_eq!(cols[0]["numeric"], 0, "text column not numeric");
+    // qty column: numeric aggregates
+    assert_eq!(cols[1]["name"], "qty");
+    assert_eq!(cols[1]["numeric"], 3, "3 numeric: {s}");
+    assert_eq!(cols[1]["sum"], 60.0, "sum: {s}");
+    assert_eq!(cols[1]["min"], 10.0, "min: {s}");
+    assert_eq!(cols[1]["max"], 30.0, "max: {s}");
+    assert_eq!(cols[1]["mean"], 20.0, "mean: {s}");
+    // note column: one blank
+    assert_eq!(cols[2]["name"], "note");
+    assert_eq!(cols[2]["count"], 2, "two non-blank notes: {s}");
+    assert_eq!(cols[2]["blanks"], 1, "one blank: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn ods_write_then_read_round_trips() {
     let path = tmp("rt.ods");
     let w = call(
