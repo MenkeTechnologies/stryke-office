@@ -115,7 +115,7 @@ Office::pdf_build("report.pdf", [
 
 | Kind | Formats | Read | Write |
 |---|---|---|---|
-| Spreadsheet | xlsx, ods, xls, csv, tsv | yes | xlsx, ods, csv, tsv |
+| Spreadsheet | xlsx, ods, xls, csv, tsv | yes | xlsx, ods, csv, tsv, html, md |
 | Document | docx, odt, html, md, rtf, txt | yes | docx, odt, html, md, rtf, txt, pdf |
 | Presentation | pptx, odp | yes | yes |
 | PDF | pdf | text + pages | text |
@@ -142,7 +142,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 |---|---|---|
 | `Office::version()` | string | package version |
 | `Office::sheet_read($path)` | arrayref of `{name, rows}` | numbers stay numbers, empty cells `undef` |
-| `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; `format` opt |
+| `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; writes xlsx/ods/csv/tsv + html/md tables; `format` opt |
 | `Office::sheet_merge($inputs, $output, %opts)` | `{sources, sheets}` | combine workbooks into one; `mode => "rows"` stacks; target ext converts |
 | `Office::sheet_stats($path, %opts)` | `{sheet, rows, columns:[{name,count,numeric,blanks,sum?,min?,max?,mean?}]}` | per-column descriptive stats; `sheet`/`header` opts |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |

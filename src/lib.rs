@@ -1033,6 +1033,16 @@ fn op_sheet_write(opts: Value) -> Result<Value> {
             write_csv(&path, &sheets, delim)?;
             sheets.len()
         }
+        "html" | "htm" => {
+            let sheets = json_sheets(&opts)?;
+            write_sheet_html(&path, &sheets)?;
+            sheets.len()
+        }
+        "md" | "markdown" => {
+            let sheets = json_sheets(&opts)?;
+            write_sheet_md(&path, &sheets)?;
+            sheets.len()
+        }
         other => return Err(anyhow!("unsupported spreadsheet write format: {other}")),
     };
     Ok(json!({"ok": true, "path": path, "sheets": n}))

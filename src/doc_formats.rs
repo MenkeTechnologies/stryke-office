@@ -34,6 +34,55 @@ fn write_csv(path: &str, sheets: &[(String, Vec<Vec<Value>>)], delim: char) -> R
     Ok(())
 }
 
+/// Display string for a sheet cell, unwrapping `{v}`/`{value}` rich cells.
+fn sheet_cell_disp(c: &Value) -> String {
+    match c {
+        Value::Object(o) => {
+            cell_to_string(o.get("v").or_else(|| o.get("value")).unwrap_or(&Value::Null))
+        }
+        other => cell_to_string(other),
+    }
+}
+
+/// Render the first sheet as an HTML `<table>` (first row → `<th>`, rest `<td>`).
+fn write_sheet_html(path: &str, sheets: &[(String, Vec<Vec<Value>>)]) -> Result<()> {
+    let mut out = String::from("<table>\n");
+    if let Some((_, rows)) = sheets.first() {
+        for (i, row) in rows.iter().enumerate() {
+            let tag = if i == 0 { "th" } else { "td" };
+            out.push_str("<tr>");
+            for c in row {
+                out.push_str(&format!("<{tag}>{}</{tag}>", xml_escape(&sheet_cell_disp(c))));
+            }
+            out.push_str("</tr>\n");
+        }
+    }
+    out.push_str("</table>\n");
+    std::fs::write(path, out)?;
+    Ok(())
+}
+
+/// Render the first sheet as a GitHub-flavored Markdown table (first row is the
+/// header). Cells with `|`/newlines are escaped so the table stays intact.
+fn write_sheet_md(path: &str, sheets: &[(String, Vec<Vec<Value>>)]) -> Result<()> {
+    let mut out = String::new();
+    if let Some((_, rows)) = sheets.first() {
+        let ncols = rows.iter().map(Vec::len).max().unwrap_or(0);
+        let esc = |s: String| s.replace('|', "\\|").replace('\n', " ");
+        for (i, row) in rows.iter().enumerate() {
+            let cells: Vec<String> = (0..ncols)
+                .map(|c| esc(row.get(c).map(sheet_cell_disp).unwrap_or_default()))
+                .collect();
+            out.push_str(&format!("| {} |\n", cells.join(" | ")));
+            if i == 0 {
+                out.push_str(&format!("| {} |\n", vec!["---"; ncols].join(" | ")));
+            }
+        }
+    }
+    std::fs::write(path, out)?;
+    Ok(())
+}
+
 /// Minimal RFC-4180-ish CSV parser (handles quotes, doubled quotes, embedded
 /// newlines). Numeric-looking fields come back as JSON numbers.
 fn read_csv(path: &str, delim: char) -> Result<Value> {
