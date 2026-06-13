@@ -191,6 +191,33 @@ fn pdf_page_size(doc: &Document, page_id: ObjectId) -> (f64, f64) {
         .unwrap_or((595.0, 842.0))
 }
 
+/// A 4-element rectangle (e.g. MediaBox/CropBox) of a page, if present.
+fn pdf_page_box(doc: &Document, page_id: ObjectId, key: &[u8]) -> Option<[f64; 4]> {
+    let a = doc
+        .get_object(page_id)
+        .ok()
+        .and_then(|o| o.as_dict().ok())
+        .and_then(|d| d.get(key).ok())
+        .and_then(|o| o.as_array().ok())?;
+    Some([
+        obj_num(a.first()?)?,
+        obj_num(a.get(1)?)?,
+        obj_num(a.get(2)?)?,
+        obj_num(a.get(3)?)?,
+    ])
+}
+
+/// Parse a JSON 4-number array into `[f64; 4]`.
+fn four_floats(v: &Value) -> Option<[f64; 4]> {
+    let a = v.as_array()?;
+    Some([
+        a.first()?.as_f64()?,
+        a.get(1)?.as_f64()?,
+        a.get(2)?.as_f64()?,
+        a.get(3)?.as_f64()?,
+    ])
+}
+
 /// Add an inline Helvetica font named `name` to a page's Resources.
 fn ensure_helvetica(doc: &mut Document, page_id: ObjectId, name: &str) -> Result<()> {
     use lopdf::Dictionary;
@@ -314,7 +341,66 @@ fn op_pdf_info(opts: Value) -> Result<Value> {
             }
         }
     }
+    // First page geometry: MediaBox (+ derived width/height) and CropBox if set.
+    if let Some((_, pid)) = doc.get_pages().into_iter().next() {
+        if let Some(mb) = pdf_page_box(&doc, pid, b"MediaBox") {
+            out["mediabox"] = json!(mb);
+            out["width"] = json!(mb[2] - mb[0]);
+            out["height"] = json!(mb[3] - mb[1]);
+        }
+        if let Some(cb) = pdf_page_box(&doc, pid, b"CropBox") {
+            out["cropbox"] = json!(cb);
+        }
+    }
     Ok(out)
+}
+
+/// Set the crop box (visible region) on pages. opts: path, output, either
+/// `box` => [x0, y0, x1, y1] applied to all selected pages, or
+/// `margins` => [left, bottom, right, top] inset from each page's MediaBox.
+/// `pages` => [1-based subset] (default all). Returns `{ ok, path, cropped }`.
+fn op_pdf_crop(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let explicit = opts.get("box").and_then(four_floats);
+    let margins = opts.get("margins").and_then(four_floats);
+    if explicit.is_none() && margins.is_none() {
+        return Err(anyhow!("need box [x0,y0,x1,y1] or margins [l,b,r,t]"));
+    }
+    let subset: Option<std::collections::BTreeSet<u32>> = opts
+        .get("pages")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect());
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages = doc.get_pages();
+    let mut plan: Vec<(ObjectId, [f64; 4])> = Vec::new();
+    for (num, pid) in &pages {
+        if let Some(set) = &subset {
+            if !set.contains(num) {
+                continue;
+            }
+        }
+        let bx = if let Some(b) = explicit {
+            b
+        } else {
+            let mb = pdf_page_box(&doc, *pid, b"MediaBox").unwrap_or([0.0, 0.0, 595.0, 842.0]);
+            let m = margins.unwrap();
+            [mb[0] + m[0], mb[1] + m[1], mb[2] - m[2], mb[3] - m[3]]
+        };
+        plan.push((*pid, bx));
+    }
+    let cropped = plan.len();
+    for (pid, bx) in plan {
+        if let Ok(d) = doc.get_object_mut(pid).and_then(|o| o.as_dict_mut()) {
+            d.set(
+                "CropBox",
+                Object::Array(bx.iter().map(|&v| Object::Real(v as f32)).collect()),
+            );
+        }
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "cropped": cropped }))
 }
 
 // ── security: encrypt / decrypt ───────────────────────────────────────────────
