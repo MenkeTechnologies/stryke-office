@@ -154,6 +154,20 @@ fn Office::pdf_info ($path) {
     Office::_decode("pdf_info", office__pdf_info(to_json({ path => $path })))
 }
 
+## Stamp a rotated text watermark on every page. opts: size (60), color
+## (light gray), angle (deg, 45).
+fn Office::pdf_watermark ($path, $text, $output, %opts) {
+    Office::_decode("pdf_watermark",
+        office__pdf_watermark(to_json({ path => $path, text => $text, output => $output, size => $opts{size}, color => $opts{color}, angle => $opts{angle} })))
+}
+
+## Add footer page numbers to every page. opts: format ("{n} / {total}"),
+## size (10), color (black), y (24).
+fn Office::pdf_page_numbers ($path, $output, %opts) {
+    Office::_decode("pdf_page_numbers",
+        office__pdf_page_numbers(to_json({ path => $path, output => $output, format => $opts{format}, size => $opts{size}, color => $opts{color}, y => $opts{y} })))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new
