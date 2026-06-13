@@ -3348,6 +3348,7 @@ include!("chart_render.rs");
 include!("chart_svg.rs");
 
 export!(office__chart_render, op_chart_render);
+export!(office__chart_from_sheet, op_chart_from_sheet);
 export!(office__chart_svg, op_chart_svg);
 export!(office__chart_save, op_chart_save);
 export!(office__chart_grid, op_chart_grid);

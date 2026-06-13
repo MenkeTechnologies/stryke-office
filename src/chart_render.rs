@@ -509,6 +509,96 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     Ok(json!({"handle": handle, "width": w, "height": h, "type": kind}))
 }
 
+/// Render a chart directly from a spreadsheet's columns and save it. opts:
+/// path => spreadsheet, output => chart file (.svg/.pdf/raster ext sets the
+/// format), type => chart type, sheet => name/index, header (default true),
+/// categories => column name/index for x labels (optional), series => array of
+/// column names/indices (default: all numeric data columns except categories).
+/// Other chart options (title, width, height, smooth, …) pass through. Returns
+/// the `chart_save` result.
+fn op_chart_from_sheet(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let data = &rows[data_start..];
+    let cell = |r: &Value, c: usize| -> Value {
+        r.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+
+    let cat_col = match opts.get("categories") {
+        Some(v) if !v.is_null() => Some(resolve_col(Some(v), hr)?),
+        _ => None,
+    };
+    let categories: Vec<Value> = match cat_col {
+        Some(c) => data.iter().map(|r| json!(cell_to_string(&cell(r, c)))).collect(),
+        None => Vec::new(),
+    };
+
+    let series_cols: Vec<usize> = match opts.get("series").and_then(Value::as_array) {
+        Some(arr) => arr.iter().map(|c| resolve_col(Some(c), hr)).collect::<Result<_>>()?,
+        None => (0..ncols)
+            .filter(|&c| Some(c) != cat_col)
+            .filter(|&c| {
+                data.iter().any(|r| sheet_cell_num(&cell(r, c)).is_some())
+                    && data
+                        .iter()
+                        .all(|r| sheet_cell_blank(&cell(r, c)) || sheet_cell_num(&cell(r, c)).is_some())
+            })
+            .collect(),
+    };
+
+    let series: Vec<Value> = series_cols
+        .iter()
+        .map(|&c| {
+            let name = hr
+                .and_then(|h| h.get(c))
+                .map(cell_to_string)
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| format!("Col{}", c + 1));
+            let datav: Vec<Value> = data
+                .iter()
+                .map(|r| json!(sheet_cell_num(&cell(r, c)).unwrap_or(0.0)))
+                .collect();
+            json!({ "name": name, "data": datav })
+        })
+        .collect();
+
+    let mut chart = opts.clone();
+    chart["series"] = json!(series);
+    chart["categories"] = json!(categories);
+    chart["path"] = json!(output);
+    op_chart_save(chart)
+}
+
 /// Error unless an `series` array is present.
 fn require_series(opts: &Value) -> Result<()> {
     if opts.get("series").and_then(Value::as_array).is_none() {

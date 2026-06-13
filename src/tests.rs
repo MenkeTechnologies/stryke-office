@@ -1966,6 +1966,53 @@ fn docx_inline_image() {
 // ── charting (data -> image handle -> any format) ────────────────────
 
 #[test]
+fn chart_from_sheet_renders() {
+    let path = tmp("cfs.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["month","sales","cost"],["Jan",10,5],["Feb",20,8]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // SVG output, categories from the month column, series auto-detected
+    let svg = tmp("cfs.svg");
+    let r = call(
+        office__chart_from_sheet,
+        &format!(
+            r#"{{"path":"{path}","output":"{svg}","type":"bar","categories":"month","title":"Sales"}}"#
+        ),
+    );
+    assert_eq!(r["ok"], true, "chart_from_sheet svg: {r}");
+    assert_eq!(r["format"], "svg", "svg format: {r}");
+    let content = std::fs::read_to_string(&svg).unwrap();
+    assert!(
+        content.contains("<svg"),
+        "is svg: {}",
+        &content[..content.len().min(40)]
+    );
+
+    // PNG output too
+    let png = tmp("cfs.png");
+    let rp = call(
+        office__chart_from_sheet,
+        &format!(r#"{{"path":"{path}","output":"{png}","type":"line","categories":"month"}}"#),
+    );
+    assert_eq!(rp["ok"], true, "chart_from_sheet png: {rp}");
+    assert!(
+        std::fs::metadata(&png)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false),
+        "png written"
+    );
+
+    for f in [&path, &svg, &png] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn chart_render_to_image_then_save_any_format() {
     for kind in ["bar", "line", "area", "scatter", "pie"] {
         let series = if kind == "scatter" {

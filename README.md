@@ -490,6 +490,9 @@ identically in raster **and** SVG.
 - `chart_save(type, path, %opts)` → write straight to a file, format by
   extension: `.svg` (vector), `.pdf` (chart embedded in a PDF), or any raster
   extension.
+- `chart_from_sheet(path, output, %opts)` → read a spreadsheet's columns and
+  render a chart in one call; `categories` column for x labels, `series`
+  columns (auto-detected numeric by default), format by `output` extension.
 - `chart_grid(charts, %opts)` → render many specs and tile them into one
   **dashboard** image (cols/cell_width/cell_height/gap/background); `path =>`
   saves the grid straight to any raster extension or `.pdf`. The "tons of
