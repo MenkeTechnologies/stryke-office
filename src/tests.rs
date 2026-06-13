@@ -818,6 +818,41 @@ fn pdf_merge_split_rotate_info() {
 }
 
 #[test]
+fn pdf_watermark_and_page_numbers() {
+    // 3-page source
+    let src = tmp("wm_src.pdf");
+    let v = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"One"}},{{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Two"}},{{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Three"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(v["ok"], true, "build src: {v}");
+
+    // watermark every page
+    let wm = tmp("wm.pdf");
+    let w = call(office__pdf_watermark, &format!(r#"{{"path":"{src}","output":"{wm}","text":"DRAFT","angle":45}}"#));
+    assert_eq!(w["stamped"], 3, "watermarked 3 pages: {w}");
+    let ir = call(office__pdf_read, &format!(r#"{{"path":"{wm}"}}"#));
+    assert!(ir["text"].as_str().unwrap_or("").contains("One"), "watermarked pdf keeps content + re-reads");
+
+    // footer page numbers
+    let pn = tmp("pn.pdf");
+    let p = call(office__pdf_page_numbers, &format!(r#"{{"path":"{src}","output":"{pn}","format":"Page {{n}} of {{total}}"}}"#));
+    assert_eq!(p["pages"], 3, "numbered 3 pages: {p}");
+    let ip = call(office__pdf_info, &format!(r#"{{"path":"{pn}"}}"#));
+    assert_eq!(ip["pages"], 3, "numbered pdf still 3 pages");
+
+    for f in [&src, &wm, &pn] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn chart_save_dispatches_by_extension() {
     let spec = r#""type":"bar","series":[{"name":"s","data":[3,6,9]}],"categories":["a","b","c"]"#;
     for (ext, magic) in [("svg", "<svg"), ("png", "PNG"), ("pdf", "%PDF")] {

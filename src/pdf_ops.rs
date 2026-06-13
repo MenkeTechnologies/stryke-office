@@ -171,6 +171,121 @@ fn pdf_dict_str(dict: &lopdf::Dictionary, key: &[u8]) -> Option<String> {
     }
 }
 
+/// A PDF number (Integer or Real) as f64.
+fn obj_num(o: &Object) -> Option<f64> {
+    match o {
+        Object::Integer(i) => Some(*i as f64),
+        Object::Real(r) => Some(*r as f64),
+        _ => None,
+    }
+}
+
+/// MediaBox (width, height) of a page, defaulting to A4.
+fn pdf_page_size(doc: &Document, page_id: ObjectId) -> (f64, f64) {
+    doc.get_object(page_id)
+        .ok()
+        .and_then(|o| o.as_dict().ok())
+        .and_then(|d| d.get(b"MediaBox").ok())
+        .and_then(|o| o.as_array().ok())
+        .and_then(|a| Some((obj_num(a.get(2)?)?, obj_num(a.get(3)?)?)))
+        .unwrap_or((595.0, 842.0))
+}
+
+/// Add an inline Helvetica font named `name` to a page's Resources.
+fn ensure_helvetica(doc: &mut Document, page_id: ObjectId, name: &str) -> Result<()> {
+    use lopdf::Dictionary;
+    let res = doc.get_or_create_resources(page_id).map_err(|e| anyhow!("resources: {e}"))?;
+    let rdict = res.as_dict_mut().map_err(|e| anyhow!("resources dict: {e}"))?;
+    if !rdict.has(b"Font") {
+        rdict.set("Font", Dictionary::new());
+    }
+    let fonts = rdict
+        .get_mut(b"Font")
+        .ok()
+        .and_then(|o| o.as_dict_mut().ok())
+        .ok_or_else(|| anyhow!("font dict"))?;
+    let mut fd = Dictionary::new();
+    fd.set("Type", "Font");
+    fd.set("Subtype", "Type1");
+    fd.set("BaseFont", "Helvetica");
+    fonts.set(name, Object::Dictionary(fd));
+    Ok(())
+}
+
+/// RGB 0..1 of a color value (default light gray for watermarks).
+fn pdf_color01(v: Option<&Value>, default: [u8; 3]) -> (f64, f64, f64) {
+    let c = match v {
+        Some(_) => parse_color(v),
+        None => image::Rgba([default[0], default[1], default[2], 255]),
+    };
+    (c.0[0] as f64 / 255.0, c.0[1] as f64 / 255.0, c.0[2] as f64 / 255.0)
+}
+
+/// Stamp a rotated text watermark across every page. opts: path => input,
+/// output, text, size (60), color (default light gray), angle (deg, 45).
+fn op_pdf_watermark(opts: Value) -> Result<Value> {
+    use lopdf::content::{Content, Operation};
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let text = req_str(&opts, "text")?.to_string();
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(60.0);
+    let (r, g, b) = pdf_color01(opts.get("color"), [200, 200, 200]);
+    let angle = opts.get("angle").and_then(Value::as_f64).unwrap_or(45.0);
+    let (sin, cos) = angle.to_radians().sin_cos();
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let mut stamped = 0usize;
+    for (_, page_id) in doc.get_pages() {
+        ensure_helvetica(&mut doc, page_id, "SOFW")?;
+        let (pw, ph) = pdf_page_size(&doc, page_id);
+        let ops = vec![
+            Operation::new("q", vec![]),
+            Operation::new("BT", vec![]),
+            Operation::new("rg", vec![r.into(), g.into(), b.into()]),
+            Operation::new("Tf", vec!["SOFW".into(), size.into()]),
+            Operation::new("Tm", vec![cos.into(), sin.into(), (-sin).into(), cos.into(), (pw * 0.12).into(), (ph * 0.35).into()]),
+            Operation::new("Tj", vec![Object::string_literal(text.clone())]),
+            Operation::new("ET", vec![]),
+            Operation::new("Q", vec![]),
+        ];
+        doc.add_to_page_content(page_id, Content { operations: ops }).map_err(|e| anyhow!("stamp page: {e}"))?;
+        stamped += 1;
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({"ok": true, "path": out, "stamped": stamped}))
+}
+
+/// Add footer page numbers to every page. opts: path => input, output,
+/// format ("{n} / {total}"), size (10), color (black), y (24).
+fn op_pdf_page_numbers(opts: Value) -> Result<Value> {
+    use lopdf::content::{Content, Operation};
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let fmt = opts.get("format").and_then(Value::as_str).unwrap_or("{n} / {total}").to_string();
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(10.0);
+    let (r, g, b) = pdf_color01(opts.get("color"), [40, 40, 40]);
+    let y = opts.get("y").and_then(Value::as_f64).unwrap_or(24.0);
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages = doc.get_pages();
+    let total = pages.len();
+    for (num, page_id) in pages {
+        ensure_helvetica(&mut doc, page_id, "SOFP")?;
+        let (pw, _) = pdf_page_size(&doc, page_id);
+        let text = fmt.replace("{n}", &num.to_string()).replace("{total}", &total.to_string());
+        let x = (pw / 2.0 - text.len() as f64 * size * 0.25).max(4.0);
+        let ops = vec![
+            Operation::new("BT", vec![]),
+            Operation::new("rg", vec![r.into(), g.into(), b.into()]),
+            Operation::new("Tf", vec!["SOFP".into(), size.into()]),
+            Operation::new("Td", vec![x.into(), y.into()]),
+            Operation::new("Tj", vec![Object::string_literal(text)]),
+            Operation::new("ET", vec![]),
+        ];
+        doc.add_to_page_content(page_id, Content { operations: ops }).map_err(|e| anyhow!("number page: {e}"))?;
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({"ok": true, "path": out, "pages": total}))
+}
+
 /// Page count, version, and document-info metadata. opts: path => input.
 fn op_pdf_info(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
