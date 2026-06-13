@@ -55,4 +55,8 @@ assert_ok exists &Office::chart_render, "Office::chart_render exists"
 assert_ok exists &Office::chart_svg, "Office::chart_svg exists"
 assert_ok exists &Office::chart_save, "Office::chart_save exists"
 
+# barcodes
+assert_ok exists &Office::barcode_qr, "Office::barcode_qr exists"
+assert_ok exists &Office::barcode_1d, "Office::barcode_1d exists"
+
 test_run

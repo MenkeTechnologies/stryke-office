@@ -1622,3 +1622,60 @@ fn image_unknown_handle_errors() {
         err_of(&v)
     );
 }
+
+#[test]
+fn barcode_qr_renders_and_saves() {
+    // QR -> handle; module count is the canonical 21..177 odd square side.
+    let v = call(
+        office__barcode_qr,
+        r#"{"data":"https://menketechnologies.github.io","ec":"Q","scale":4,"quiet":2}"#,
+    );
+    let n = v["modules"].as_u64().expect("modules");
+    assert!((21..=177).contains(&n), "qr side out of range: {n}");
+    let w = v["width"].as_u64().unwrap();
+    assert_eq!(w, (n + 4) * 4, "width = (modules + 2*quiet) * scale");
+    let h = v["handle"].as_u64().expect("qr handle");
+
+    // round-trips through the shared image surface (save as png)
+    let path = tmp("qr.png");
+    let sv = call(office__img_save, &format!(r#"{{"handle":{h},"path":"{path}"}}"#));
+    assert_eq!(sv["ok"], true, "{sv}");
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(&bytes[1..4], b"PNG", "png magic");
+    std::fs::remove_file(&path).ok();
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
+fn barcode_1d_symbologies() {
+    // (symbology, data) pairs that each library accepts.
+    let cases = [
+        ("code128", "STRYKE-2026"),
+        ("code39", "ABC123"),
+        ("code93", "HELLO"),
+        ("ean13", "750103131130"),
+        ("ean8", "1234567"),
+        ("upca", "03600029145"),
+        ("itf", "123456"),
+    ];
+    for (sym, data) in cases {
+        let v = call(
+            office__barcode_1d,
+            &format!(r#"{{"symbology":"{sym}","data":"{data}","scale":2,"height":60}}"#),
+        );
+        let h = v["handle"].as_u64().unwrap_or_else(|| panic!("{sym}: {v}"));
+        assert_eq!(v["height"].as_u64(), Some(60), "{sym} height");
+        assert!(v["bars"].as_u64().unwrap_or(0) > 0, "{sym} has bars");
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    }
+}
+
+#[test]
+fn barcode_invalid_inputs_error() {
+    // EAN-13 needs digits only -> error surfaced, not a panic.
+    let v = call(office__barcode_1d, r#"{"symbology":"ean13","data":"not-digits"}"#);
+    assert!(!err_of(&v).is_empty(), "expected error, got: {v}");
+    // unknown symbology name
+    let u = call(office__barcode_1d, r#"{"symbology":"nope","data":"x"}"#);
+    assert!(err_of(&u).contains("unknown symbology"), "got: {}", err_of(&u));
+}
