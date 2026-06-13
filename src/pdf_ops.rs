@@ -608,3 +608,39 @@ fn op_pdf_search(opts: Value) -> Result<Value> {
     }
     Ok(json!({ "count": total, "matched_pages": hits.len(), "pages": hits }))
 }
+
+// ── burst (one file per page) ─────────────────────────────────────────────────
+
+/// Split a PDF into one file per page. opts: path, dir => output directory,
+/// prefix => filename stem (default: the source's stem). Files are written as
+/// `{dir}/{prefix}-{n}.pdf` (1-based). Returns `{ count, files }`.
+fn op_pdf_burst(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("page")
+                .to_string()
+        });
+    let total = Document::load(path)
+        .map_err(|e| anyhow!("load {path}: {e}"))?
+        .get_pages()
+        .len() as u32;
+
+    let mut files = Vec::new();
+    for p in 1..=total {
+        let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+        let remove: Vec<u32> = (1..=total).filter(|&x| x != p).collect();
+        doc.delete_pages(&remove);
+        let out = format!("{dir}/{prefix}-{p}.pdf");
+        doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
