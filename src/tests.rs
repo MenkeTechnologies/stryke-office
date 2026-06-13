@@ -1243,6 +1243,43 @@ fn chart_log_axis_errorbars_annotations() {
 }
 
 #[test]
+fn chart_grid_dashboard_and_new_types() {
+    // marimekko + radial_bar render in both renderers
+    for kind in ["marimekko", "radial_bar"] {
+        let series = r#"[{"name":"s1","data":[5,8,3,6]},{"name":"s2","data":[2,4,6,1]}]"#;
+        let c = call(office__chart_render, &format!(r#"{{"type":"{kind}","width":400,"height":320,"categories":["a","b","c","d"],"series":{series}}}"#));
+        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","categories":["a","b","c","d"],"series":{series}}}"#));
+        assert!(v["svg"].as_str().unwrap_or("").starts_with("<svg"), "{kind} svg");
+    }
+
+    // dashboard grid: 4 different charts tiled into one image, returns a handle
+    let charts = r#"[
+        {"type":"bar","categories":["a","b"],"series":[{"data":[3,7]}]},
+        {"type":"line","categories":["a","b","c"],"series":[{"data":[2,5,3]}]},
+        {"type":"pie","categories":["x","y"],"series":[{"data":[6,4]}]},
+        {"type":"sankey","links":[{"source":0,"target":1,"value":5}]}
+    ]"#;
+    let g = call(office__chart_grid, &format!(r#"{{"charts":{charts},"cols":2,"cell_width":300,"cell_height":220,"gap":8}}"#));
+    assert_eq!(g["charts"], 4, "grid composited 4 charts: {g}");
+    let gh = g["handle"].as_u64().expect("grid handle");
+    assert!(g["width"].as_u64().unwrap() >= 600, "grid width spans 2 columns");
+    call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
+
+    // grid saved straight to PDF
+    let path = tmp("dash.pdf");
+    let gp = call(office__chart_grid, &format!(r#"{{"charts":{charts},"cols":2,"path":"{path}"}}"#));
+    assert_eq!(gp["ok"], true, "grid pdf save: {gp}");
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(String::from_utf8_lossy(&bytes[..bytes.len().min(8)]).contains("%PDF"), "grid pdf magic");
+    if let Some(h) = gp["handle"].as_u64() {
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    }
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn chart_legend_and_labels_emit() {
     // legend swatches + value labels appear in the SVG
     let v = call(

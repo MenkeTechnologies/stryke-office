@@ -263,6 +263,14 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_slope(&mut img, &fnt, series, l, t, r, b, black)
         }
+        "marimekko" | "mosaic" => {
+            require_series(&opts)?;
+            render_marimekko(&mut img, &fnt, series, &cats, l, t, r, b, black)
+        }
+        "radial_bar" => {
+            require_series(&opts)?;
+            render_radial_bar(&mut img, &fnt, series, &cats, l, t, r, b, black)
+        }
         _ => special = false,
     }
 
@@ -1745,4 +1753,160 @@ fn render_slope(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], l: i32, t:
             draw_text_mut(img, black, x0 as i32 - 56, yv(*a) as i32 - 6, PxScale::from(11.0), fnt, name);
         }
     }
+}
+
+/// Marimekko / mosaic: column widths ∝ each category's total, segments within
+/// each column 100%-stacked by series.
+#[allow(clippy::too_many_arguments)]
+fn render_marimekko(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>) {
+    let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let col_tot: Vec<f64> = (0..ncat)
+        .map(|ci| series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0).max(0.0)).sum())
+        .collect();
+    let grand: f64 = col_tot.iter().sum::<f64>().max(f64::EPSILON);
+    let pw = (r - l) as f64;
+    let ph = (b - t) as f64;
+    let mut x = l as f64;
+    for ci in 0..ncat {
+        let cw = col_tot[ci] / grand * pw;
+        let mut y = t as f64;
+        let ctot = col_tot[ci].max(f64::EPSILON);
+        for (si, s) in series.iter().enumerate() {
+            let v = series_nums(s).get(ci).copied().unwrap_or(0.0).max(0.0);
+            let seg_h = v / ctot * ph;
+            draw_filled_rect_mut(img, Rect::at(x as i32 + 1, y as i32 + 1).of_size((cw as u32).saturating_sub(2).max(1), (seg_h as u32).saturating_sub(1).max(1)), palette(si));
+            y += seg_h;
+        }
+        if let Some(c) = cats.get(ci) {
+            draw_text_mut(img, black, x as i32 + 2, b + 4, PxScale::from(10.0), fnt, c);
+        }
+        x += cw;
+    }
+}
+
+/// Radial bar chart: each category is a concentric ring whose arc sweep is
+/// proportional to its value.
+#[allow(clippy::too_many_arguments)]
+fn render_radial_bar(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[String], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let maxv = data.iter().cloned().fold(f64::EPSILON, f64::max);
+    let cx = (l + r) / 2;
+    let cy = (t + b) / 2;
+    let rmax = ((r - l).min(b - t) / 2 - 16).max(20) as f64;
+    let inner = rmax * 0.25;
+    let band = (rmax - inner) / n as f64;
+    let max_sweep = std::f64::consts::TAU * 0.75; // 270°
+    for (i, &v) in data.iter().enumerate() {
+        let rr = inner + (i as f64 + 0.5) * band;
+        let sweep = v / maxv * max_sweep;
+        let steps = (sweep / 0.1).ceil().max(2.0) as usize;
+        let thick = (band * 0.7).max(2.0);
+        // approximate a thick arc with overlapping filled circles
+        for k in 0..=steps {
+            let a = -std::f64::consts::FRAC_PI_2 + sweep * k as f64 / steps as f64;
+            let x = cx + (rr * a.cos()) as i32;
+            let y = cy + (rr * a.sin()) as i32;
+            draw_filled_circle_mut(img, (x, y), (thick / 2.0) as i32, palette(i));
+        }
+        if let Some(c) = cats.get(i) {
+            draw_text_mut(img, black, cx + (rr) as i32 + 2, cy - (rr) as i32 - 6, PxScale::from(10.0), fnt, c);
+        }
+    }
+}
+
+/// Render several chart specs and tile them into one image grid (a
+/// dashboard). opts: charts => [spec,...], cols, cell_width (400),
+/// cell_height (300), gap (10), background, title; path => save to any raster
+/// extension or .pdf. Returns the grid image handle (+ saved path if given).
+fn op_chart_grid(opts: Value) -> Result<Value> {
+    let specs = opts
+        .get("charts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing charts (expected array of specs)"))?
+        .clone();
+    if specs.is_empty() {
+        return Err(anyhow!("no charts to grid"));
+    }
+    let cw = opts.get("cell_width").and_then(Value::as_u64).unwrap_or(400);
+    let chh = opts.get("cell_height").and_then(Value::as_u64).unwrap_or(300);
+    let gap = opts.get("gap").and_then(Value::as_u64).unwrap_or(10) as u32;
+    let cols = opts
+        .get("cols")
+        .and_then(Value::as_u64)
+        .map(|c| c as usize)
+        .unwrap_or_else(|| (specs.len() as f64).sqrt().ceil() as usize)
+        .max(1);
+    let bg = match opts.get("background") {
+        Some(c) => parse_color(Some(c)),
+        None => Rgba([255, 255, 255, 255]),
+    };
+
+    // Render each spec to its own handle, sizing cells uniformly.
+    let mut handles = Vec::with_capacity(specs.len());
+    for spec in &specs {
+        let mut s = spec.clone();
+        if let Some(o) = s.as_object_mut() {
+            o.entry("width").or_insert(json!(cw));
+            o.entry("height").or_insert(json!(chh));
+        }
+        let rendered = op_chart_render(s)?;
+        if let Some(h) = rendered.get("handle").and_then(Value::as_u64) {
+            handles.push(h);
+        }
+    }
+    // Compose the grid.
+    let imgs: Vec<image::RgbaImage> = handles.iter().map(|&h| rgba_of(h)).collect::<Result<_>>()?;
+    let n = imgs.len();
+    let rows = n.div_ceil(cols);
+    let cell_w = imgs.iter().map(|i| i.width()).max().unwrap_or(cw as u32);
+    let cell_h = imgs.iter().map(|i| i.height()).max().unwrap_or(chh as u32);
+    let total_w = cols as u32 * cell_w + (cols as u32 + 1) * gap;
+    let total_h = rows as u32 * cell_h + (rows as u32 + 1) * gap;
+    let mut canvas = image::RgbaImage::from_pixel(total_w, total_h, bg);
+    for (i, im) in imgs.iter().enumerate() {
+        let (cr, cc) = (i / cols, i % cols);
+        let x = gap + cc as u32 * (cell_w + gap);
+        let y = gap + cr as u32 * (cell_h + gap);
+        image::imageops::overlay(&mut canvas, im, x as i64, y as i64);
+    }
+    // Free the per-chart intermediates.
+    {
+        let mut map = images().lock();
+        for h in &handles {
+            map.remove(h);
+        }
+    }
+    let grid = insert_image(DynamicImage::ImageRgba8(canvas));
+
+    // Optional direct save (raster extension, or .pdf via JPEG embed).
+    if let Some(path) = opts.get("path").and_then(Value::as_str) {
+        let ext = ext_of(path);
+        let result = if ext == "pdf" {
+            let (jpeg, w, h) = with_image(grid, |img| {
+                use image::GenericImageView;
+                let (w, h) = img.dimensions();
+                let mut buf = std::io::Cursor::new(Vec::new());
+                img.to_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).map_err(|e| anyhow!("encode jpeg: {e}"))?;
+                Ok((buf.into_inner(), w, h))
+            })?;
+            std::fs::write(path, pdf_with_jpeg(&jpeg, w, h)).map_err(|e| anyhow!("write {path}: {e}"))
+        } else {
+            with_image(grid, |img| img.save(path).map_err(|e| anyhow!("save {path}: {e}")))
+        };
+        result?;
+        return Ok(json!({"ok": true, "handle": grid, "path": path, "charts": n}));
+    }
+    with_image(grid, |img| Ok(info_json_chart(grid, img, n)))
+}
+
+/// Image info plus a chart count, for chart_grid.
+fn info_json_chart(handle: u64, img: &DynamicImage, charts: usize) -> Value {
+    json!({"handle": handle, "width": img.width(), "height": img.height(), "charts": charts})
 }

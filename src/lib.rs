@@ -1577,6 +1577,7 @@ include!("chart_svg.rs");
 export!(office__chart_render, op_chart_render);
 export!(office__chart_svg, op_chart_svg);
 export!(office__chart_save, op_chart_save);
+export!(office__chart_grid, op_chart_grid);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

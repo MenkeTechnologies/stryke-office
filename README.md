@@ -271,7 +271,8 @@ cumulative-% line), `lollipop`/`dot`, `gantt` (per-series
 `{name, start, end}` on a time axis), `sunburst` (multi-ring,
 `rings => [[..],[..]]` innermost first), `range`/`range_column` (floating bars
 from `data => [[lo,hi],…]`), `percent_stacked` (100%-stacked), `streamgraph`
-(centered stacked area), `waffle` (10×10 share grid), `slope` (before/after).
+(centered stacked area), `waffle` (10×10 share grid), `slope` (before/after),
+`marimekko`/`mosaic` (variable-width stacked), `radial_bar` (concentric arcs).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,
@@ -289,6 +290,10 @@ identically in raster **and** SVG.
 - `chart_save(type, path, %opts)` → write straight to a file, format by
   extension: `.svg` (vector), `.pdf` (chart embedded in a PDF), or any raster
   extension.
+- `chart_grid(charts, %opts)` → render many specs and tile them into one
+  **dashboard** image (cols/cell_width/cell_height/gap/background); `path =>`
+  saves the grid straight to any raster extension or `.pdf`. The "tons of
+  graphs in one artifact" path.
 
 ```stryke
 Office::chart_save("line", "out.svg", series => $s, categories => \@c)   # vector

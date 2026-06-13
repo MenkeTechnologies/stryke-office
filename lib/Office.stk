@@ -672,7 +672,8 @@ fn Office::img_seam_carve ($handle, $width) {
 ##   scatter | bubble | pie | donut | radar | histogram | sankey | waterfall |
 ##   ohlc | candlestick | boxplot | funnel | gauge | heatmap | treemap |
 ##   polar | bullet | pareto | lollipop | dot | gantt | sunburst |
-##   range | range_column | percent_stacked | streamgraph | waffle | slope
+##   range | range_column | percent_stacked | streamgraph | waffle | slope |
+##   marimekko | radial_bar
 ## $series: arrayref of { name, data => [n, ...], color?, kind? }.
 ##   bullet series => { name, value, target, ranges => [r1,r2,...] };
 ##   gantt series => { name, start, end, color? };
@@ -709,6 +710,17 @@ fn Office::chart_svg ($type, $series, %opts) {
     $r{series} = $series
     val $o = Office::_decode("chart_svg", office__chart_svg(to_json(\%r)))
     exists $o->{svg} ? $o->{svg} : $o
+}
+
+## Render many chart specs and tile them into one dashboard image. $charts is
+## an arrayref of full chart specs (each as for chart_render). opts: cols,
+## cell_width (400), cell_height (300), gap (10), background, path (save the
+## grid straight to any raster extension or .pdf). Returns { handle, width,
+## height, charts } — or { ok, path, charts } when path is given.
+fn Office::chart_grid ($charts, %opts) {
+    var %r = %opts
+    $r{charts} = $charts
+    Office::_decode("chart_grid", office__chart_grid(to_json(\%r)))
 }
 
 ## Render a chart straight to a file, format chosen by $path extension:
