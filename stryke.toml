@@ -24,6 +24,7 @@ exports = [
     "office__sheet_aggregate",
     "office__sheet_select",
     "office__sheet_transpose",
+    "office__sheet_dedupe",
     "office__doc_read",
     "office__doc_write",
     "office__slides_read",

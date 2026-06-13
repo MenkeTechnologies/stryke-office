@@ -1815,6 +1815,103 @@ fn op_sheet_transpose(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": dims.0, "columns": dims.1 }))
 }
 
+/// Remove duplicate data rows (SQL DISTINCT). opts: path, output,
+/// by => a column name/index or an array of them (default: the whole row),
+/// keep => "first" (default) | "last", sheet, header (default true), format.
+/// Order is preserved; the header is kept. Returns `{ ok, path, kept, removed }`.
+fn op_sheet_dedupe(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let keep_last = opts.get("keep").and_then(Value::as_str) == Some("last");
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let cols: Option<Vec<usize>> = match opts.get("by") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(arr)) => Some(
+            arr.iter()
+                .map(|c| resolve_col(Some(c), hr))
+                .collect::<Result<_>>()?,
+        ),
+        Some(v) => Some(vec![resolve_col(Some(v), hr)?]),
+    };
+    let row_key = |row: &Value| -> String {
+        match &cols {
+            Some(cs) => cs
+                .iter()
+                .map(|&c| {
+                    cell_to_string(
+                        row.as_array()
+                            .and_then(|a| a.get(c))
+                            .unwrap_or(&Value::Null),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\u{1}"),
+            None => row.to_string(),
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let total = rows.len() - data_start;
+    let mut seen = std::collections::HashSet::new();
+    let mut kept: Vec<Value> = if keep_last {
+        let mut rev: Vec<Value> = Vec::new();
+        for row in rows[data_start..].iter().rev() {
+            if seen.insert(row_key(row)) {
+                rev.push(row.clone());
+            }
+        }
+        rev.reverse();
+        rev
+    } else {
+        let mut out = Vec::new();
+        for row in &rows[data_start..] {
+            if seen.insert(row_key(row)) {
+                out.push(row.clone());
+            }
+        }
+        out
+    };
+
+    let kept_n = kept.len();
+    let mut new_rows: Vec<Value> = Vec::with_capacity(kept_n + 1);
+    if data_start == 1 {
+        new_rows.push(rows[0].clone());
+    }
+    new_rows.append(&mut kept);
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "kept": kept_n, "removed": total - kept_n }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -2429,6 +2526,7 @@ export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_transpose, op_sheet_transpose);
+export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
