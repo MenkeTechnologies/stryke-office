@@ -122,6 +122,15 @@ fn Office::sheet_filter ($path, $by, $output, %opts) {
         office__sheet_filter(to_json({ path => $path, by => $by, output => $output, op => $opts{op}, value => $opts{value}, sheet => $opts{sheet}, ignore_case => $opts{ignore_case}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Group rows by $group_by and aggregate (SQL GROUP BY). opts: value => column
+## to aggregate (required for sum/mean/min/max), agg => count|sum|mean|min|max
+## (default count), sheet, header => 0 if first row is data, format => override.
+## Output is a two-column sheet sorted by group. Returns { ok, path, groups }.
+fn Office::sheet_aggregate ($path, $group_by, $output, %opts) {
+    Office::_decode("sheet_aggregate",
+        office__sheet_aggregate(to_json({ path => $path, group_by => $group_by, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

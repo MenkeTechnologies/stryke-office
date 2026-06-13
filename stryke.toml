@@ -21,6 +21,7 @@ exports = [
     "office__records_write",
     "office__sheet_sort",
     "office__sheet_filter",
+    "office__sheet_aggregate",
     "office__doc_read",
     "office__doc_write",
     "office__slides_read",
