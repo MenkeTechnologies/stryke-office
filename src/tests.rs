@@ -1034,6 +1034,42 @@ fn chart_incr20_types_render_raster_and_svg() {
 }
 
 #[test]
+fn chart_incr22_types_and_overlays() {
+    // lollipop / dot are cartesian
+    for kind in ["lollipop", "dot"] {
+        let c = call(
+            office__chart_render,
+            &format!(r#"{{"type":"{kind}","width":400,"height":300,"categories":["a","b","c"],"series":[{{"data":[5,9,3]}}]}}"#),
+        );
+        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind}: {c}"));
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","categories":["a","b","c"],"series":[{{"data":[5,9,3]}}]}}"#));
+        assert!(v["svg"].as_str().unwrap_or("").contains("<circle"), "{kind} svg dots");
+    }
+    // gantt: tasks with start/end
+    let gantt = r#"[{"name":"design","start":0,"end":3},{"name":"build","start":3,"end":8},{"name":"ship","start":8,"end":10}]"#;
+    let gc = call(office__chart_render, &format!(r#"{{"type":"gantt","series":{gantt}}}"#));
+    let gh = gc["handle"].as_u64().expect("gantt raster handle");
+    call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
+    let gv = call(office__chart_svg, &format!(r#"{{"type":"gantt","series":{gantt}}}"#));
+    assert!(gv["svg"].as_str().unwrap_or("").contains("<rect"), "gantt svg bars");
+    // sunburst: rings, no series required
+    let sv = call(office__chart_svg, r#"{"type":"sunburst","rings":[[10,20],[5,5,10,10]]}"#);
+    assert!(sv["svg"].as_str().unwrap_or("").contains("<path"), "sunburst svg ring segments");
+    let sc = call(office__chart_render, r#"{"type":"sunburst","rings":[[10,20],[5,5,10,10]]}"#);
+    let sh = sc["handle"].as_u64().expect("sunburst raster handle");
+    call(office__img_close, &format!(r#"{{"handle":{sh}}}"#));
+    // markers + reference lines on a line chart (SVG)
+    let lv = call(
+        office__chart_svg,
+        r#"{"type":"line","categories":["a","b","c"],"series":[{"data":[3,7,5]}],"markers":true,"reference_lines":[{"y":6}]}"#,
+    );
+    let svg = lv["svg"].as_str().unwrap_or("");
+    assert!(svg.contains("<circle"), "line markers present");
+    assert!(svg.contains("stroke-dasharray"), "reference line dashed");
+}
+
+#[test]
 fn chart_legend_and_labels_emit() {
     // legend swatches + value labels appear in the SVG
     let v = call(

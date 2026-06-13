@@ -45,7 +45,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
     }
 
     let labels = opts.get("labels").and_then(Value::as_bool).unwrap_or(false);
-    let needs_series = !matches!(kind, "sankey" | "gauge" | "heatmap");
+    let needs_series = !matches!(kind, "sankey" | "gauge" | "heatmap" | "sunburst");
     if needs_series && opts.get("series").and_then(Value::as_array).is_none() {
         return Err(anyhow!("missing series (expected array)"));
     }
@@ -64,6 +64,8 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "polar" => svg_polar(&mut s, series, &cats, l, t, r, b),
         "bullet" => svg_bullet(&mut s, series, l, t, r, b),
         "pareto" => svg_pareto(&mut s, series, &cats, l, t, r, b),
+        "gantt" => svg_gantt(&mut s, series, l, t, r, b),
+        "sunburst" => svg_sunburst(&mut s, opts, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -148,7 +150,32 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
             "ohlc" => svg_ohlc(&mut s, series, l, pw, &yp, false),
             "candlestick" => svg_ohlc(&mut s, series, l, pw, &yp, true),
             "boxplot" => svg_boxplot(&mut s, series, l, pw, &yp),
+            "lollipop" => svg_lollipop(&mut s, series, l, pw, &yp, true),
+            "dot" => svg_lollipop(&mut s, series, l, pw, &yp, false),
             _ => svg_bars(&mut s, series, &cats, l, pw, &yp, false, labels),
+        }
+        // markers on line-family points
+        if opts.get("markers").and_then(Value::as_bool) == Some(true)
+            && matches!(kind, "line" | "area" | "step" | "stacked_area")
+        {
+            for (si, ser) in series.iter().enumerate() {
+                let col = svg_palette(si);
+                let data = series_nums(ser);
+                let n = data.len();
+                for (i, v) in data.iter().enumerate() {
+                    let x = l + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 };
+                    let _ = write!(s, r##"<circle cx="{x:.1}" cy="{:.1}" r="3" fill="{col}"/>"##, yp(*v));
+                }
+            }
+        }
+        // horizontal reference lines
+        if let Some(refs) = opts.get("reference_lines").and_then(Value::as_array) {
+            for rl in refs {
+                if let Some(yv) = rl.get("y").and_then(Value::as_f64) {
+                    let col = rl.get("color").and_then(Value::as_str).unwrap_or("#cc3333");
+                    let _ = write!(s, r##"<line x1="{l}" y1="{:.1}" x2="{r}" y2="{:.1}" stroke="{col}" stroke-dasharray="6,4"/>"##, yp(yv), yp(yv));
+                }
+            }
         }
         // optional least-squares trendline over scatter points
         if scatter && opts.get("trendline").and_then(Value::as_bool) == Some(true) {
@@ -599,6 +626,104 @@ fn svg_pareto(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64,
         let _ = write!(s, r##"<text x="{x:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(name));
     }
     let _ = write!(s, r##"<polyline points="{pts}" fill="none" stroke="#c03a2b" stroke-width="2"/>"##);
+}
+
+/// Lollipop / dot plot (vector).
+fn svg_lollipop(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, with_stem: bool) {
+    let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let slot = pw / ncat as f64;
+    let base = yp(0.0);
+    let nser = series.len().max(1);
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        for (ci, v) in series_nums(ser).into_iter().enumerate() {
+            let x = l + ci as f64 * slot + slot * 0.5 + (si as f64 - (nser as f64 - 1.0) / 2.0) * 6.0;
+            let y = yp(v);
+            if with_stem {
+                let _ = write!(s, r##"<line x1="{x:.1}" y1="{base:.1}" x2="{x:.1}" y2="{y:.1}" stroke="{col}" stroke-width="2"/>"##);
+            }
+            let _ = write!(s, r##"<circle cx="{x:.1}" cy="{y:.1}" r="5" fill="{col}"/>"##);
+        }
+    }
+}
+
+/// Gantt (vector): one time bar per task `{name, start, end, color?}`.
+fn svg_gantt(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let tasks: Vec<(&Value, f64, f64)> = series
+        .iter()
+        .filter_map(|x| Some((x, x.get("start").and_then(Value::as_f64)?, x.get("end").and_then(Value::as_f64)?)))
+        .collect();
+    if tasks.is_empty() {
+        return;
+    }
+    let lo = tasks.iter().map(|x| x.1).fold(f64::INFINITY, f64::min);
+    let hi = tasks.iter().map(|x| x.2).fold(f64::NEG_INFINITY, f64::max);
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let axis_l = l + 20.0;
+    let map = |v: f64| axis_l + (v - lo) / span * (r - axis_l);
+    let n = tasks.len();
+    let row_h = ((b - t) / n as f64).max(10.0);
+    let bh = (row_h - 6.0).max(4.0);
+    for i in 0..=5 {
+        let v = lo + span * i as f64 / 5.0;
+        let x = map(v);
+        let _ = write!(s, r##"<line x1="{x:.1}" y1="{t}" x2="{x:.1}" y2="{b}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, x - 8.0, b + 12.0, xml_escape(&fmt_num(v)));
+    }
+    for (i, (ser, start, end)) in tasks.iter().enumerate() {
+        let y = t + i as f64 * row_h + 3.0;
+        let (x0, x1) = (map(*start), map(*end));
+        let col = ser.get("color").and_then(Value::as_str).map(String::from).unwrap_or_else(|| svg_palette(i));
+        let _ = write!(s, r##"<rect x="{x0:.1}" y="{y:.1}" width="{:.1}" height="{bh:.1}" fill="{col}"/>"##, (x1 - x0).max(1.0));
+        if let Some(name) = ser.get("name").and_then(Value::as_str) {
+            let _ = write!(s, r##"<text x="2" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + bh * 0.7, xml_escape(name));
+        }
+    }
+}
+
+/// Sunburst / multi-ring (vector). `rings` innermost first, or series data.
+fn svg_sunburst(s: &mut String, opts: &Value, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let rings: Vec<Vec<f64>> = if let Some(rs) = opts.get("rings").and_then(Value::as_array) {
+        rs.iter().map(|row| row.as_array().map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default()).collect()
+    } else {
+        series.iter().map(series_nums).collect()
+    };
+    let nr = rings.len();
+    if nr == 0 {
+        return;
+    }
+    let (cx, cy) = ((l + r) / 2.0, (t + b) / 2.0);
+    let rmax = ((r - l).min(b - t) / 2.0 - 10.0).max(20.0);
+    let ring_w = rmax / nr as f64;
+    let mut ci = 0usize;
+    for (ri, ring) in rings.iter().enumerate() {
+        let total: f64 = ring.iter().sum();
+        if total <= 0.0 {
+            continue;
+        }
+        let inner = ri as f64 * ring_w;
+        let outer = (ri + 1) as f64 * ring_w;
+        let mut angle = -std::f64::consts::FRAC_PI_2;
+        for &v in ring {
+            let sweep = v / total * std::f64::consts::TAU;
+            let a1 = angle + sweep;
+            let large = if sweep > std::f64::consts::PI { 1 } else { 0 };
+            let (ox0, oy0) = (cx + outer * angle.cos(), cy + outer * angle.sin());
+            let (ox1, oy1) = (cx + outer * a1.cos(), cy + outer * a1.sin());
+            let (ix1, iy1) = (cx + inner * a1.cos(), cy + inner * a1.sin());
+            let (ix0, iy0) = (cx + inner * angle.cos(), cy + inner * angle.sin());
+            let _ = write!(
+                s,
+                r##"<path d="M {ox0:.1},{oy0:.1} A {outer:.1},{outer:.1} 0 {large},1 {ox1:.1},{oy1:.1} L {ix1:.1},{iy1:.1} A {inner:.1},{inner:.1} 0 {large},0 {ix0:.1},{iy0:.1} Z" fill="{}"/>"##,
+                svg_palette(ci)
+            );
+            ci += 1;
+            angle = a1;
+        }
+    }
 }
 
 fn svg_line_area(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, b: f64, fill: bool) {

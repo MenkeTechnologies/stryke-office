@@ -242,10 +242,13 @@ cumulative), `ohlc`/`candlestick` (`data` is `[[open,high,low,close],…]`),
 `max`, no series), `heatmap` (`matrix => [[..],..]` or series-of-rows, no
 series required), `treemap` (area-proportional), `polar`/rose, `bullet`
 (per-series `{name, value, target, ranges}`), `pareto` (sorted bars +
-cumulative-% line). opts: `title`, `width` (800), `height` (600),
-`categories`, per-series `color`, `legend => 0` to suppress, `labels => 1` for
-data labels, `x_label`, `y_label`. Every type renders identically in raster
-**and** SVG.
+cumulative-% line), `lollipop`/`dot`, `gantt` (per-series
+`{name, start, end}` on a time axis), `sunburst` (multi-ring,
+`rings => [[..],[..]]` innermost first). opts: `title`, `width` (800),
+`height` (600), `categories`, per-series `color`, `legend => 0` to suppress,
+`labels => 1` for data labels, `x_label`, `y_label`, `markers => 1`
+(line family), `reference_lines => [{y, color}]` (threshold lines). Every type
+renders identically in raster **and** SVG.
 
 **Raster and vector output, any format.** Three entry points:
 - `chart_render(type, series, %opts)` → raster image handle (then `img_save`

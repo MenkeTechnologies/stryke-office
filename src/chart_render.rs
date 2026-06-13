@@ -182,7 +182,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     let ph = (b - t).max(1) as f64;
 
     // Kinds that don't need a `series` array (or use a different shape).
-    let needs_series = !matches!(kind.as_str(), "sankey" | "gauge" | "heatmap");
+    let needs_series = !matches!(kind.as_str(), "sankey" | "gauge" | "heatmap" | "sunburst");
 
     // Non-cartesian renderers draw into `img` then we fall through to the
     // shared legend/finish path. `false` => handle below in the cartesian arm.
@@ -219,6 +219,11 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_pareto(&mut img, &fnt, series, &cats, l, t, r, b, black, grid)
         }
+        "gantt" => {
+            require_series(&opts)?;
+            render_gantt(&mut img, &fnt, series, l, t, r, b, black, grid)
+        }
+        "sunburst" => render_sunburst(&mut img, &opts, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -307,7 +312,37 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             "ohlc" => render_ohlc(&mut img, series, l, pw, b, &yp, false),
             "candlestick" => render_ohlc(&mut img, series, l, pw, b, &yp, true),
             "boxplot" => render_boxplot(&mut img, series, l, pw, b, &yp),
+            "lollipop" => render_lollipop(&mut img, series, l, pw, b, &yp, true),
+            "dot" => render_lollipop(&mut img, series, l, pw, b, &yp, false),
             _ => render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black, false, labels),
+        }
+        // markers on line-family points
+        if opts.get("markers").and_then(Value::as_bool) == Some(true)
+            && matches!(kind.as_str(), "line" | "area" | "step" | "stacked_area")
+        {
+            for (si, s) in series.iter().enumerate() {
+                let color = series_color(s, si);
+                let data = series_nums(s);
+                let n = data.len();
+                for (i, v) in data.iter().enumerate() {
+                    let x = l as f64 + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 };
+                    draw_filled_circle_mut(&mut img, (x as i32, yp(*v) as i32), 3, color);
+                }
+            }
+        }
+        // horizontal reference lines: `reference_lines:[{y, color?}]`
+        if let Some(refs) = opts.get("reference_lines").and_then(Value::as_array) {
+            for rl in refs {
+                if let Some(yv) = rl.get("y").and_then(Value::as_f64) {
+                    let color = parse_color(rl.get("color").or(Some(&Value::String("#cc3333".into()))));
+                    let y = yp(yv);
+                    let mut x = l as f32;
+                    while x < r as f32 {
+                        draw_line_segment_mut(&mut img, (x, y), ((x + 6.0).min(r as f32), y), color);
+                        x += 12.0;
+                    }
+                }
+            }
         }
         // optional least-squares trendline over scatter points
         if scatter && opts.get("trendline").and_then(Value::as_bool) == Some(true) {
@@ -1287,5 +1322,121 @@ fn render_pareto(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], cats: &[S
         }
         prev = Some((cxp, cy));
         draw_text_mut(img, black, x as i32, b + 6, PxScale::from(11.0), fnt, name);
+    }
+}
+
+/// Lollipop (stem + dot) or dot plot (`with_stem = false`).
+fn render_lollipop(img: &mut RgbaImage, series: &[Value], l: i32, pw: f64, _b: i32, yp: &dyn Fn(f64) -> f32, with_stem: bool) {
+    let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let slot = pw / ncat as f64;
+    let base = yp(0.0);
+    let nser = series.len().max(1);
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        for (ci, v) in series_nums(s).into_iter().enumerate() {
+            let x = l as f64 + ci as f64 * slot + slot * 0.5 + (si as f64 - (nser as f64 - 1.0) / 2.0) * 6.0;
+            let y = yp(v);
+            if with_stem {
+                draw_line_segment_mut(img, (x as f32, base), (x as f32, y), color);
+            }
+            draw_filled_circle_mut(img, (x as i32, y as i32), 5, color);
+        }
+    }
+}
+
+/// Gantt: one horizontal time bar per task. Each series item is a task
+/// `{name, start, end, color?}` on a shared time axis.
+#[allow(clippy::too_many_arguments)]
+fn render_gantt(img: &mut RgbaImage, fnt: &FontRef, series: &[Value], l: i32, t: i32, r: i32, b: i32, black: Rgba<u8>, grid: Rgba<u8>) {
+    let tasks: Vec<(&Value, f64, f64)> = series
+        .iter()
+        .filter_map(|s| {
+            let start = s.get("start").and_then(Value::as_f64)?;
+            let end = s.get("end").and_then(Value::as_f64)?;
+            Some((s, start, end))
+        })
+        .collect();
+    if tasks.is_empty() {
+        return;
+    }
+    let lo = tasks.iter().map(|t| t.1).fold(f64::INFINITY, f64::min);
+    let hi = tasks.iter().map(|t| t.2).fold(f64::NEG_INFINITY, f64::max);
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    // labels live in the left margin; bars in [l..r]
+    let axis_l = l + 20;
+    let map = |v: f64| axis_l as f64 + (v - lo) / span * (r - axis_l) as f64;
+    let n = tasks.len();
+    let row_h = ((b - t) / n as i32).max(10);
+    let bh = (row_h - 6).max(4);
+    // time gridlines (5)
+    for i in 0..=5 {
+        let v = lo + span * i as f64 / 5.0;
+        let x = map(v) as f32;
+        draw_line_segment_mut(img, (x, t as f32), (x, b as f32), grid);
+        draw_text_mut(img, black, x as i32 - 8, b + 4, PxScale::from(11.0), fnt, &fmt_num(v));
+    }
+    for (i, (s, start, end)) in tasks.iter().enumerate() {
+        let y = t + i as i32 * row_h + 3;
+        let x0 = map(*start);
+        let x1 = map(*end);
+        let color = match s.get("color") {
+            Some(c) => parse_color(Some(c)),
+            None => palette(i),
+        };
+        draw_filled_rect_mut(img, Rect::at(x0 as i32, y).of_size((x1 - x0).max(1.0) as u32, bh as u32), color);
+        if let Some(name) = s.get("name").and_then(Value::as_str) {
+            draw_text_mut(img, black, 2, y, PxScale::from(11.0), fnt, name);
+        }
+    }
+}
+
+/// Sunburst / multi-ring: `rings:[[..],[..]]` innermost first (or the series'
+/// data arrays as rings). Each ring's values fill the full circle.
+fn render_sunburst(img: &mut RgbaImage, opts: &Value, series: &[Value], l: i32, t: i32, r: i32, b: i32) {
+    let rings: Vec<Vec<f64>> = if let Some(rs) = opts.get("rings").and_then(Value::as_array) {
+        rs.iter().map(|row| row.as_array().map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default()).collect()
+    } else {
+        series.iter().map(series_nums).collect()
+    };
+    let nr = rings.len();
+    if nr == 0 {
+        return;
+    }
+    let cx = (l + r) / 2;
+    let cy = (t + b) / 2;
+    let rmax = ((r - l).min(b - t) / 2 - 10).max(20) as f64;
+    let ring_w = rmax / nr as f64;
+    let mut ci = 0usize;
+    for (ri, ring) in rings.iter().enumerate() {
+        let total: f64 = ring.iter().sum();
+        if total <= 0.0 {
+            continue;
+        }
+        let inner = ri as f64 * ring_w;
+        let outer = (ri + 1) as f64 * ring_w;
+        let mut angle = -std::f64::consts::FRAC_PI_2;
+        for &v in ring {
+            let sweep = v / total * std::f64::consts::TAU;
+            let steps = (sweep / 0.1).ceil().max(2.0) as usize;
+            let mut poly: Vec<Point<i32>> = Vec::with_capacity(steps * 2 + 2);
+            for k in 0..=steps {
+                let a = angle + sweep * k as f64 / steps as f64;
+                poly.push(Point::new(cx + (outer * a.cos()) as i32, cy + (outer * a.sin()) as i32));
+            }
+            for k in (0..=steps).rev() {
+                let a = angle + sweep * k as f64 / steps as f64;
+                let ir = inner.max(0.0);
+                poly.push(Point::new(cx + (ir * a.cos()) as i32, cy + (ir * a.sin()) as i32));
+            }
+            poly.dedup();
+            if poly.len() >= 3 && poly.first() != poly.last() {
+                draw_polygon_mut(img, &poly, palette(ci));
+            }
+            ci += 1;
+            angle += sweep;
+        }
     }
 }
