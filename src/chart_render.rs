@@ -89,8 +89,8 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     let pw = (r - l).max(1) as f64;
     let ph = (b - t).max(1) as f64;
 
-    if kind == "pie" {
-        render_pie(&mut img, series, l, t, r, b);
+    if kind == "pie" || kind == "donut" || kind == "doughnut" {
+        render_pie(&mut img, series, l, t, r, b, kind != "pie");
         let handle = insert_image(DynamicImage::ImageRgba8(img));
         return Ok(json!({"handle": handle, "width": w, "height": h, "type": kind}));
     }
@@ -139,7 +139,11 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     match kind.as_str() {
         "line" | "area" => render_line_area(&mut img, series, l, r, b, ymin, ymax, kind == "area"),
         "scatter" => render_scatter(&mut img, series, l as f64, pw, xmin, xmax, yp),
-        _ => render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black),
+        "histogram" => render_histogram(&mut img, &fnt, series, &opts, l, pw, t, b, black),
+        "stacked" | "stacked_bar" => {
+            render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black, true)
+        }
+        _ => render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black, false),
     }
 
     let handle = insert_image(DynamicImage::ImageRgba8(img));
@@ -157,6 +161,7 @@ fn render_bars(
     b: i32,
     yp: &dyn Fn(f64) -> f32,
     black: Rgba<u8>,
+    stacked: bool,
 ) {
     let ncat = series.iter().map(|s| series_nums(s).len()).max().unwrap_or(0).max(cats.len());
     if ncat == 0 {
@@ -164,26 +169,95 @@ fn render_bars(
     }
     let nser = series.len().max(1);
     let slot = pw / ncat as f64;
-    let barw = (slot * 0.8 / nser as f64).max(1.0);
     let base = yp(0.0);
-    for (si, s) in series.iter().enumerate() {
-        let color = series_color(s, si);
-        for (ci, v) in series_nums(s).into_iter().enumerate() {
-            let x = l as f64 + ci as f64 * slot + slot * 0.1 + si as f64 * barw;
-            let top = yp(v);
-            let (y0, y1) = if top < base { (top, base) } else { (base, top) };
-            let hgt = (y1 - y0).max(1.0) as u32;
-            draw_filled_rect_mut(
-                img,
-                Rect::at(x as i32, y0 as i32).of_size(barw.max(1.0) as u32, hgt),
-                color,
-            );
+    if stacked {
+        let mut cum = vec![0.0f64; ncat];
+        let barw = (slot * 0.8).max(1.0);
+        for (si, s) in series.iter().enumerate() {
+            let color = series_color(s, si);
+            for (ci, v) in series_nums(s).into_iter().enumerate() {
+                let x = l as f64 + ci as f64 * slot + slot * 0.1;
+                let y0 = yp(cum[ci] + v);
+                let y1 = yp(cum[ci]);
+                let hgt = (y1 - y0).max(1.0) as u32;
+                draw_filled_rect_mut(
+                    img,
+                    Rect::at(x as i32, y0 as i32).of_size(barw as u32, hgt),
+                    color,
+                );
+                cum[ci] += v;
+            }
+        }
+    } else {
+        let barw = (slot * 0.8 / nser as f64).max(1.0);
+        for (si, s) in series.iter().enumerate() {
+            let color = series_color(s, si);
+            for (ci, v) in series_nums(s).into_iter().enumerate() {
+                let x = l as f64 + ci as f64 * slot + slot * 0.1 + si as f64 * barw;
+                let top = yp(v);
+                let (y0, y1) = if top < base { (top, base) } else { (base, top) };
+                let hgt = (y1 - y0).max(1.0) as u32;
+                draw_filled_rect_mut(
+                    img,
+                    Rect::at(x as i32, y0 as i32).of_size(barw.max(1.0) as u32, hgt),
+                    color,
+                );
+            }
         }
     }
     for (ci, cat) in cats.iter().enumerate() {
         let x = l as f64 + ci as f64 * slot + slot * 0.25;
         draw_text_mut(img, black, x as i32, b + 6, PxScale::from(12.0), fnt, cat);
     }
+}
+
+/// Histogram of the first series' raw data, binned into `bins` (opt, default
+/// 10) equal-width buckets; bars are bucket counts.
+#[allow(clippy::too_many_arguments)]
+fn render_histogram(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    pw: f64,
+    t: i32,
+    b: i32,
+    black: Rgba<u8>,
+) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    if data.is_empty() {
+        return;
+    }
+    let nbins = opts.get("bins").and_then(Value::as_u64).unwrap_or(10).clamp(1, 200) as usize;
+    let (lo, hi) = data.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &v| {
+        (a.min(v), b.max(v))
+    });
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let mut counts = vec![0u32; nbins];
+    for &v in &data {
+        let mut idx = ((v - lo) / span * nbins as f64) as usize;
+        if idx >= nbins {
+            idx = nbins - 1;
+        }
+        counts[idx] += 1;
+    }
+    let maxc = *counts.iter().max().unwrap_or(&1) as f64;
+    let ph = (b - t).max(1) as f64;
+    let slot = pw / nbins as f64;
+    let color = series_color(series.first().unwrap_or(&Value::Null), 0);
+    for (i, &c) in counts.iter().enumerate() {
+        let x = l as f64 + i as f64 * slot + slot * 0.05;
+        let bh = c as f64 / maxc * ph;
+        let y0 = b as f64 - bh;
+        draw_filled_rect_mut(
+            img,
+            Rect::at(x as i32, y0 as i32).of_size((slot * 0.9).max(1.0) as u32, bh.max(1.0) as u32),
+            color,
+        );
+    }
+    draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &format!("{lo:.1}"));
+    draw_text_mut(img, black, (l as f64 + pw - 30.0) as i32, b + 6, PxScale::from(12.0), fnt, &format!("{hi:.1}"));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -253,7 +327,7 @@ fn render_scatter(
     }
 }
 
-fn render_pie(img: &mut RgbaImage, series: &[Value], l: i32, t: i32, r: i32, b: i32) {
+fn render_pie(img: &mut RgbaImage, series: &[Value], l: i32, t: i32, r: i32, b: i32, donut: bool) {
     let data = series.first().map(series_nums).unwrap_or_default();
     let total: f64 = data.iter().sum();
     if total <= 0.0 {
@@ -280,5 +354,8 @@ fn render_pie(img: &mut RgbaImage, series: &[Value], l: i32, t: i32, r: i32, b: 
             draw_polygon_mut(img, &poly, palette(i));
         }
         angle += sweep;
+    }
+    if donut {
+        draw_filled_circle_mut(img, (cx, cy), (radius * 0.55) as i32, Rgba([255, 255, 255, 255]));
     }
 }

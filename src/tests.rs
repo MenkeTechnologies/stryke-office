@@ -594,6 +594,54 @@ fn chart_render_to_image_then_save_any_format() {
 }
 
 #[test]
+fn image_filters_apply() {
+    let n = call(
+        office__img_new,
+        r#"{"width":48,"height":48,"color":[120,160,200,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    for (f, arg) in [
+        (
+            office__img_blur as extern "C" fn(*const c_char) -> *const c_char,
+            r#"{"handle":H,"sigma":1.5}"#,
+        ),
+        (
+            office__img_sharpen,
+            r#"{"handle":H,"sigma":1.0,"threshold":2}"#,
+        ),
+        (office__img_brighten, r#"{"handle":H,"value":20}"#),
+        (office__img_contrast, r#"{"handle":H,"value":15.0}"#),
+        (office__img_huerotate, r#"{"handle":H,"degrees":90}"#),
+        (office__img_invert, r#"{"handle":H}"#),
+        (office__img_grayscale, r#"{"handle":H}"#),
+    ] {
+        let v = call(f, &arg.replace('H', &h.to_string()));
+        assert_eq!(v["ok"], true, "filter failed: {v}");
+    }
+    // Image is still valid + usable after the filter chain.
+    let info = call(office__img_info, &format!(r#"{{"handle":{h}}}"#));
+    assert_eq!(info["width"], 48, "image intact after filters");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
+fn chart_extra_types_render() {
+    for kind in ["donut", "stacked", "histogram", "column"] {
+        let c = call(
+            office__chart_render,
+            &format!(
+                r#"{{"type":"{kind}","width":400,"height":300,"categories":["a","b","c","d"],"series":[{{"name":"s1","data":[4,8,2,6]}},{{"name":"s2","data":[3,5,7,1]}}]}}"#
+            ),
+        );
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind}: {c}"));
+        assert_eq!(c["width"], 400, "{kind} width");
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    }
+}
+
+#[test]
 fn chart_missing_series_errors() {
     let v = call(office__chart_render, r#"{"type":"bar"}"#);
     assert!(

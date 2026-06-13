@@ -207,6 +207,44 @@ fn Office::img_close ($handle) {
     Office::_decode("img_close", office__img_close(to_json({ handle => $handle })))
 }
 
+# ── image filters (in place on the handle) ──────────────────────────
+
+## Gaussian blur. opts: sigma (default 2).
+fn Office::img_blur ($handle, %opts) {
+    Office::_decode("img_blur", office__img_blur(to_json({ handle => $handle, sigma => $opts{sigma} })))
+}
+
+## Unsharp-mask sharpen. opts: sigma (default 2), threshold (default 2).
+fn Office::img_sharpen ($handle, %opts) {
+    Office::_decode("img_sharpen",
+        office__img_sharpen(to_json({ handle => $handle, sigma => $opts{sigma}, threshold => $opts{threshold} })))
+}
+
+## Brighten by $value (negative darkens).
+fn Office::img_brighten ($handle, $value) {
+    Office::_decode("img_brighten", office__img_brighten(to_json({ handle => $handle, value => $value })))
+}
+
+## Adjust contrast by $value (negative reduces).
+fn Office::img_contrast ($handle, $value) {
+    Office::_decode("img_contrast", office__img_contrast(to_json({ handle => $handle, value => $value })))
+}
+
+## Rotate hue by $degrees.
+fn Office::img_huerotate ($handle, $degrees) {
+    Office::_decode("img_huerotate", office__img_huerotate(to_json({ handle => $handle, degrees => $degrees })))
+}
+
+## Invert colors.
+fn Office::img_invert ($handle) {
+    Office::_decode("img_invert", office__img_invert(to_json({ handle => $handle })))
+}
+
+## Convert to grayscale (luma).
+fn Office::img_grayscale ($handle) {
+    Office::_decode("img_grayscale", office__img_grayscale(to_json({ handle => $handle })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format

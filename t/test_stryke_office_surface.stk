@@ -36,6 +36,15 @@ assert_ok exists &Office::img_draw_circle, "Office::img_draw_circle exists"
 assert_ok exists &Office::img_draw_text, "Office::img_draw_text exists"
 assert_ok exists &Office::img_close, "Office::img_close exists"
 
+# image filters
+assert_ok exists &Office::img_blur, "Office::img_blur exists"
+assert_ok exists &Office::img_sharpen, "Office::img_sharpen exists"
+assert_ok exists &Office::img_brighten, "Office::img_brighten exists"
+assert_ok exists &Office::img_contrast, "Office::img_contrast exists"
+assert_ok exists &Office::img_huerotate, "Office::img_huerotate exists"
+assert_ok exists &Office::img_invert, "Office::img_invert exists"
+assert_ok exists &Office::img_grayscale, "Office::img_grayscale exists"
+
 # charting
 assert_ok exists &Office::chart_render, "Office::chart_render exists"
 

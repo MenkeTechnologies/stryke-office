@@ -380,3 +380,56 @@ fn op_img_close(opts: Value) -> Result<Value> {
     let removed = images().lock().remove(&handle).is_some();
     Ok(json!({"ok": true, "closed": removed}))
 }
+
+// ── filters (all in-place on the handle's image) ─────────────────────────────
+
+fn op_img_blur(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let sigma = opts.get("sigma").and_then(Value::as_f64).unwrap_or(2.0) as f32;
+    transform(h, |img| Ok(img.blur(sigma)))?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_sharpen(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let sigma = opts.get("sigma").and_then(Value::as_f64).unwrap_or(2.0) as f32;
+    let threshold = opts.get("threshold").and_then(Value::as_i64).unwrap_or(2) as i32;
+    transform(h, |img| Ok(img.unsharpen(sigma, threshold)))?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_brighten(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let value = opts.get("value").and_then(Value::as_i64).unwrap_or(0) as i32;
+    transform(h, |img| Ok(img.brighten(value)))?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_contrast(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let c = opts.get("value").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+    transform(h, |img| Ok(img.adjust_contrast(c)))?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_huerotate(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let deg = opts.get("degrees").and_then(Value::as_i64).unwrap_or(0) as i32;
+    transform(h, |img| Ok(img.huerotate(deg)))?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_invert(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |mut img| {
+        img.invert();
+        Ok(img)
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+fn op_img_grayscale(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    transform(h, |img| Ok(img.grayscale()))?;
+    Ok(json!({"ok": true}))
+}

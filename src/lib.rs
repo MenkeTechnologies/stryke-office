@@ -1133,6 +1133,13 @@ export!(office__img_draw_line, op_img_draw_line);
 export!(office__img_draw_circle, op_img_draw_circle);
 export!(office__img_draw_text, op_img_draw_text);
 export!(office__img_close, op_img_close);
+export!(office__img_blur, op_img_blur);
+export!(office__img_sharpen, op_img_sharpen);
+export!(office__img_brighten, op_img_brighten);
+export!(office__img_contrast, op_img_contrast);
+export!(office__img_huerotate, op_img_huerotate);
+export!(office__img_invert, op_img_invert);
+export!(office__img_grayscale, op_img_grayscale);
 
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");

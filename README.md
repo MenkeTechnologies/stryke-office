@@ -203,9 +203,9 @@ for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
 }
 ```
 
-Chart types: `bar`/`column`, `line`, `area`, `scatter` (`data` is `[[x,y],…]`),
-`pie`. opts: `title`, `width` (800), `height` (600), `categories`, per-series
-`color`. Rendered natively with `imageproc` + the vendored font — no plotters,
+Chart types: `bar`/`column`, `stacked`, `line`, `area`, `scatter` (`data` is
+`[[x,y],…]`), `pie`, `donut`, `histogram` (opt `bins`). opts: `title`, `width`
+(800), `height` (600), `categories`, per-series `color`. Rendered natively with `imageproc` + the vendored font — no plotters,
 no system fonts, no external binaries. (The stryke core also has `*_svg` chart
 builtins for quick inline SVG; this renders raster charts you can save/embed
 in any format.)
@@ -224,6 +224,7 @@ in any format.)
 | `Office::img_get_pixel($h, $x, $y)` / `img_put_pixel($h, $x, $y, $color)` | `{r,g,b,a}` / hashref | |
 | `Office::img_draw_rect / img_draw_line / img_draw_circle / img_draw_text` | hashref | `fill` opt; text uses vendored DejaVu Sans or a `font` path |
 | `Office::img_close($handle)` | hashref | release the handle |
+| `Office::img_blur / img_sharpen / img_brighten / img_contrast / img_huerotate / img_invert / img_grayscale` | hashref | in-place filters on a handle |
 
 ## [0x05] No external binaries
 
