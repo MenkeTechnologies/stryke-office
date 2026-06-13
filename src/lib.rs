@@ -1274,6 +1274,98 @@ fn op_sheet_find(opts: Value) -> Result<Value> {
     Ok(json!({ "count": matches.len(), "matches": matches }))
 }
 
+/// Read a sheet as records: the first row is taken as field names and each
+/// subsequent row becomes an object keyed by those names. opts: path,
+/// sheet => name or 0-based index (default first). Returns `{ fields, records,
+/// count }`; missing trailing cells come back as null.
+fn op_sheet_records(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let fields: Vec<String> = rows
+        .first()
+        .and_then(Value::as_array)
+        .map(|hr| hr.iter().map(cell_to_string).collect())
+        .unwrap_or_default();
+
+    let mut records = Vec::new();
+    for row in rows.iter().skip(1) {
+        let cells = row.as_array();
+        let mut obj = serde_json::Map::new();
+        for (i, f) in fields.iter().enumerate() {
+            let v = cells.and_then(|c| c.get(i)).cloned().unwrap_or(Value::Null);
+            obj.insert(f.clone(), v);
+        }
+        records.push(Value::Object(obj));
+    }
+    Ok(json!({ "fields": fields, "count": records.len(), "records": records }))
+}
+
+/// Write records (an array of objects) to a sheet: a header row of field names
+/// followed by one row per record. opts: path, records (required),
+/// fields => explicit column order (default: keys in first-seen order across
+/// records), sheet_name (default "Sheet1"), format => override. Returns
+/// `{ ok, path, rows, fields }`.
+fn op_records_write(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?.to_string();
+    let records = opts
+        .get("records")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing records (expected array of objects)"))?;
+
+    let fields: Vec<String> = match opts.get("fields").and_then(Value::as_array) {
+        Some(f) => f.iter().map(cell_to_string).collect(),
+        None => {
+            let mut seen = std::collections::HashSet::new();
+            let mut order = Vec::new();
+            for rec in records {
+                if let Some(o) = rec.as_object() {
+                    for k in o.keys() {
+                        if seen.insert(k.clone()) {
+                            order.push(k.clone());
+                        }
+                    }
+                }
+            }
+            order
+        }
+    };
+
+    let mut rows: Vec<Value> = Vec::with_capacity(records.len() + 1);
+    rows.push(json!(fields));
+    for rec in records {
+        let row: Vec<Value> = fields
+            .iter()
+            .map(|f| rec.get(f).cloned().unwrap_or(Value::Null))
+            .collect();
+        rows.push(Value::Array(row));
+    }
+
+    let sheet_name = opts
+        .get("sheet_name")
+        .and_then(Value::as_str)
+        .unwrap_or("Sheet1");
+    let mut wopts = json!({ "path": path, "sheets": [{ "name": sheet_name, "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": path, "rows": records.len(), "fields": fields }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -1881,6 +1973,8 @@ export!(office__sheet_write, op_sheet_write);
 export!(office__sheet_merge, op_sheet_merge);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_find, op_sheet_find);
+export!(office__sheet_records, op_sheet_records);
+export!(office__records_write, op_records_write);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
