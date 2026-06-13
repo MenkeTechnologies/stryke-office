@@ -1452,7 +1452,7 @@ fn chart_new_types_render_raster_and_svg() {
 }
 
 #[test]
-fn chart_incr20_types_render_raster_and_svg() {
+fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
     for kind in ["treemap", "polar", "pareto", "stacked_area"] {
@@ -1508,7 +1508,7 @@ fn chart_incr20_types_render_raster_and_svg() {
 }
 
 #[test]
-fn chart_incr22_types_and_overlays() {
+fn chart_types_and_overlays() {
     // lollipop / dot are cartesian
     for kind in ["lollipop", "dot"] {
         let c = call(
@@ -1574,7 +1574,7 @@ fn chart_incr22_types_and_overlays() {
 }
 
 #[test]
-fn chart_incr25_types_theming_smooth() {
+fn chart_types_theming_smooth() {
     // range bars from [lo,hi] pairs
     let rc = call(
         office__chart_render,
@@ -1728,7 +1728,7 @@ fn chart_grid_dashboard_and_new_types() {
 }
 
 #[test]
-fn chart_incr32_calendar_parallel_hexbin() {
+fn chart_calendar_parallel_hexbin() {
     // calendar: needs no series, just values
     let cal = call(
         office__chart_render,
