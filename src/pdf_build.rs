@@ -223,6 +223,55 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": path, "pages": pages.len(), "bytes": bytes.len()}))
 }
 
+/// Build a PDF from image files — one image per page, each scaled to fit the
+/// page within the margins (aspect preserved). opts: images => [paths],
+/// output => path, page_size => [w, h] points (default A4), margin => points
+/// (default 36). Returns `{ ok, path, pages }`.
+fn op_images_to_pdf(opts: Value) -> Result<Value> {
+    let images = opts
+        .get("images")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing images (expected array of paths)"))?;
+    if images.is_empty() {
+        return Err(anyhow!("no images"));
+    }
+    let output = req_str(&opts, "output")?.to_string();
+    let (pw, ph) = match opts.get("page_size").and_then(Value::as_array) {
+        Some(a) if a.len() >= 2 => (a[0].as_f64().unwrap_or(595.0), a[1].as_f64().unwrap_or(842.0)),
+        _ => (595.0, 842.0),
+    };
+    let margin = opts.get("margin").and_then(Value::as_f64).unwrap_or(36.0);
+    // Reserve the 6pt inter-element padding pdf_build adds when flowing an image,
+    // so an image scaled to the content height doesn't tip onto a second page.
+    let (cw, ch) = (pw - 2.0 * margin, ph - 2.0 * margin - 8.0);
+
+    let mut elements: Vec<Value> = Vec::new();
+    for (i, im) in images.iter().enumerate() {
+        let path = im
+            .as_str()
+            .ok_or_else(|| anyhow!("image path must be a string"))?;
+        let (iw, ih) = image::image_dimensions(path).map_err(|e| anyhow!("image {path}: {e}"))?;
+        let scale = (cw / iw.max(1) as f64).min(ch / ih.max(1) as f64);
+        if i > 0 {
+            elements.push(json!({ "type": "pagebreak" }));
+        }
+        elements.push(json!({
+            "type": "image",
+            "path": path,
+            "width": iw as f64 * scale,
+            "height": ih as f64 * scale,
+        }));
+    }
+
+    op_pdf_build(json!({
+        "path": output,
+        "elements": elements,
+        "page_size": [pw, ph],
+        "margin": margin,
+    }))?;
+    Ok(json!({ "ok": true, "path": output, "pages": images.len() }))
+}
+
 /// Serialize the accumulated pages into a single PDF byte buffer.
 fn assemble_pdf(pages: &[PdfPage], pw: f64, ph: f64) -> Vec<u8> {
     // Object 1 = Catalog, 2 = Pages; the rest are emitted per page.

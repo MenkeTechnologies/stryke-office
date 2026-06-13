@@ -33,6 +33,7 @@ exports = [
     "office__pdf_read",
     "office__pdf_write",
     "office__pdf_build",
+    "office__images_to_pdf",
     "office__pdf_merge",
     "office__pdf_split",
     "office__pdf_rotate",
