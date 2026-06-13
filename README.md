@@ -102,7 +102,7 @@ val $info = Office::pdf_read("out.pdf")   # { pages => [...], text => "..." }
 | Kind | Formats | Read | Write |
 |---|---|---|---|
 | Spreadsheet | xlsx, ods, xls, csv, tsv | yes | xlsx, ods, csv, tsv |
-| Document | docx, odt, html, md, rtf, txt | yes | docx, odt, html, md, rtf, txt |
+| Document | docx, odt, html, md, rtf, txt | yes | docx, odt, html, md, rtf, txt, pdf |
 | Presentation | pptx, odp | yes | yes |
 | PDF | pdf | text + pages | text |
 | Image | png, jpeg, gif, bmp, webp, tiff, … | yes | yes |

@@ -912,6 +912,28 @@ fn op_doc_write(opts: Value) -> Result<Value> {
                 .collect::<Vec<_>>()
                 .join("\n"),
         )?,
+        "pdf" => {
+            // Flatten blocks to lines and emit a self-contained PDF
+            // (headings padded with a blank line). lo_core supplies the font.
+            let mut lines: Vec<String> = Vec::new();
+            for b in &blocks {
+                let kind = b.get("kind").and_then(Value::as_str).unwrap_or("para");
+                if kind == "pagebreak" {
+                    lines.push(String::new());
+                    continue;
+                }
+                lines.push(block_plain_text(b));
+                if kind == "heading" {
+                    lines.push(String::new());
+                }
+            }
+            let bytes = lo_core::write_text_pdf(
+                &lines,
+                lo_core::units::Length::mm(210.0),
+                lo_core::units::Length::mm(297.0),
+            );
+            std::fs::write(&path, bytes)?;
+        }
         other => return Err(anyhow!("unsupported document write format: {other}")),
     }
     Ok(json!({"ok": true, "path": path, "blocks": blocks.len()}))

@@ -230,6 +230,24 @@ fn html_md_rtf_txt_doc_round_trip() {
 }
 
 #[test]
+fn doc_write_to_pdf() {
+    let path = tmp("doc.pdf");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[{{"kind":"heading","level":1,"text":"Report Title"}},{{"kind":"para","text":"Some body text."}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "doc->pdf write failed: {w}");
+    let r = call(office__pdf_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert!(
+        r["text"].as_str().unwrap_or("").contains("Report Title"),
+        "pdf text extracted"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn missing_path_errors_cleanly() {
     let v = call(office__sheet_read, "{}");
     assert_eq!(err_of(&v), "missing path");
