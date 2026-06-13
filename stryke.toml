@@ -175,6 +175,7 @@ exports = [
     "office__img_quantize",
     "office__img_favicon",
     "office__chart_render",
+    "office__chart_from_sheet",
     "office__chart_svg",
     "office__chart_save",
     "office__chart_grid",

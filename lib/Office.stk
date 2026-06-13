@@ -1206,6 +1206,19 @@ fn Office::chart_render ($type, $series, %opts) {
     Office::_decode("chart_render", office__chart_render(to_json(\%r)))
 }
 
+## Render a chart straight from a spreadsheet's columns and save it. $path is the
+## spreadsheet, $output the chart file (.svg/.pdf/.png/... sets the format).
+## opts: type (bar/line/...), sheet, header => 0, categories => column for x
+## labels, series => arrayref of value columns (default: all numeric columns),
+## plus chart options (title, width, height, smooth, ...). Returns the chart_save
+## result.
+fn Office::chart_from_sheet ($path, $output, %opts) {
+    var %r = %opts
+    $r{path} = $path
+    $r{output} = $output
+    Office::_decode("chart_from_sheet", office__chart_from_sheet(to_json(\%r)))
+}
+
 ## Render a chart to a vector SVG string (returns the markup), or write it
 ## to %opts{path} if given. Same spec keys as chart_render.
 fn Office::chart_svg ($type, $series, %opts) {
