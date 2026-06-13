@@ -115,6 +115,7 @@ exports = [
     "office__chart_render",
     "office__chart_svg",
     "office__chart_save",
+    "office__chart_grid",
 ]
 
 [scripts]

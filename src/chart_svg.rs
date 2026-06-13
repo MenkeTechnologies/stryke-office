@@ -71,6 +71,8 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "sunburst" => svg_sunburst(&mut s, opts, series, l, t, r, b),
         "waffle" => svg_waffle(&mut s, series, l, t, r, b),
         "slope" => svg_slope(&mut s, series, l, t, r, b),
+        "marimekko" | "mosaic" => svg_marimekko(&mut s, series, &cats, l, t, r, b),
+        "radial_bar" => svg_radial_bar(&mut s, series, &cats, l, t, r, b),
         _ => special = false,
     }
 
@@ -934,6 +936,63 @@ fn svg_slope(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
         let _ = write!(s, r##"<circle cx="{x0:.1}" cy="{:.1}" r="4" fill="{col}"/><circle cx="{x1:.1}" cy="{:.1}" r="4" fill="{col}"/>"##, yv(*a), yv(*c));
         if let Some(name) = ser.get("name").and_then(Value::as_str) {
             let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" text-anchor="end" fill="#1e1e1e">{}</text>"##, x0 - 6.0, yv(*a) + 4.0, xml_escape(name));
+        }
+    }
+}
+
+/// Marimekko / mosaic (vector).
+fn svg_marimekko(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let col_tot: Vec<f64> = (0..ncat)
+        .map(|ci| series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0).max(0.0)).sum())
+        .collect();
+    let grand: f64 = col_tot.iter().sum::<f64>().max(f64::EPSILON);
+    let (pw, ph) = (r - l, b - t);
+    let mut x = l;
+    for ci in 0..ncat {
+        let cw = col_tot[ci] / grand * pw;
+        let mut y = t;
+        let ctot = col_tot[ci].max(f64::EPSILON);
+        for (si, ser) in series.iter().enumerate() {
+            let v = series_nums(ser).get(ci).copied().unwrap_or(0.0).max(0.0);
+            let seg = v / ctot * ph;
+            let _ = write!(s, r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="{}" stroke="#ffffff"/>"##, x + 1.0, y, (cw - 2.0).max(1.0), seg, svg_palette(si));
+            y += seg;
+        }
+        if let Some(c) = cats.get(ci) {
+            let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, x + 2.0, b + 12.0, xml_escape(c));
+        }
+        x += cw;
+    }
+}
+
+/// Radial bar chart (vector): concentric ring arcs proportional to value.
+fn svg_radial_bar(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let maxv = data.iter().cloned().fold(f64::EPSILON, f64::max);
+    let (cx, cy) = ((l + r) / 2.0, (t + b) / 2.0);
+    let rmax = ((r - l).min(b - t) / 2.0 - 16.0).max(20.0);
+    let inner = rmax * 0.25;
+    let band = (rmax - inner) / n as f64;
+    let max_sweep = std::f64::consts::TAU * 0.75;
+    for (i, &v) in data.iter().enumerate() {
+        let rr = inner + (i as f64 + 0.5) * band;
+        let sweep = v / maxv * max_sweep;
+        let a0 = -std::f64::consts::FRAC_PI_2;
+        let a1 = a0 + sweep;
+        let (x0, y0) = (cx + rr * a0.cos(), cy + rr * a0.sin());
+        let (x1, y1) = (cx + rr * a1.cos(), cy + rr * a1.sin());
+        let large = if sweep > std::f64::consts::PI { 1 } else { 0 };
+        let _ = write!(s, r##"<path d="M {x0:.1},{y0:.1} A {rr:.1},{rr:.1} 0 {large},1 {x1:.1},{y1:.1}" fill="none" stroke="{}" stroke-width="{:.1}"/>"##, svg_palette(i), band * 0.7);
+        if let Some(c) = cats.get(i) {
+            let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, cx + 4.0, cy - rr, xml_escape(c));
         }
     }
 }
