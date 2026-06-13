@@ -1517,6 +1517,11 @@ export!(office__pdf_info, op_pdf_info);
 export!(office__pdf_watermark, op_pdf_watermark);
 export!(office__pdf_page_numbers, op_pdf_page_numbers);
 
+// PDF AcroForm fields: list + fill
+include!("pdf_form.rs");
+export!(office__pdf_form_fields, op_pdf_form_fields);
+export!(office__pdf_fill_form, op_pdf_fill_form);
+
 // document metadata (core/app properties) read + write across all formats
 include!("meta_ops.rs");
 export!(office__meta_read, op_meta_read);

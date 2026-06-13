@@ -69,4 +69,8 @@ assert_ok exists &Office::extract_images, "Office::extract_images exists"
 # text replace / templating
 assert_ok exists &Office::replace_text, "Office::replace_text exists"
 
+# pdf forms
+assert_ok exists &Office::pdf_form_fields, "Office::pdf_form_fields exists"
+assert_ok exists &Office::pdf_fill_form, "Office::pdf_fill_form exists"
+
 test_run
