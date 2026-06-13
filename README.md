@@ -161,6 +161,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |
 | `Office::doc_stats($path)` | `{words, characters, characters_no_spaces, lines, paragraphs, pages?}` | Word-style counts across docx/odt/html/md/rtf/txt/pdf |
+| `Office::doc_wordfreq($path, %opts)` | `{total, unique, words:[{word,count}]}` | word-frequency ranking; `top`/`min_length`/`stopwords` opts |
 | `Office::doc_merge($inputs, $output, %opts)` | `{sources, blocks}` | concatenate documents into one; target ext converts too; `page_breaks` toggle |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |

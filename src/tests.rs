@@ -935,6 +935,31 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn doc_wordfreq_ranks_words() {
+    let path = tmp("wf.txt");
+    std::fs::write(&path, "the cat sat on the mat the cat ran").unwrap();
+
+    // default: no stopwords, ignore_case
+    let r = call(office__doc_wordfreq, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["total"], 9, "9 tokens: {r}");
+    assert_eq!(r["unique"], 6, "6 unique: {r}");
+    assert_eq!(r["words"][0]["word"], "the", "top word: {r}");
+    assert_eq!(r["words"][0]["count"], 3, "the x3: {r}");
+    assert_eq!(r["words"][1]["word"], "cat", "second: {r}");
+    assert_eq!(r["words"][1]["count"], 2, "cat x2: {r}");
+
+    // with stopwords: "the"/"on" filtered -> cat leads
+    let s = call(
+        office__doc_wordfreq,
+        &format!(r#"{{"path":"{path}","stopwords":true}}"#),
+    );
+    assert_eq!(s["words"][0]["word"], "cat", "stopword-filtered top: {s}");
+    assert_eq!(s["total"], 5, "5 non-stopword tokens: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn doc_find_and_slides_find() {
     // doc_find over a docx with three paragraphs
     let dx = tmp("find.docx");
