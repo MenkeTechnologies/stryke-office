@@ -570,6 +570,74 @@ fn op_doc_stats(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// The full text of any readable document as one string.
+fn doc_full_text(path: &str) -> Result<String> {
+    Ok(match ext_of(path).as_str() {
+        "pdf" => {
+            let bytes = std::fs::read(path)?;
+            lo_core::extract_text_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?
+        }
+        _ => op_doc_read(json!({ "path": path }))?
+            .get("paragraphs")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default(),
+    })
+}
+
+/// Common English stopwords filtered when `stopwords` is requested.
+const STOPWORDS: &[&str] = &[
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "for", "with", "is", "are",
+    "was", "were", "be", "been", "by", "as", "that", "this", "it", "its", "from", "not", "no",
+    "into", "than", "then",
+];
+
+/// Word-frequency analysis for any readable document. opts: path, top (default
+/// 20), min_length (default 1), ignore_case (default true), stopwords (default
+/// false; filter common English words). Returns `{ total, unique, words:
+/// [{ word, count }] }` sorted by count desc then word asc.
+fn op_doc_wordfreq(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let top = opts.get("top").and_then(Value::as_u64).unwrap_or(20) as usize;
+    let min_len = opts.get("min_length").and_then(Value::as_u64).unwrap_or(1) as usize;
+    let ignore_case = opts.get("ignore_case").and_then(Value::as_bool).unwrap_or(true);
+    let use_stop = opts.get("stopwords").and_then(Value::as_bool).unwrap_or(false);
+
+    let text = doc_full_text(path)?;
+    let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut total = 0u64;
+    for tok in text.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()) {
+        let w = if ignore_case {
+            tok.to_lowercase()
+        } else {
+            tok.to_string()
+        };
+        if w.chars().count() < min_len {
+            continue;
+        }
+        if use_stop && STOPWORDS.contains(&w.to_lowercase().as_str()) {
+            continue;
+        }
+        *counts.entry(w).or_insert(0) += 1;
+        total += 1;
+    }
+
+    let unique = counts.len();
+    let mut ranked: Vec<(String, u64)> = counts.into_iter().collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    ranked.truncate(top);
+    let words: Vec<Value> = ranked
+        .into_iter()
+        .map(|(w, c)| json!({ "word": w, "count": c }))
+        .collect();
+    Ok(json!({ "total": total, "unique": unique, "words": words }))
+}
+
 // ── hyperlinks ────────────────────────────────────────────────────────────────
 
 /// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display

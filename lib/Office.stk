@@ -208,6 +208,15 @@ fn Office::doc_stats ($path) {
     Office::_decode("doc_stats", office__doc_stats(to_json({ path => $path })))
 }
 
+## Word-frequency analysis for any readable document (docx/odt/html/md/rtf/txt/
+## pdf). opts: top => N (default 20), min_length => N (default 1), ignore_case
+## => 0, stopwords => 1 (filter common English words). Returns { total, unique,
+## words => [{ word, count }] } sorted by count desc.
+fn Office::doc_wordfreq ($path, %opts) {
+    Office::_decode("doc_wordfreq",
+        office__doc_wordfreq(to_json({ path => $path, top => $opts{top}, min_length => $opts{min_length}, ignore_case => $opts{ignore_case}, stopwords => $opts{stopwords} })))
+}
+
 ## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts:
 ## ignore_case => 1. Returns { count, matches => [{ paragraph, count, snippet }] }
 ## with 1-based paragraph indexes.
