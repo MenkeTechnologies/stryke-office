@@ -44,89 +44,151 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         );
     }
 
-    if kind == "sankey" {
-        svg_sankey(&mut s, opts, w, h);
-        s.push_str("</svg>");
-        return Ok(s);
-    }
-    if opts.get("series").and_then(Value::as_array).is_none() {
+    let labels = opts.get("labels").and_then(Value::as_bool).unwrap_or(false);
+    let needs_series = !matches!(kind, "sankey" | "gauge" | "heatmap");
+    if needs_series && opts.get("series").and_then(Value::as_array).is_none() {
         return Err(anyhow!("missing series (expected array)"));
-    }
-    if kind == "pie" || kind == "donut" || kind == "doughnut" {
-        svg_pie(&mut s, series, w, h, kind != "pie");
-        s.push_str("</svg>");
-        return Ok(s);
-    }
-    if kind == "radar" {
-        svg_radar(&mut s, series, &cats, w, h);
-        s.push_str("</svg>");
-        return Ok(s);
     }
 
     let (l, r, t, b) = (60.0, w - 24.0, 44.0, h - 40.0);
-    let pw = (r - l).max(1.0);
-    let ph = (b - t).max(1.0);
-    let scatter = kind == "scatter" || kind == "bubble";
 
-    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
-    let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
-    if scatter {
-        for ser in series {
-            for (x, y, _) in series_points3(ser) {
-                ymin = ymin.min(y);
-                ymax = ymax.max(y);
-                xmin = xmin.min(x);
-                xmax = xmax.max(x);
-            }
-        }
-    } else {
-        for ser in series {
-            for v in series_nums(ser) {
-                ymin = ymin.min(v);
-                ymax = ymax.max(v);
-            }
-        }
-        ymin = ymin.min(0.0);
-    }
-    if !ymin.is_finite() || !ymax.is_finite() || (ymax - ymin).abs() < f64::EPSILON {
-        ymax = ymin + 1.0;
-    }
-    if scatter && (!xmin.is_finite() || (xmax - xmin).abs() < f64::EPSILON) {
-        xmax = xmin + 1.0;
-    }
-    let yp = |v: f64| b - (v - ymin) / (ymax - ymin) * ph;
-
-    // axes + gridlines
-    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/>"##);
-    let _ = write!(s, r##"<line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
-    for i in 0..=5 {
-        let v = ymin + (ymax - ymin) * (i as f64) / 5.0;
-        let y = yp(v);
-        let _ = write!(s, r##"<line x1="{l}" y1="{y}" x2="{r}" y2="{y}" stroke="#d2d2d2"/>"##);
-        let _ = write!(s, r##"<text x="6" y="{}" font-size="11" fill="#1e1e1e">{v:.1}</text>"##, y + 4.0);
-    }
-
+    let mut special = true;
     match kind {
-        "line" | "area" => svg_line_area(&mut s, series, l, pw, &yp, b, kind == "area"),
-        "scatter" => svg_scatter(&mut s, series, l, pw, xmin, xmax, &yp),
-        "bubble" => svg_bubble(&mut s, series, l, pw, xmin, xmax, &yp),
-        "histogram" => svg_histogram(&mut s, series, opts, l, pw, t, b),
-        "stacked" | "stacked_bar" => svg_bars(&mut s, series, &cats, l, pw, &yp, true),
-        _ => svg_bars(&mut s, series, &cats, l, pw, &yp, false),
+        "sankey" => svg_sankey(&mut s, opts, w, h),
+        "pie" | "donut" | "doughnut" => svg_pie(&mut s, series, &cats, w, h, kind != "pie", labels),
+        "radar" => svg_radar(&mut s, series, &cats, w, h),
+        "funnel" => svg_funnel(&mut s, series, &cats, l, t, r, b, labels),
+        "gauge" => svg_gauge(&mut s, opts, l, t, r, b),
+        "heatmap" => svg_heatmap(&mut s, opts, &cats, l, t, r, b),
+        _ => special = false,
     }
-    // category labels
-    if !cats.is_empty() && !scatter {
-        let slot = pw / cats.len().max(1) as f64;
-        for (i, c) in cats.iter().enumerate() {
-            let x = l + i as f64 * slot + slot * 0.3;
-            let _ = write!(s, r##"<text x="{x}" y="{}" font-size="11" fill="#1e1e1e">{}</text>"##, b + 16.0, xml_escape(c));
+
+    if !special {
+        let pw = (r - l).max(1.0);
+        let ph = (b - t).max(1.0);
+        let scatter = kind == "scatter" || kind == "bubble";
+        let ohlc_like = kind == "ohlc" || kind == "candlestick";
+
+        let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+        let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
+        if scatter {
+            for ser in series {
+                for (x, y, _) in series_points3(ser) {
+                    ymin = ymin.min(y);
+                    ymax = ymax.max(y);
+                    xmin = xmin.min(x);
+                    xmax = xmax.max(x);
+                }
+            }
+        } else if ohlc_like {
+            for ser in series {
+                for o in series_ohlc(ser) {
+                    ymin = ymin.min(o[2]);
+                    ymax = ymax.max(o[1]);
+                }
+            }
+        } else if kind == "waterfall" {
+            let mut cum = 0.0;
+            ymin = ymin.min(0.0);
+            ymax = ymax.max(0.0);
+            for v in series.first().map(series_nums).unwrap_or_default() {
+                cum += v;
+                ymin = ymin.min(cum);
+                ymax = ymax.max(cum);
+            }
+        } else {
+            for ser in series {
+                for v in series_nums(ser) {
+                    ymin = ymin.min(v);
+                    ymax = ymax.max(v);
+                }
+            }
+            ymin = ymin.min(0.0);
+        }
+        if !ymin.is_finite() || !ymax.is_finite() || (ymax - ymin).abs() < f64::EPSILON {
+            ymax = ymin + 1.0;
+        }
+        if scatter && (!xmin.is_finite() || (xmax - xmin).abs() < f64::EPSILON) {
+            xmax = xmin + 1.0;
+        }
+        let yp = |v: f64| b - (v - ymin) / (ymax - ymin) * ph;
+
+        // axes + gridlines
+        let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/>"##);
+        let _ = write!(s, r##"<line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+        for i in 0..=5 {
+            let v = ymin + (ymax - ymin) * (i as f64) / 5.0;
+            let y = yp(v);
+            let _ = write!(s, r##"<line x1="{l}" y1="{y}" x2="{r}" y2="{y}" stroke="#d2d2d2"/>"##);
+            let _ = write!(s, r##"<text x="6" y="{}" font-size="11" fill="#1e1e1e">{v:.1}</text>"##, y + 4.0);
+        }
+
+        match kind {
+            "line" => svg_line_area(&mut s, series, l, pw, &yp, b, false),
+            "area" => svg_line_area(&mut s, series, l, pw, &yp, b, true),
+            "step" => svg_step(&mut s, series, l, pw, &yp),
+            "scatter" => svg_scatter(&mut s, series, l, pw, xmin, xmax, &yp),
+            "bubble" => svg_bubble(&mut s, series, l, pw, xmin, xmax, &yp),
+            "histogram" => svg_histogram(&mut s, series, opts, l, pw, t, b),
+            "stacked" | "stacked_bar" => svg_bars(&mut s, series, &cats, l, pw, &yp, true, labels),
+            "combo" => svg_combo(&mut s, series, l, pw, &yp, labels),
+            "waterfall" => svg_waterfall(&mut s, series, l, pw, &yp, labels),
+            "ohlc" => svg_ohlc(&mut s, series, l, pw, &yp, false),
+            "candlestick" => svg_ohlc(&mut s, series, l, pw, &yp, true),
+            "boxplot" => svg_boxplot(&mut s, series, l, pw, &yp),
+            _ => svg_bars(&mut s, series, &cats, l, pw, &yp, false, labels),
+        }
+        // category labels
+        if !cats.is_empty() && !scatter {
+            let slot = pw / cats.len().max(1) as f64;
+            for (i, c) in cats.iter().enumerate() {
+                let x = l + i as f64 * slot + slot * 0.3;
+                let _ = write!(s, r##"<text x="{x}" y="{}" font-size="11" fill="#1e1e1e">{}</text>"##, b + 16.0, xml_escape(c));
+            }
+        }
+        // axis titles
+        if let Some(xl) = opts.get("x_label").and_then(Value::as_str) {
+            let _ = write!(s, r##"<text x="{}" y="{}" text-anchor="middle" font-size="14" fill="#1e1e1e">{}</text>"##, (l + r) / 2.0, b + 34.0, xml_escape(xl));
+        }
+        if let Some(yl) = opts.get("y_label").and_then(Value::as_str) {
+            let _ = write!(s, r##"<text x="16" y="{cy}" text-anchor="middle" font-size="14" fill="#1e1e1e" transform="rotate(-90 16 {cy})">{}</text>"##, xml_escape(yl), cy = (t + b) / 2.0);
         }
     }
+
+    // shared legend
+    if opts.get("legend").and_then(Value::as_bool) != Some(false) {
+        svg_legend(&mut s, kind, series, &cats, w, t);
+    }
+
     s.push_str("</svg>");
     Ok(s)
 }
 
-fn svg_bars(s: &mut String, series: &[Value], cats: &[String], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, stacked: bool) {
+/// Top-right SVG legend with color swatches.
+fn svg_legend(s: &mut String, kind: &str, series: &[Value], cats: &[String], w: f64, t: f64) {
+    let entries: Vec<(String, String)> = if matches!(kind, "pie" | "donut" | "doughnut" | "funnel") {
+        cats.iter().enumerate().map(|(i, c)| (c.clone(), svg_palette(i))).collect()
+    } else {
+        series
+            .iter()
+            .enumerate()
+            .filter_map(|(i, ser)| ser.get("name").and_then(Value::as_str).map(|n| (n.to_string(), svg_palette(i))))
+            .collect()
+    };
+    if entries.is_empty() {
+        return;
+    }
+    let maxlen = entries.iter().map(|(n, _)| n.len()).max().unwrap_or(4) as f64;
+    let x0 = w - (maxlen * 7.0 + 24.0) - 10.0;
+    let mut y = t + 4.0;
+    for (name, col) in &entries {
+        let _ = write!(s, r##"<rect x="{x0}" y="{y}" width="12" height="12" fill="{col}"/>"##);
+        let _ = write!(s, r##"<text x="{}" y="{}" font-size="12" fill="#1e1e1e">{}</text>"##, x0 + 16.0, y + 11.0, xml_escape(name));
+        y += 18.0;
+    }
+}
+
+fn svg_bars(s: &mut String, series: &[Value], cats: &[String], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, stacked: bool, labels: bool) {
     let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0).max(cats.len());
     if ncat == 0 {
         return;
@@ -156,8 +218,218 @@ fn svg_bars(s: &mut String, series: &[Value], cats: &[String], l: f64, pw: f64, 
                 let top = yp(v);
                 let (y, height) = if top < base { (top, base - top) } else { (base, top - base) };
                 let _ = write!(s, r##"<rect x="{x}" y="{y}" width="{bw}" height="{}" fill="{col}"/>"##, height.max(0.0));
+                if labels {
+                    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" text-anchor="middle" fill="#1e1e1e">{}</text>"##, x + bw / 2.0, top - 3.0, xml_escape(&fmt_num(v)));
+                }
             }
         }
+    }
+}
+
+/// Stepped line (hold then jump).
+fn svg_step(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64) {
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let data = series_nums(ser);
+        let n = data.len();
+        if n == 0 {
+            continue;
+        }
+        let xat = |i: usize| l + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 };
+        let mut d = format!("M {:.1},{:.1}", xat(0), yp(data[0]));
+        for i in 1..n {
+            let _ = write!(d, " H {:.1} V {:.1}", xat(i), yp(data[i]));
+        }
+        let _ = write!(s, r##"<path d="{d}" fill="none" stroke="{col}" stroke-width="2"/>"##);
+    }
+}
+
+/// Combination chart: `kind:"line"` series as polylines, the rest as bars.
+fn svg_combo(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, labels: bool) {
+    let ncat = series.iter().map(|x| series_nums(x).len()).max().unwrap_or(0);
+    if ncat == 0 {
+        return;
+    }
+    let slot = pw / ncat as f64;
+    let bar_idx: Vec<usize> = (0..series.len()).filter(|&i| series[i].get("kind").and_then(Value::as_str) != Some("line")).collect();
+    let nbar = bar_idx.len().max(1);
+    let bw = slot * 0.7 / nbar as f64;
+    let base = yp(0.0);
+    for (bi, &i) in bar_idx.iter().enumerate() {
+        let col = svg_palette(i);
+        for (ci, v) in series_nums(&series[i]).into_iter().enumerate() {
+            let x = l + ci as f64 * slot + slot * 0.15 + bi as f64 * bw;
+            let top = yp(v);
+            let (y, height) = if top < base { (top, base - top) } else { (base, top - base) };
+            let _ = write!(s, r##"<rect x="{x}" y="{y}" width="{bw}" height="{}" fill="{col}"/>"##, height.max(0.0));
+            if labels {
+                let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" text-anchor="middle" fill="#1e1e1e">{}</text>"##, x + bw / 2.0, top - 3.0, xml_escape(&fmt_num(v)));
+            }
+        }
+    }
+    for (i, ser) in series.iter().enumerate() {
+        if ser.get("kind").and_then(Value::as_str) != Some("line") {
+            continue;
+        }
+        let col = svg_palette(i);
+        let pts: String = series_nums(ser).iter().enumerate().map(|(ci, v)| format!("{:.1},{:.1} ", l + ci as f64 * slot + slot * 0.5, yp(*v))).collect();
+        let _ = write!(s, r##"<polyline points="{pts}" fill="none" stroke="{col}" stroke-width="2"/>"##);
+    }
+}
+
+/// Waterfall ribbons from the first series' deltas.
+fn svg_waterfall(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, labels: bool) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let slot = pw / n as f64;
+    let bw = slot * 0.7;
+    let mut cum = 0.0;
+    for (i, &v) in data.iter().enumerate() {
+        let prev = cum;
+        cum += v;
+        let y = yp(prev.max(cum));
+        let height = (yp(prev.min(cum)) - y).max(0.0);
+        let x = l + i as f64 * slot + slot * 0.15;
+        let col = if v >= 0.0 { "#55aa55" } else { "#cc5555" };
+        let _ = write!(s, r##"<rect x="{x}" y="{y}" width="{bw}" height="{height}" fill="{col}"/>"##);
+        if i + 1 < n {
+            let yc = yp(cum);
+            let _ = write!(s, r##"<line x1="{:.1}" y1="{yc:.1}" x2="{:.1}" y2="{yc:.1}" stroke="#969696"/>"##, x + bw, x + slot);
+        }
+        if labels {
+            let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" text-anchor="middle" fill="#1e1e1e">{}</text>"##, x + bw / 2.0, y - 3.0, xml_escape(&fmt_num(v)));
+        }
+    }
+}
+
+/// OHLC / candlestick from `data:[[o,h,l,c],...]`.
+fn svg_ohlc(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64, candle: bool) {
+    let data = series.first().map(series_ohlc).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let slot = pw / n as f64;
+    let bw = (slot * 0.5).max(2.0);
+    for (i, o) in data.iter().enumerate() {
+        let [open, high, low, close] = *o;
+        let cx = l + i as f64 * slot + slot * 0.5;
+        let col = if close >= open { "#339955" } else { "#cc4444" };
+        let _ = write!(s, r##"<line x1="{cx:.1}" y1="{:.1}" x2="{cx:.1}" y2="{:.1}" stroke="{col}"/>"##, yp(high), yp(low));
+        if candle {
+            let (top, bot) = (open.max(close), open.min(close));
+            let y = yp(top);
+            let height = (yp(bot) - y).max(1.0);
+            let fill = if close >= open { "none" } else { col };
+            let _ = write!(s, r##"<rect x="{:.1}" y="{y:.1}" width="{bw:.1}" height="{height:.1}" fill="{fill}" stroke="{col}"/>"##, cx - bw / 2.0);
+        } else {
+            let _ = write!(s, r##"<line x1="{:.1}" y1="{:.1}" x2="{cx:.1}" y2="{:.1}" stroke="{col}"/>"##, cx - bw / 2.0, yp(open), yp(open));
+            let _ = write!(s, r##"<line x1="{cx:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{col}"/>"##, yp(close), cx + bw / 2.0, yp(close));
+        }
+    }
+}
+
+/// Box-and-whisker per series.
+fn svg_boxplot(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64) {
+    let n = series.len().max(1);
+    let slot = pw / n as f64;
+    let bw = (slot * 0.4).max(3.0);
+    for (si, ser) in series.iter().enumerate() {
+        let Some([mn, q1, med, q3, mx]) = five_number(&series_nums(ser)) else { continue };
+        let col = svg_palette(si);
+        let cx = l + si as f64 * slot + slot * 0.5;
+        let (x0, x1) = (cx - bw / 2.0, cx + bw / 2.0);
+        let _ = write!(s, r##"<line x1="{cx:.1}" y1="{:.1}" x2="{cx:.1}" y2="{:.1}" stroke="{col}"/>"##, yp(mn), yp(q1));
+        let _ = write!(s, r##"<line x1="{cx:.1}" y1="{:.1}" x2="{cx:.1}" y2="{:.1}" stroke="{col}"/>"##, yp(q3), yp(mx));
+        let _ = write!(s, r##"<line x1="{x0:.1}" y1="{:.1}" x2="{x1:.1}" y2="{:.1}" stroke="{col}"/>"##, yp(mn), yp(mn));
+        let _ = write!(s, r##"<line x1="{x0:.1}" y1="{:.1}" x2="{x1:.1}" y2="{:.1}" stroke="{col}"/>"##, yp(mx), yp(mx));
+        let y = yp(q3);
+        let height = (yp(q1) - y).max(1.0);
+        let _ = write!(s, r##"<rect x="{x0:.1}" y="{y:.1}" width="{bw:.1}" height="{height:.1}" fill="none" stroke="{col}"/>"##);
+        let _ = write!(s, r##"<line x1="{x0:.1}" y1="{:.1}" x2="{x1:.1}" y2="{:.1}" stroke="{col}" stroke-width="2"/>"##, yp(med), yp(med));
+    }
+}
+
+/// Centered descending funnel from the first series.
+#[allow(clippy::too_many_arguments)]
+fn svg_funnel(s: &mut String, series: &[Value], cats: &[String], l: f64, t: f64, r: f64, b: f64, labels: bool) {
+    let data = series.first().map(series_nums).unwrap_or_default();
+    let n = data.len();
+    if n == 0 {
+        return;
+    }
+    let maxv = data.iter().cloned().fold(0.0f64, f64::max).max(f64::EPSILON);
+    let cx = (l + r) / 2.0;
+    let fullw = (r - l) * 0.8;
+    let band_h = (b - t) / n as f64 * 0.85;
+    let gap = (b - t) / n as f64 * 0.15;
+    for (i, &v) in data.iter().enumerate() {
+        let half = fullw * (v / maxv) / 2.0;
+        let y = t + i as f64 * (band_h + gap);
+        let col = svg_palette(i);
+        let _ = write!(s, r##"<rect x="{:.1}" y="{y:.1}" width="{:.1}" height="{band_h:.1}" fill="{col}"/>"##, cx - half, half * 2.0);
+        if labels {
+            let text = cats.get(i).map(|c| format!("{c}: {}", fmt_num(v))).unwrap_or_else(|| fmt_num(v));
+            let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" font-size="12" text-anchor="middle" fill="#1e1e1e">{}</text>"##, y + band_h / 2.0 + 4.0, xml_escape(&text));
+        }
+    }
+}
+
+/// Semicircular gauge.
+fn svg_gauge(s: &mut String, opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let value = opts.get("value").and_then(Value::as_f64).unwrap_or(0.0);
+    let max = opts.get("max").and_then(Value::as_f64).unwrap_or(100.0).max(f64::EPSILON);
+    let frac = (value / max).clamp(0.0, 1.0);
+    let cx = (l + r) / 2.0;
+    let cy = (t + b) * 2.0 / 3.0;
+    let radius = ((r - l).min((b - t) * 2.0) / 2.0 - 20.0).max(20.0);
+    let arc = |s: &mut String, frac: f64, col: &str| {
+        let a0 = std::f64::consts::PI;
+        let a1 = a0 + frac * std::f64::consts::PI;
+        let (x0, y0) = (cx + radius * a0.cos(), cy + radius * a0.sin());
+        let (x1, y1) = (cx + radius * a1.cos(), cy + radius * a1.sin());
+        let large = if frac > 0.5 { 1 } else { 0 };
+        let _ = write!(s, r##"<path d="M {x0:.1},{y0:.1} A {radius:.1},{radius:.1} 0 {large},1 {x1:.1},{y1:.1}" fill="none" stroke="{col}" stroke-width="{:.1}"/>"##, radius * 0.28);
+    };
+    arc(s, 1.0, "#dcdcdc");
+    arc(s, frac, &svg_palette(0));
+    let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="22" fill="#1e1e1e">{}/{}</text>"##, cy - 6.0, xml_escape(&fmt_num(value)), xml_escape(&fmt_num(max)));
+}
+
+/// Heatmap grid colored white→blue.
+fn svg_heatmap(s: &mut String, opts: &Value, cats: &[String], l: f64, t: f64, r: f64, b: f64) {
+    let rows: Vec<Vec<f64>> = if let Some(m) = opts.get("matrix").and_then(Value::as_array) {
+        m.iter().map(|row| row.as_array().map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default()).collect()
+    } else {
+        opts.get("series").and_then(Value::as_array).map(|sr| sr.iter().map(series_nums).collect()).unwrap_or_default()
+    };
+    let nr = rows.len();
+    let nc = rows.iter().map(|x| x.len()).max().unwrap_or(0);
+    if nr == 0 || nc == 0 {
+        return;
+    }
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for row in &rows {
+        for &v in row {
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+    }
+    let span = if (hi - lo).abs() < f64::EPSILON { 1.0 } else { hi - lo };
+    let cw = (r - l) / nc as f64;
+    let ch = (b - t) / nr as f64;
+    for (ri, row) in rows.iter().enumerate() {
+        for (ci, &v) in row.iter().enumerate() {
+            let frac = ((v - lo) / span).clamp(0.0, 1.0);
+            let col = format!("#{:02x}{:02x}ff", (255.0 - frac * 187.0) as u8, (255.0 - frac * 141.0) as u8);
+            let _ = write!(s, r##"<rect x="{:.1}" y="{:.1}" width="{cw:.1}" height="{ch:.1}" fill="{col}"/>"##, l + ci as f64 * cw, t + ri as f64 * ch);
+        }
+    }
+    for (ci, c) in cats.iter().enumerate().take(nc) {
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="11" fill="#1e1e1e">{}</text>"##, l + ci as f64 * cw + cw * 0.2, b + 14.0, xml_escape(c));
     }
 }
 
@@ -259,7 +531,7 @@ fn svg_histogram(s: &mut String, series: &[Value], opts: &Value, l: f64, pw: f64
     }
 }
 
-fn svg_pie(s: &mut String, series: &[Value], w: f64, h: f64, donut: bool) {
+fn svg_pie(s: &mut String, series: &[Value], cats: &[String], w: f64, h: f64, donut: bool, labels: bool) {
     let data = series.first().map(series_nums).unwrap_or_default();
     let total: f64 = data.iter().sum();
     if total <= 0.0 {
@@ -279,6 +551,13 @@ fn svg_pie(s: &mut String, series: &[Value], w: f64, h: f64, donut: bool) {
             r##"<path d="M {cx:.1},{cy:.1} L {x0:.1},{y0:.1} A {radius:.1},{radius:.1} 0 {large},1 {x1:.1},{y1:.1} Z" fill="{}"/>"##,
             svg_palette(i)
         );
+        if labels {
+            let mid = angle + sweep / 2.0;
+            let (lx, ly) = (cx + radius * 0.65 * mid.cos(), cy + radius * 0.65 * mid.sin());
+            let pct = v / total * 100.0;
+            let text = cats.get(i).map(|c| format!("{c} {pct:.0}%")).unwrap_or_else(|| format!("{pct:.0}%"));
+            let _ = write!(s, r##"<text x="{lx:.1}" y="{ly:.1}" text-anchor="middle" font-size="11" fill="#1e1e1e">{}</text>"##, xml_escape(&text));
+        }
         angle = a1;
     }
     if donut {

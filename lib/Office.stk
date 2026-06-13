@@ -430,17 +430,26 @@ fn Office::img_erode ($handle, %opts) {
 # you want (png/jpeg/gif/bmp/webp/tiff) or process it further. Fully
 # self-contained — no plotters, no system fonts, no external binaries.
 
-## Render a chart. $type: "bar"|"column"|"line"|"area"|"scatter"|"pie".
-## $series: arrayref of { name, data => [n, ...], color? }  (scatter data is
-## [[x, y], ...]; pie uses the first series' data as slices). opts: title,
-## width (800), height (600), categories => [labels]. Returns
-## { handle, width, height, type } — pass handle to Office::img_save / img_*.
+## Render a chart to a raster image handle. $type is one of:
+##   bar | column | stacked | line | area | step | combo | scatter | bubble |
+##   pie | donut | radar | histogram | sankey | waterfall | ohlc |
+##   candlestick | boxplot | funnel | gauge | heatmap
+## $series: arrayref of { name, data => [n, ...], color?, kind? }.
+##   scatter data => [[x, y], ...]; bubble => [[x, y, size], ...];
+##   ohlc/candlestick => [[open, high, low, close], ...];
+##   boxplot data => raw numbers (min/q1/median/q3/max computed);
+##   combo series can set kind => "line" to overlay a line on the bars;
+##   pie/funnel use the first series' data as slices/bands.
+## opts: title, width (800), height (600), categories => [labels],
+##   legend => 0 to suppress, labels => 1 for data labels, x_label, y_label,
+##   bins (histogram), value+max (gauge), matrix => [[..],..] (heatmap),
+##   nodes+links (sankey). Returns { handle, width, height, type } — pass the
+## handle to Office::img_save (any raster format) or any img_* op.
 fn Office::chart_render ($type, $series, %opts) {
-    val $r = {
-        type => $type, series => $series, title => $opts{title},
-        width => $opts{width}, height => $opts{height}, categories => $opts{categories},
-    }
-    Office::_decode("chart_render", office__chart_render(to_json($r)))
+    var %r = %opts
+    $r{type} = $type
+    $r{series} = $series
+    Office::_decode("chart_render", office__chart_render(to_json(\%r)))
 }
 
 ## Render a chart to a vector SVG string (returns the markup), or write it

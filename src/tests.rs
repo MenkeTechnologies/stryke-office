@@ -904,6 +904,75 @@ fn chart_radar_and_bubble_render() {
 }
 
 #[test]
+fn chart_new_types_render_raster_and_svg() {
+    // cartesian-family new types (need a series)
+    let cart = r#"[{"name":"s1","data":[5,8,3,9,4]}]"#;
+    for kind in ["step", "waterfall", "boxplot", "combo"] {
+        let c = call(
+            office__chart_render,
+            &format!(r#"{{"type":"{kind}","width":420,"height":300,"categories":["a","b","c","d","e"],"series":{cart},"legend":false}}"#),
+        );
+        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        let v = call(
+            office__chart_svg,
+            &format!(r#"{{"type":"{kind}","categories":["a","b","c","d","e"],"series":{cart}}}"#),
+        );
+        let svg = v["svg"].as_str().unwrap_or("");
+        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{kind} svg malformed");
+    }
+    // OHLC + candlestick from [o,h,l,c] tuples
+    let ohlc = r#"[{"data":[[10,15,8,12],[12,14,9,10],[10,13,7,13]]}]"#;
+    for kind in ["ohlc", "candlestick"] {
+        let c = call(office__chart_render, &format!(r#"{{"type":"{kind}","series":{ohlc}}}"#));
+        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind}: {c}"));
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","series":{ohlc}}}"#));
+        assert!(v["svg"].as_str().unwrap_or("").contains("<line"), "{kind} svg wicks");
+    }
+    // funnel uses categories for labels
+    let fc = call(
+        office__chart_render,
+        r#"{"type":"funnel","categories":["lead","trial","paid"],"series":[{"data":[100,60,25]}],"labels":true}"#,
+    );
+    let fh = fc["handle"].as_u64().expect("funnel handle");
+    call(office__img_close, &format!(r#"{{"handle":{fh}}}"#));
+    // gauge + heatmap do NOT require a series
+    let g = call(office__chart_render, r#"{"type":"gauge","value":72,"max":100}"#);
+    let gh = g["handle"].as_u64().expect("gauge handle");
+    call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
+    let hm = call(office__chart_svg, r#"{"type":"heatmap","matrix":[[1,2,3],[4,5,6],[7,8,9]],"categories":["x","y","z"]}"#);
+    assert!(hm["svg"].as_str().unwrap_or("").contains("<rect"), "heatmap svg cells");
+}
+
+#[test]
+fn chart_legend_and_labels_emit() {
+    // legend swatches + value labels appear in the SVG
+    let v = call(
+        office__chart_svg,
+        r#"{"type":"bar","categories":["a","b","c"],"series":[{"name":"Alpha","data":[3,6,9]},{"name":"Beta","data":[2,5,1]}],"labels":true,"x_label":"qtr","y_label":"units"}"#,
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(svg.contains(">Alpha<"), "legend series name present: {}", &svg[..svg.len().min(80)]);
+    assert!(svg.contains("rotate(-90"), "rotated y-axis title present");
+    assert!(svg.contains(">qtr<"), "x-axis title present");
+}
+
+#[test]
+fn chart_save_new_type_any_format() {
+    // a brand-new type round-trips through chart_save's extension dispatch
+    let spec = r#""type":"waterfall","series":[{"data":[10,-3,5,-2]}],"categories":["a","b","c","d"]"#;
+    for (ext, magic) in [("svg", "<svg"), ("png", "PNG"), ("pdf", "%PDF")] {
+        let path = tmp(&format!("wf.{ext}"));
+        let v = call(office__chart_save, &format!(r#"{{{spec},"path":"{path}"}}"#));
+        assert_eq!(v["ok"], true, "{ext}: {v}");
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(String::from_utf8_lossy(&bytes[..bytes.len().min(8)]).contains(magic), "{ext} magic");
+        std::fs::remove_file(&path).ok();
+    }
+}
+
+#[test]
 fn xlsx_conditional_format_and_validation() {
     let path = tmp("cv.xlsx");
     let w = call(
