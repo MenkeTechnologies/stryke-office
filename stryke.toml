@@ -20,6 +20,7 @@ exports = [
     "office__slides_write",
     "office__pdf_read",
     "office__pdf_write",
+    "office__pdf_build",
     "office__img_open",
     "office__img_new",
     "office__img_save",

@@ -1460,6 +1460,10 @@ export!(office__slides_write, op_slides_write);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 
+// multi-element PDF document builder (text/images/shapes across pages)
+include!("pdf_build.rs");
+export!(office__pdf_build, op_pdf_build);
+
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");
 

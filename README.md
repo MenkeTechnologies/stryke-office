@@ -95,6 +95,18 @@ Office::slides_write("deck.pptx", [
 # PDF: generate and extract text (self-contained, no font files)
 Office::pdf_write("out.pdf", ["Line one", "Line two"])
 val $info = Office::pdf_read("out.pdf")   # { pages => [...], text => "..." }
+
+# PDF: build a multi-page document — headings, flowing paragraphs, embedded
+# images (file or image handle), and vector shapes (base-14 fonts, no embed)
+val $chart = Office::chart_render("bar", [{ data => [3, 7] }], categories => ["a", "b"])
+Office::pdf_build("report.pdf", [
+    { type => "heading", level => 1, text => "Quarterly Report" },
+    { type => "paragraph", text => $long_text },              # auto-wrapped/paginated
+    { type => "image", handle => $chart->{handle}, width => 300 },
+    { type => "pagebreak" },
+    { type => "rect", x => 50, y => 80, width => 200, height => 30, color => "#D9E1F2" },
+    { type => "text", x => 50, y => 120, text => "footnote", size => 9 },
+])
 ```
 
 ## [0x03] Format matrix
@@ -135,6 +147,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
 | `Office::pdf_read($path)` | `{pages => [...], text}` | text extraction |
 | `Office::pdf_write($path, $lines)` | hashref | `$lines`: arrayref of strings (A4) |
+| `Office::pdf_build($path, $elements, %opts)` | `{pages, bytes}` | multi-page: heading/paragraph/text/image/rect/line/pagebreak; `page_size`/`margin` |
 
 ### Rich formatting
 
@@ -410,6 +423,7 @@ stryke-office/
   src/image_ops.rs       # PIL-complete image I/O + manipulation
   src/chart_render.rs    # raster chart renderer (all chart types)
   src/chart_svg.rs       # vector (SVG/PDF) chart renderer
+  src/pdf_build.rs       # multi-element paginated PDF document builder
   stryke.toml            # package manifest + [ffi] table
   lib/Office.stk         # stryke wrapper (use Office)
   assets/DejaVuSans.ttf  # vendored font for image text drawing
