@@ -16,6 +16,16 @@
 //!
 //! Output format is chosen from the path's extension (override with `format`).
 
+// The pixel and chart-rendering code is written with index-addressed loops over
+// parallel arrays — RGBA channels, the category axis, running stack
+// accumulators — where indexing is the clearest form; and the renderers take
+// many positional layout bounds (l/t/r/b + data + style) plus closures over
+// them. These are deliberate, readable choices for numeric/plotting code, not
+// defects, so the corresponding style lints are allowed crate-wide.
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+
 use std::ffi::{CStr, CString};
 use std::io::{Cursor, Read, Write};
 use std::os::raw::c_char;
@@ -263,7 +273,10 @@ fn op_sheet_read(opts: Value) -> Result<Value> {
         "tsv" => return read_csv(path, '\t'),
         _ => {}
     }
-    let want_formulas = opts.get("formulas").and_then(Value::as_bool).unwrap_or(false);
+    let want_formulas = opts
+        .get("formulas")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let mut wb = open_workbook_auto(path)?;
     let names = wb.sheet_names().to_owned();
     let mut sheets = Vec::new();
@@ -628,7 +641,14 @@ fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value)
     }
     if let Some(m) = s.get("margins").and_then(Value::as_array) {
         let g = |i: usize, d: f64| m.get(i).and_then(Value::as_f64).unwrap_or(d);
-        ws.set_margins(g(0, 0.7), g(1, 0.7), g(2, 0.75), g(3, 0.75), g(4, 0.3), g(5, 0.3));
+        ws.set_margins(
+            g(0, 0.7),
+            g(1, 0.7),
+            g(2, 0.75),
+            g(3, 0.75),
+            g(4, 0.3),
+            g(5, 0.3),
+        );
     }
     if let Some(notes) = s.get("notes").and_then(Value::as_array) {
         for n in notes {
@@ -660,12 +680,12 @@ fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value)
     write_xlsx_sparklines(ws, sheet, s)?;
     // Outline grouping: `group_rows:[[first,last],...]`, `group_columns:[...]`.
     if let Some(g) = s.get("group_rows").and_then(Value::as_array) {
-        for r in g.iter().filter_map(|p| pair_u64(p)) {
+        for r in g.iter().filter_map(pair_u64) {
             ws.group_rows(r.0 as u32, r.1 as u32)?;
         }
     }
     if let Some(g) = s.get("group_columns").and_then(Value::as_array) {
-        for c in g.iter().filter_map(|p| pair_u64(p)) {
+        for c in g.iter().filter_map(pair_u64) {
             ws.group_columns(c.0 as u16, c.1 as u16)?;
         }
     }
@@ -695,14 +715,22 @@ fn pair_u64(v: &Value) -> Option<(u64, u64)> {
 /// In-cell sparklines: `sparklines:[{at:[row,col], range:[r1,c1,r2,c2],
 /// type?: "line"|"column"|"winloss", markers?, high?, low?}]`. The data range
 /// references this sheet.
-fn write_xlsx_sparklines(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value) -> Result<()> {
+fn write_xlsx_sparklines(
+    ws: &mut rust_xlsxwriter::Worksheet,
+    sheet: &str,
+    s: &Value,
+) -> Result<()> {
     use rust_xlsxwriter::{Sparkline, SparklineType};
     let Some(sparks) = s.get("sparklines").and_then(Value::as_array) else {
         return Ok(());
     };
     for sp in sparks {
-        let Some(at) = pair_u64(sp.get("at").unwrap_or(&Value::Null)) else { continue };
-        let Some(rng) = quad(sp, "range") else { continue };
+        let Some(at) = pair_u64(sp.get("at").unwrap_or(&Value::Null)) else {
+            continue;
+        };
+        let Some(rng) = quad(sp, "range") else {
+            continue;
+        };
         let stype = match sp.get("type").and_then(Value::as_str).unwrap_or("line") {
             "column" => SparklineType::Column,
             "winloss" | "winlose" => SparklineType::WinLose,
@@ -1063,10 +1091,18 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
     }
     // Register numbering definitions once if any list block is present:
     // num 1 = ordered (decimal), num 2 = bulleted.
-    let has_list = blocks.iter().any(|b| b.get("kind").and_then(Value::as_str) == Some("list"));
+    let has_list = blocks
+        .iter()
+        .any(|b| b.get("kind").and_then(Value::as_str) == Some("list"));
     if has_list {
         let lvl = |fmt: &str, text: &str| {
-            Level::new(0, Start::new(1), NumberFormat::new(fmt), LevelText::new(text), LevelJc::new("left"))
+            Level::new(
+                0,
+                Start::new(1),
+                NumberFormat::new(fmt),
+                LevelText::new(text),
+                LevelJc::new("left"),
+            )
         };
         docx = docx
             .add_abstract_numbering(AbstractNumbering::new(1).add_level(lvl("decimal", "%1.")))
@@ -1076,10 +1112,12 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
     }
     // Optional running header/footer (plain text).
     if let Some(h) = opts.get("header").and_then(Value::as_str) {
-        docx = docx.header(Header::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h))));
+        docx = docx
+            .header(Header::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h))));
     }
     if let Some(f) = opts.get("footer").and_then(Value::as_str) {
-        docx = docx.footer(Footer::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(f))));
+        docx = docx
+            .footer(Footer::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(f))));
     }
     for b in blocks {
         match b.get("kind").and_then(Value::as_str).unwrap_or("para") {
@@ -1099,8 +1137,12 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
             "link" => {
                 let url = req_str(b, "url")?;
                 let text = b.get("text").and_then(Value::as_str).unwrap_or(url);
-                let hl = Hyperlink::new(url, HyperlinkType::External)
-                    .add_run(Run::new().add_text(text).color("0563C1").underline("single"));
+                let hl = Hyperlink::new(url, HyperlinkType::External).add_run(
+                    Run::new()
+                        .add_text(text)
+                        .color("0563C1")
+                        .underline("single"),
+                );
                 docx = docx.add_paragraph(Paragraph::new().add_hyperlink(hl));
             }
             "table" => {
@@ -1115,7 +1157,9 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
                                 let mut tc = TableCell::new().add_paragraph(docx_para(cell));
                                 if let Some(o) = cell.as_object() {
                                     if let Some(bg) = o.get("bg").and_then(Value::as_str) {
-                                        tc = tc.shading(Shading::new().fill(bg.trim_start_matches('#')));
+                                        tc = tc.shading(
+                                            Shading::new().fill(bg.trim_start_matches('#')),
+                                        );
                                     }
                                     if let Some(span) = o.get("span").and_then(Value::as_u64) {
                                         tc = tc.grid_span(span as usize);

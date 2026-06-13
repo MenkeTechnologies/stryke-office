@@ -1163,9 +1163,7 @@ fn morph3(buf: &image::RgbaImage, grow: bool) -> image::RgbaImage {
                 }
             }
             let px = out.get_pixel_mut(x as u32, y as u32);
-            for c in 0..3 {
-                px.0[c] = v[c];
-            }
+            px.0[..3].copy_from_slice(&v[..3]);
         }
     }
     out
@@ -1738,7 +1736,7 @@ fn op_img_dominant_colors(opts: Value) -> Result<Value> {
             *hist.entry(key).or_insert(0) += 1;
         }
         let mut v: Vec<(u16, u32)> = hist.into_iter().collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|&(_, cnt)| std::cmp::Reverse(cnt));
         let colors: Vec<Value> = v
             .into_iter()
             .take(count)
@@ -2259,7 +2257,7 @@ fn op_img_fisheye(opts: Value) -> Result<Value> {
         Ok(DynamicImage::ImageRgba8(remap(&src, |x, y| {
             let (dx, dy) = (x - cx, y - cy);
             let r = (dx * dx + dy * dy).sqrt() / rmax;
-            if r >= 1.0 || r < 1e-6 {
+            if !(1e-6..1.0).contains(&r) {
                 return (x, y);
             }
             // pull samples inward by r^(1+strength)

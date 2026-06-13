@@ -738,7 +738,10 @@ fn chart_svg_vector_output() {
 #[test]
 fn pdf_build_multi_element_document() {
     // render a chart to an image handle to embed in the PDF
-    let chart = call(office__chart_render, r#"{"type":"bar","width":300,"height":200,"categories":["a","b"],"series":[{"data":[3,7]}]}"#);
+    let chart = call(
+        office__chart_render,
+        r#"{"type":"bar","width":300,"height":200,"categories":["a","b"],"series":[{"data":[3,7]}]}"#,
+    );
     let ch = chart["handle"].as_u64().expect("chart handle");
 
     let path = tmp("doc.pdf");
@@ -759,11 +762,18 @@ fn pdf_build_multi_element_document() {
         ),
     );
     assert_eq!(v["ok"], true, "pdf_build failed: {v}");
-    assert!(v["pages"].as_u64().unwrap() >= 2, "auto-paginated to >=2 pages: {v}");
+    assert!(
+        v["pages"].as_u64().unwrap() >= 2,
+        "auto-paginated to >=2 pages: {v}"
+    );
     // re-read the produced PDF with the existing extractor → valid, has text
     let r = call(office__pdf_read, &format!(r#"{{"path":"{path}"}}"#));
     let text = r["text"].as_str().unwrap_or("");
-    assert!(text.contains("Quarterly Report") || text.contains("Appendix"), "pdf text round-trips: {:?}", &text[..text.len().min(80)]);
+    assert!(
+        text.contains("Quarterly Report") || text.contains("Appendix"),
+        "pdf text round-trips: {:?}",
+        &text[..text.len().min(80)]
+    );
     call(office__img_close, &format!(r#"{{"handle":{ch}}}"#));
     std::fs::remove_file(&path).ok();
 }
@@ -792,21 +802,30 @@ fn pdf_merge_split_rotate_info() {
 
     // merge → 4 pages
     let merged = tmp("merged.pdf");
-    let m = call(office__pdf_merge, &format!(r#"{{"inputs":["{a}","{b}"],"path":"{merged}"}}"#));
+    let m = call(
+        office__pdf_merge,
+        &format!(r#"{{"inputs":["{a}","{b}"],"path":"{merged}"}}"#),
+    );
     assert_eq!(m["ok"], true, "merge: {m}");
     let im = call(office__pdf_info, &format!(r#"{{"path":"{merged}"}}"#));
     assert_eq!(im["pages"], 4, "merged has 4 pages: {im}");
 
     // split → keep pages 1 and 3 → 2 pages
     let sub = tmp("sub.pdf");
-    let s = call(office__pdf_split, &format!(r#"{{"path":"{merged}","pages":[1,3],"output":"{sub}"}}"#));
+    let s = call(
+        office__pdf_split,
+        &format!(r#"{{"path":"{merged}","pages":[1,3],"output":"{sub}"}}"#),
+    );
     assert_eq!(s["ok"], true, "split: {s}");
     let is = call(office__pdf_info, &format!(r#"{{"path":"{sub}"}}"#));
     assert_eq!(is["pages"], 2, "split kept 2 pages: {is}");
 
     // rotate all pages 90°
     let rot = tmp("rot.pdf");
-    let r = call(office__pdf_rotate, &format!(r#"{{"path":"{merged}","angle":90,"output":"{rot}"}}"#));
+    let r = call(
+        office__pdf_rotate,
+        &format!(r#"{{"path":"{merged}","angle":90,"output":"{rot}"}}"#),
+    );
     assert_eq!(r["rotated"], 4, "rotated all 4 pages: {r}");
     // rotated file still parses
     let ir = call(office__pdf_read, &format!(r#"{{"path":"{rot}"}}"#));
@@ -835,14 +854,23 @@ fn pdf_watermark_and_page_numbers() {
 
     // watermark every page
     let wm = tmp("wm.pdf");
-    let w = call(office__pdf_watermark, &format!(r#"{{"path":"{src}","output":"{wm}","text":"DRAFT","angle":45}}"#));
+    let w = call(
+        office__pdf_watermark,
+        &format!(r#"{{"path":"{src}","output":"{wm}","text":"DRAFT","angle":45}}"#),
+    );
     assert_eq!(w["stamped"], 3, "watermarked 3 pages: {w}");
     let ir = call(office__pdf_read, &format!(r#"{{"path":"{wm}"}}"#));
-    assert!(ir["text"].as_str().unwrap_or("").contains("One"), "watermarked pdf keeps content + re-reads");
+    assert!(
+        ir["text"].as_str().unwrap_or("").contains("One"),
+        "watermarked pdf keeps content + re-reads"
+    );
 
     // footer page numbers
     let pn = tmp("pn.pdf");
-    let p = call(office__pdf_page_numbers, &format!(r#"{{"path":"{src}","output":"{pn}","format":"Page {{n}} of {{total}}"}}"#));
+    let p = call(
+        office__pdf_page_numbers,
+        &format!(r#"{{"path":"{src}","output":"{pn}","format":"Page {{n}} of {{total}}"}}"#),
+    );
     assert_eq!(p["pages"], 3, "numbered 3 pages: {p}");
     let ip = call(office__pdf_info, &format!(r#"{{"path":"{pn}"}}"#));
     assert_eq!(ip["pages"], 3, "numbered pdf still 3 pages");
@@ -928,18 +956,33 @@ fn image_extended_processing_ops() {
         ),
         (office__img_equalize, r#"{"handle":H}"#),
         (office__img_solarize, r#"{"handle":H,"threshold":100}"#),
-        (office__img_colorize, r##"{"handle":H,"black":"#000080","white":"#ffd700"}"##),
+        (
+            office__img_colorize,
+            r##"{"handle":H,"black":"#000080","white":"#ffd700"}"##,
+        ),
         (office__img_emboss, r#"{"handle":H}"#),
-        (office__img_convolve, r#"{"handle":H,"kernel":[0,-1,0,-1,5,-1,0,-1,0]}"#),
+        (
+            office__img_convolve,
+            r#"{"handle":H,"kernel":[0,-1,0,-1,5,-1,0,-1,0]}"#,
+        ),
         (office__img_box_blur, r#"{"handle":H,"radius":2}"#),
         (office__img_median, r#"{"handle":H,"radius":1}"#),
         (office__img_pixelate, r#"{"handle":H,"block":4}"#),
         (office__img_vignette, r#"{"handle":H,"strength":0.5}"#),
         (office__img_opacity, r#"{"handle":H,"factor":0.5}"#),
         (office__img_putalpha, r#"{"handle":H,"alpha":200}"#),
-        (office__img_noise, r#"{"handle":H,"kind":"gaussian","amount":15,"seed":7}"#),
-        (office__img_noise, r#"{"handle":H,"kind":"salt_pepper","amount":0.1,"seed":7}"#),
-        (office__img_watermark, r#"{"handle":H,"text":"DRAFT","opacity":0.3}"#),
+        (
+            office__img_noise,
+            r#"{"handle":H,"kind":"gaussian","amount":15,"seed":7}"#,
+        ),
+        (
+            office__img_noise,
+            r#"{"handle":H,"kind":"salt_pepper","amount":0.1,"seed":7}"#,
+        ),
+        (
+            office__img_watermark,
+            r#"{"handle":H,"text":"DRAFT","opacity":0.3}"#,
+        ),
         (office__img_dilate, r#"{"handle":H,"iterations":1}"#),
         (office__img_erode, r#"{"handle":H,"iterations":1}"#),
     ] {
@@ -947,7 +990,10 @@ fn image_extended_processing_ops() {
         assert_eq!(v["ok"], true, "op failed: {v}");
     }
     // geometry ops that report new dimensions
-    let bordered = call(office__img_border, &format!(r#"{{"handle":{h},"size":5,"color":[255,0,0]}}"#));
+    let bordered = call(
+        office__img_border,
+        &format!(r#"{{"handle":{h},"size":5,"color":[255,0,0]}}"#),
+    );
     assert_eq!(bordered["width"], 58, "border grows canvas: {bordered}");
     let tp = call(office__img_transpose, &format!(r#"{{"handle":{h}}}"#));
     assert_eq!(tp["width"], 58, "transpose swaps W/H: {tp}");
@@ -955,14 +1001,24 @@ fn image_extended_processing_ops() {
     assert_eq!(tv["height"], 58, "transverse swaps W/H back: {tv}");
 
     // canny edges → grayscale image
-    let edges = call(office__img_edges, &format!(r#"{{"handle":{h},"low":20,"high":80}}"#));
+    let edges = call(
+        office__img_edges,
+        &format!(r#"{{"handle":{h},"low":20,"high":80}}"#),
+    );
     assert_eq!(edges["mode"], "L", "edges produce grayscale: {edges}");
 
     // histogram + extrema readouts
     let hist = call(office__img_histogram, &format!(r#"{{"handle":{h}}}"#));
-    assert_eq!(hist["luma"].as_array().unwrap().len(), 256, "256-bin luma histogram");
+    assert_eq!(
+        hist["luma"].as_array().unwrap().len(),
+        256,
+        "256-bin luma histogram"
+    );
     let ext = call(office__img_extrema, &format!(r#"{{"handle":{h}}}"#));
-    assert!(ext["r"].is_array(), "extrema reports per-channel min/max: {ext}");
+    assert!(
+        ext["r"].is_array(),
+        "extrema reports per-channel min/max: {ext}"
+    );
 
     // split → 4 channel handles, merge back
     let sp = call(office__img_split, &format!(r#"{{"handle":{h}}}"#));
@@ -972,15 +1028,27 @@ fn image_extended_processing_ops() {
         sp["handles"]["b"].as_u64().unwrap(),
         sp["handles"]["a"].as_u64().unwrap(),
     );
-    let merged = call(office__img_merge, &format!(r#"{{"r":{cr},"g":{cg},"b":{cb},"a":{ca}}}"#));
+    let merged = call(
+        office__img_merge,
+        &format!(r#"{{"r":{cr},"g":{cg},"b":{cb},"a":{ca}}}"#),
+    );
     let mh = merged["handle"].as_u64().expect("merge handle");
 
     // blend / blend_mode / composite between two same-size handles
-    let other = call(office__img_new, r#"{"width":58,"height":58,"color":[200,80,40,255]}"#);
+    let other = call(
+        office__img_new,
+        r#"{"width":58,"height":58,"color":[200,80,40,255]}"#,
+    );
     let oh = other["handle"].as_u64().unwrap();
-    let bl = call(office__img_blend, &format!(r#"{{"handle":{h},"src":{oh},"alpha":0.4}}"#));
+    let bl = call(
+        office__img_blend,
+        &format!(r#"{{"handle":{h},"src":{oh},"alpha":0.4}}"#),
+    );
     assert_eq!(bl["ok"], true, "blend: {bl}");
-    let bm = call(office__img_blend_mode, &format!(r#"{{"handle":{h},"src":{oh},"mode":"screen"}}"#));
+    let bm = call(
+        office__img_blend_mode,
+        &format!(r#"{{"handle":{h},"src":{oh},"mode":"screen"}}"#),
+    );
     assert_eq!(bm["ok"], true, "blend_mode: {bm}");
 
     for handle in [h, cr, cg, cb, ca, mh, oh] {
@@ -993,44 +1061,83 @@ fn image_animation_drawing_transform_base64() {
     // build 3 distinct frames, write an animated GIF, read frames back
     let mut handles = Vec::new();
     for color in ["[200,0,0,255]", "[0,200,0,255]", "[0,0,200,255]"] {
-        let n = call(office__img_new, &format!(r#"{{"width":32,"height":32,"color":{color}}}"#));
+        let n = call(
+            office__img_new,
+            &format!(r#"{{"width":32,"height":32,"color":{color}}}"#),
+        );
         handles.push(n["handle"].as_u64().unwrap());
     }
     let gif = tmp("anim.gif");
-    let hs = format!("[{}]", handles.iter().map(|h| h.to_string()).collect::<Vec<_>>().join(","));
-    let w = call(office__img_save_animated, &format!(r#"{{"path":"{gif}","handles":{hs},"delay":80,"repeat":"infinite"}}"#));
+    let hs = format!(
+        "[{}]",
+        handles
+            .iter()
+            .map(|h| h.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let w = call(
+        office__img_save_animated,
+        &format!(r#"{{"path":"{gif}","handles":{hs},"delay":80,"repeat":"infinite"}}"#),
+    );
     assert_eq!(w["ok"], true, "save_animated failed: {w}");
     let fr = call(office__img_open_frames, &format!(r#"{{"path":"{gif}"}}"#));
     assert_eq!(fr["count"], 3, "3 frames round-trip: {fr}");
     assert_eq!(fr["frames"][0]["width"], 32, "frame dims preserved");
     for f in fr["frames"].as_array().unwrap() {
-        call(office__img_close, &format!(r#"{{"handle":{}}}"#, f["handle"].as_u64().unwrap()));
+        call(
+            office__img_close,
+            &format!(r#"{{"handle":{}}}"#, f["handle"].as_u64().unwrap()),
+        );
     }
     std::fs::remove_file(&gif).ok();
 
     // montage the 3 source frames into a grid
-    let mont = call(office__img_montage, &format!(r#"{{"handles":{hs},"cols":2,"gap":3}}"#));
+    let mont = call(
+        office__img_montage,
+        &format!(r#"{{"handles":{hs},"cols":2,"gap":3}}"#),
+    );
     let mh = mont["handle"].as_u64().expect("montage handle");
     assert!(mont["width"].as_u64().unwrap() >= 32, "montage sized");
     call(office__img_close, &format!(r#"{{"handle":{mh}}}"#));
 
     // advanced drawing + gradient + warp on a fresh canvas
-    let base = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let base = call(
+        office__img_new,
+        r#"{"width":64,"height":64,"color":[255,255,255,255]}"#,
+    );
     let h = base["handle"].as_u64().unwrap();
     for (f, arg) in [
-        (office__img_gradient as extern "C" fn(*const c_char) -> *const c_char,
-         r##"{"handle":H,"kind":"radial","from":"#ff0000","to":"#0000ff"}"##),
-        (office__img_draw_ellipse, r#"{"handle":H,"x":32,"y":32,"rx":20,"ry":12,"color":[0,0,0,255]}"#),
-        (office__img_draw_polygon, r#"{"handle":H,"points":[[5,5],[60,10],[30,55]],"color":[0,128,0,200]}"#),
-        (office__img_draw_text_multiline, r#"{"handle":H,"x":2,"y":2,"text":"a\nb\nc","size":10,"color":[0,0,0,255]}"#),
-        (office__img_warp, r#"{"handle":H,"matrix":[1,0.2,0,0,1,0,0,0,1]}"#),
+        (
+            office__img_gradient as extern "C" fn(*const c_char) -> *const c_char,
+            r##"{"handle":H,"kind":"radial","from":"#ff0000","to":"#0000ff"}"##,
+        ),
+        (
+            office__img_draw_ellipse,
+            r#"{"handle":H,"x":32,"y":32,"rx":20,"ry":12,"color":[0,0,0,255]}"#,
+        ),
+        (
+            office__img_draw_polygon,
+            r#"{"handle":H,"points":[[5,5],[60,10],[30,55]],"color":[0,128,0,200]}"#,
+        ),
+        (
+            office__img_draw_text_multiline,
+            r#"{"handle":H,"x":2,"y":2,"text":"a\nb\nc","size":10,"color":[0,0,0,255]}"#,
+        ),
+        (
+            office__img_warp,
+            r#"{"handle":H,"matrix":[1,0.2,0,0,1,0,0,0,1]}"#,
+        ),
     ] {
         let v = call(f, &arg.replace('H', &h.to_string()));
         assert_eq!(v["ok"], true, "draw/transform failed: {v}");
     }
 
     // base64 round-trip: encode → decode → same dimensions
-    let enc = call(office__img_to_base64, &format!(r#"{{"handle":{h},"format":"png"}}"#));
+    let enc = call(
+        office__img_to_base64,
+        &format!(r#"{{"handle":{h},"format":"png"}}"#),
+    );
     let b64 = enc["base64"].as_str().expect("base64 string");
     assert!(!b64.is_empty(), "base64 non-empty");
     let dec = call(office__img_from_base64, &format!(r#"{{"base64":"{b64}"}}"#));
@@ -1044,15 +1151,32 @@ fn image_animation_drawing_transform_base64() {
 
 #[test]
 fn image_shapes_fills_masks_analysis() {
-    let n = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let n = call(
+        office__img_new,
+        r#"{"width":64,"height":64,"color":[255,255,255,255]}"#,
+    );
     let h = n["handle"].as_u64().unwrap();
     for (f, arg) in [
-        (office__img_draw_rounded_rect as extern "C" fn(*const c_char) -> *const c_char,
-         r#"{"handle":H,"x":4,"y":4,"width":40,"height":24,"radius":8,"color":[200,40,40,255]}"#),
-        (office__img_draw_polyline, r#"{"handle":H,"points":[[2,2],[20,40],[50,10]],"color":[0,0,255,255]}"#),
-        (office__img_draw_arc, r#"{"handle":H,"x":32,"y":32,"radius":20,"start":0,"end":270,"fill":true,"color":[0,128,0,200]}"#),
-        (office__img_replace_color, r#"{"handle":H,"from":[255,255,255],"to":[240,240,200],"tolerance":4}"#),
-        (office__img_flood_fill, r#"{"handle":H,"x":0,"y":0,"color":[180,220,255,255],"tolerance":8}"#),
+        (
+            office__img_draw_rounded_rect as extern "C" fn(*const c_char) -> *const c_char,
+            r#"{"handle":H,"x":4,"y":4,"width":40,"height":24,"radius":8,"color":[200,40,40,255]}"#,
+        ),
+        (
+            office__img_draw_polyline,
+            r#"{"handle":H,"points":[[2,2],[20,40],[50,10]],"color":[0,0,255,255]}"#,
+        ),
+        (
+            office__img_draw_arc,
+            r#"{"handle":H,"x":32,"y":32,"radius":20,"start":0,"end":270,"fill":true,"color":[0,128,0,200]}"#,
+        ),
+        (
+            office__img_replace_color,
+            r#"{"handle":H,"from":[255,255,255],"to":[240,240,200],"tolerance":4}"#,
+        ),
+        (
+            office__img_flood_fill,
+            r#"{"handle":H,"x":0,"y":0,"color":[180,220,255,255],"tolerance":8}"#,
+        ),
         (office__img_swap_channels, r#"{"handle":H,"order":"bgr"}"#),
         (office__img_crop_circle, r#"{"handle":H}"#),
     ] {
@@ -1060,23 +1184,50 @@ fn image_shapes_fills_masks_analysis() {
         assert_eq!(v["ok"], true, "shape/fill op failed: {v}");
     }
     // round_corners + drop_shadow report new geometry
-    let rc = call(office__img_round_corners, &format!(r#"{{"handle":{h},"radius":12}}"#));
+    let rc = call(
+        office__img_round_corners,
+        &format!(r#"{{"handle":{h},"radius":12}}"#),
+    );
     assert_eq!(rc["ok"], true, "round_corners: {rc}");
-    let ds = call(office__img_drop_shadow, &format!(r#"{{"handle":{h},"dx":5,"dy":5,"blur":3}}"#));
-    assert!(ds["width"].as_u64().unwrap() > 64, "drop_shadow grows canvas: {ds}");
+    let ds = call(
+        office__img_drop_shadow,
+        &format!(r#"{{"handle":{h},"dx":5,"dy":5,"blur":3}}"#),
+    );
+    assert!(
+        ds["width"].as_u64().unwrap() > 64,
+        "drop_shadow grows canvas: {ds}"
+    );
 
     // dominant colors
-    let dc = call(office__img_dominant_colors, &format!(r#"{{"handle":{h},"count":3}}"#));
-    assert!(dc["colors"].as_array().map(|a| !a.is_empty()).unwrap_or(false), "dominant colors: {dc}");
+    let dc = call(
+        office__img_dominant_colors,
+        &format!(r#"{{"handle":{h},"count":3}}"#),
+    );
+    assert!(
+        dc["colors"]
+            .as_array()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false),
+        "dominant colors: {dc}"
+    );
 
     // text measurement (no handle)
     let ts = call(office__img_text_size, r#"{"text":"Hello","size":20}"#);
-    assert!(ts["width"].as_u64().unwrap() > 0, "text width measured: {ts}");
+    assert!(
+        ts["width"].as_u64().unwrap() > 0,
+        "text width measured: {ts}"
+    );
 
     // compare against a copy → identical
-    let copy = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let copy = call(
+        office__img_new,
+        r#"{"width":64,"height":64,"color":[255,255,255,255]}"#,
+    );
     let ch = copy["handle"].as_u64().unwrap();
-    let cmp = call(office__img_compare, &format!(r#"{{"handle":{ch},"other":{ch}}}"#));
+    let cmp = call(
+        office__img_compare,
+        &format!(r#"{{"handle":{ch},"other":{ch}}}"#),
+    );
     assert_eq!(cmp["identical"], true, "self-compare identical: {cmp}");
 
     call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
@@ -1085,17 +1236,34 @@ fn image_shapes_fills_masks_analysis() {
 
 #[test]
 fn image_color_science_and_distortions() {
-    let n = call(office__img_new, r#"{"width":48,"height":48,"color":[120,160,200,255]}"#);
+    let n = call(
+        office__img_new,
+        r#"{"width":48,"height":48,"color":[120,160,200,255]}"#,
+    );
     let h = n["handle"].as_u64().unwrap();
     for (f, arg) in [
-        (office__img_levels as extern "C" fn(*const c_char) -> *const c_char,
-         r#"{"handle":H,"in_black":20,"in_white":230,"gamma":1.2,"out_black":10,"out_white":250}"#),
-        (office__img_curves, r#"{"handle":H,"points":[[0,0],[128,180],[255,255]]}"#),
-        (office__img_hsl, r#"{"handle":H,"hue":40,"saturation":1.3,"lightness":0.95}"#),
+        (
+            office__img_levels as extern "C" fn(*const c_char) -> *const c_char,
+            r#"{"handle":H,"in_black":20,"in_white":230,"gamma":1.2,"out_black":10,"out_white":250}"#,
+        ),
+        (
+            office__img_curves,
+            r#"{"handle":H,"points":[[0,0],[128,180],[255,255]]}"#,
+        ),
+        (
+            office__img_hsl,
+            r#"{"handle":H,"hue":40,"saturation":1.3,"lightness":0.95}"#,
+        ),
         (office__img_temperature, r#"{"handle":H,"amount":35}"#),
-        (office__img_channel_mixer, r#"{"handle":H,"matrix":[0.5,0.3,0.2,0.1,0.8,0.1,0.2,0.2,0.6]}"#),
+        (
+            office__img_channel_mixer,
+            r#"{"handle":H,"matrix":[0.5,0.3,0.2,0.1,0.8,0.1,0.2,0.2,0.6]}"#,
+        ),
         (office__img_swirl, r#"{"handle":H,"strength":2.5}"#),
-        (office__img_wave, r#"{"handle":H,"amplitude":6,"wavelength":24,"axis":"x"}"#),
+        (
+            office__img_wave,
+            r#"{"handle":H,"amplitude":6,"wavelength":24,"axis":"x"}"#,
+        ),
         (office__img_fisheye, r#"{"handle":H,"strength":0.6}"#),
         (office__img_kaleidoscope, r#"{"handle":H,"segments":8}"#),
     ] {
@@ -1103,16 +1271,28 @@ fn image_color_science_and_distortions() {
         assert_eq!(v["ok"], true, "color/distort op failed: {v}");
     }
     // seam carve reports the new (smaller) width
-    let sc = call(office__img_seam_carve, &format!(r#"{{"handle":{h},"width":36}}"#));
+    let sc = call(
+        office__img_seam_carve,
+        &format!(r#"{{"handle":{h},"width":36}}"#),
+    );
     assert_eq!(sc["width"], 36, "seam carve to target width: {sc}");
     // spritesheet splits into a 2x2 grid of handles
-    let n2 = call(office__img_new, r#"{"width":40,"height":40,"color":[10,20,30,255]}"#);
+    let n2 = call(
+        office__img_new,
+        r#"{"width":40,"height":40,"color":[10,20,30,255]}"#,
+    );
     let h2 = n2["handle"].as_u64().unwrap();
-    let ss = call(office__img_spritesheet, &format!(r#"{{"handle":{h2},"cols":2,"rows":2}}"#));
+    let ss = call(
+        office__img_spritesheet,
+        &format!(r#"{{"handle":{h2},"cols":2,"rows":2}}"#),
+    );
     let cells = ss["handles"].as_array().unwrap();
     assert_eq!(cells.len(), 4, "2x2 sprite split: {ss}");
     for c in cells {
-        call(office__img_close, &format!(r#"{{"handle":{}}}"#, c.as_u64().unwrap()));
+        call(
+            office__img_close,
+            &format!(r#"{{"handle":{}}}"#, c.as_u64().unwrap()),
+        );
     }
     call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
     call(office__img_close, &format!(r#"{{"handle":{h2}}}"#));
@@ -1121,23 +1301,45 @@ fn image_color_science_and_distortions() {
 #[test]
 fn image_dither_quantize_favicon() {
     // build a gradient so quantization/dither have real color variety
-    let n = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let n = call(
+        office__img_new,
+        r#"{"width":64,"height":64,"color":[255,255,255,255]}"#,
+    );
     let h = n["handle"].as_u64().unwrap();
-    call(office__img_gradient, &format!(r##"{{"handle":{h},"kind":"linear","from":"#ff0000","to":"#0000ff"}}"##));
+    call(
+        office__img_gradient,
+        &format!(r##"{{"handle":{h},"kind":"linear","from":"#ff0000","to":"#0000ff"}}"##),
+    );
 
     // dither to 1-bit per channel
-    let d = call(office__img_dither, &format!(r#"{{"handle":{h},"levels":2}}"#));
+    let d = call(
+        office__img_dither,
+        &format!(r#"{{"handle":{h},"levels":2}}"#),
+    );
     assert_eq!(d["ok"], true, "dither: {d}");
 
     // quantize to 8 colors → palette returned
-    let q = call(office__img_quantize, &format!(r#"{{"handle":{h},"colors":8}}"#));
+    let q = call(
+        office__img_quantize,
+        &format!(r#"{{"handle":{h},"colors":8}}"#),
+    );
     let colors = q["colors"].as_array().unwrap();
-    assert!(!colors.is_empty() && colors.len() <= 8, "quantize palette size: {}", colors.len());
-    assert!(colors[0]["hex"].as_str().unwrap_or("").starts_with('#'), "palette has hex");
+    assert!(
+        !colors.is_empty() && colors.len() <= 8,
+        "quantize palette size: {}",
+        colors.len()
+    );
+    assert!(
+        colors[0]["hex"].as_str().unwrap_or("").starts_with('#'),
+        "palette has hex"
+    );
 
     // multi-size favicon
     let path = tmp("fav.ico");
-    let f = call(office__img_favicon, &format!(r#"{{"handle":{h},"path":"{path}","sizes":[16,32,48]}}"#));
+    let f = call(
+        office__img_favicon,
+        &format!(r#"{{"handle":{h},"path":"{path}","sizes":[16,32,48]}}"#),
+    );
     assert_eq!(f["ok"], true, "favicon: {f}");
     let bytes = std::fs::read(&path).unwrap();
     // ICONDIR: reserved=0, type=1, count=3
@@ -1187,25 +1389,43 @@ fn chart_new_types_render_raster_and_svg() {
     for kind in ["step", "waterfall", "boxplot", "combo"] {
         let c = call(
             office__chart_render,
-            &format!(r#"{{"type":"{kind}","width":420,"height":300,"categories":["a","b","c","d","e"],"series":{cart},"legend":false}}"#),
+            &format!(
+                r#"{{"type":"{kind}","width":420,"height":300,"categories":["a","b","c","d","e"],"series":{cart},"legend":false}}"#
+            ),
         );
-        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind} raster: {c}"));
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
         let v = call(
             office__chart_svg,
             &format!(r#"{{"type":"{kind}","categories":["a","b","c","d","e"],"series":{cart}}}"#),
         );
         let svg = v["svg"].as_str().unwrap_or("");
-        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{kind} svg malformed");
+        assert!(
+            svg.starts_with("<svg") && svg.ends_with("</svg>"),
+            "{kind} svg malformed"
+        );
     }
     // OHLC + candlestick from [o,h,l,c] tuples
     let ohlc = r#"[{"data":[[10,15,8,12],[12,14,9,10],[10,13,7,13]]}]"#;
     for kind in ["ohlc", "candlestick"] {
-        let c = call(office__chart_render, &format!(r#"{{"type":"{kind}","series":{ohlc}}}"#));
-        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind}: {c}"));
+        let c = call(
+            office__chart_render,
+            &format!(r#"{{"type":"{kind}","series":{ohlc}}}"#),
+        );
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind}: {c}"));
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
-        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","series":{ohlc}}}"#));
-        assert!(v["svg"].as_str().unwrap_or("").contains("<line"), "{kind} svg wicks");
+        let v = call(
+            office__chart_svg,
+            &format!(r#"{{"type":"{kind}","series":{ohlc}}}"#),
+        );
+        assert!(
+            v["svg"].as_str().unwrap_or("").contains("<line"),
+            "{kind} svg wicks"
+        );
     }
     // funnel uses categories for labels
     let fc = call(
@@ -1215,11 +1435,20 @@ fn chart_new_types_render_raster_and_svg() {
     let fh = fc["handle"].as_u64().expect("funnel handle");
     call(office__img_close, &format!(r#"{{"handle":{fh}}}"#));
     // gauge + heatmap do NOT require a series
-    let g = call(office__chart_render, r#"{"type":"gauge","value":72,"max":100}"#);
+    let g = call(
+        office__chart_render,
+        r#"{"type":"gauge","value":72,"max":100}"#,
+    );
     let gh = g["handle"].as_u64().expect("gauge handle");
     call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
-    let hm = call(office__chart_svg, r#"{"type":"heatmap","matrix":[[1,2,3],[4,5,6],[7,8,9]],"categories":["x","y","z"]}"#);
-    assert!(hm["svg"].as_str().unwrap_or("").contains("<rect"), "heatmap svg cells");
+    let hm = call(
+        office__chart_svg,
+        r#"{"type":"heatmap","matrix":[[1,2,3],[4,5,6],[7,8,9]],"categories":["x","y","z"]}"#,
+    );
+    assert!(
+        hm["svg"].as_str().unwrap_or("").contains("<rect"),
+        "heatmap svg cells"
+    );
 }
 
 #[test]
@@ -1229,31 +1458,53 @@ fn chart_incr20_types_render_raster_and_svg() {
     for kind in ["treemap", "polar", "pareto", "stacked_area"] {
         let c = call(
             office__chart_render,
-            &format!(r#"{{"type":"{kind}","width":420,"height":320,"categories":["a","b","c","d","e"],"series":{series}}}"#),
+            &format!(
+                r#"{{"type":"{kind}","width":420,"height":320,"categories":["a","b","c","d","e"],"series":{series}}}"#
+            ),
         );
-        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind} raster: {c}"));
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
         let v = call(
             office__chart_svg,
             &format!(r#"{{"type":"{kind}","categories":["a","b","c","d","e"],"series":{series}}}"#),
         );
         let svg = v["svg"].as_str().unwrap_or("");
-        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{kind} svg malformed");
+        assert!(
+            svg.starts_with("<svg") && svg.ends_with("</svg>"),
+            "{kind} svg malformed"
+        );
     }
     // bullet graph: per-series value/target/ranges
     let bullet = r#"[{"name":"Rev","value":270,"target":250,"ranges":[150,220,300]},{"name":"Cost","value":180,"target":200,"ranges":[120,200,260]}]"#;
-    let cb = call(office__chart_render, &format!(r#"{{"type":"bullet","series":{bullet}}}"#));
+    let cb = call(
+        office__chart_render,
+        &format!(r#"{{"type":"bullet","series":{bullet}}}"#),
+    );
     let hb = cb["handle"].as_u64().expect("bullet raster handle");
     call(office__img_close, &format!(r#"{{"handle":{hb}}}"#));
-    let vb = call(office__chart_svg, &format!(r#"{{"type":"bullet","series":{bullet}}}"#));
-    assert!(vb["svg"].as_str().unwrap_or("").contains("<rect"), "bullet svg bars");
+    let vb = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"bullet","series":{bullet}}}"#),
+    );
+    assert!(
+        vb["svg"].as_str().unwrap_or("").contains("<rect"),
+        "bullet svg bars"
+    );
 
     // scatter trendline overlay emits a dashed regression line in SVG
     let st = call(
         office__chart_svg,
         r#"{"type":"scatter","series":[{"data":[[1,2],[2,3.1],[3,3.9],[4,5.2],[5,6.1]]}],"trendline":true}"#,
     );
-    assert!(st["svg"].as_str().unwrap_or("").contains("stroke-dasharray"), "trendline dashed line present");
+    assert!(
+        st["svg"]
+            .as_str()
+            .unwrap_or("")
+            .contains("stroke-dasharray"),
+        "trendline dashed line present"
+    );
 }
 
 #[test]
@@ -1262,24 +1513,54 @@ fn chart_incr22_types_and_overlays() {
     for kind in ["lollipop", "dot"] {
         let c = call(
             office__chart_render,
-            &format!(r#"{{"type":"{kind}","width":400,"height":300,"categories":["a","b","c"],"series":[{{"data":[5,9,3]}}]}}"#),
+            &format!(
+                r#"{{"type":"{kind}","width":400,"height":300,"categories":["a","b","c"],"series":[{{"data":[5,9,3]}}]}}"#
+            ),
         );
-        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind}: {c}"));
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind}: {c}"));
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
-        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","categories":["a","b","c"],"series":[{{"data":[5,9,3]}}]}}"#));
-        assert!(v["svg"].as_str().unwrap_or("").contains("<circle"), "{kind} svg dots");
+        let v = call(
+            office__chart_svg,
+            &format!(
+                r#"{{"type":"{kind}","categories":["a","b","c"],"series":[{{"data":[5,9,3]}}]}}"#
+            ),
+        );
+        assert!(
+            v["svg"].as_str().unwrap_or("").contains("<circle"),
+            "{kind} svg dots"
+        );
     }
     // gantt: tasks with start/end
     let gantt = r#"[{"name":"design","start":0,"end":3},{"name":"build","start":3,"end":8},{"name":"ship","start":8,"end":10}]"#;
-    let gc = call(office__chart_render, &format!(r#"{{"type":"gantt","series":{gantt}}}"#));
+    let gc = call(
+        office__chart_render,
+        &format!(r#"{{"type":"gantt","series":{gantt}}}"#),
+    );
     let gh = gc["handle"].as_u64().expect("gantt raster handle");
     call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
-    let gv = call(office__chart_svg, &format!(r#"{{"type":"gantt","series":{gantt}}}"#));
-    assert!(gv["svg"].as_str().unwrap_or("").contains("<rect"), "gantt svg bars");
+    let gv = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"gantt","series":{gantt}}}"#),
+    );
+    assert!(
+        gv["svg"].as_str().unwrap_or("").contains("<rect"),
+        "gantt svg bars"
+    );
     // sunburst: rings, no series required
-    let sv = call(office__chart_svg, r#"{"type":"sunburst","rings":[[10,20],[5,5,10,10]]}"#);
-    assert!(sv["svg"].as_str().unwrap_or("").contains("<path"), "sunburst svg ring segments");
-    let sc = call(office__chart_render, r#"{"type":"sunburst","rings":[[10,20],[5,5,10,10]]}"#);
+    let sv = call(
+        office__chart_svg,
+        r#"{"type":"sunburst","rings":[[10,20],[5,5,10,10]]}"#,
+    );
+    assert!(
+        sv["svg"].as_str().unwrap_or("").contains("<path"),
+        "sunburst svg ring segments"
+    );
+    let sc = call(
+        office__chart_render,
+        r#"{"type":"sunburst","rings":[[10,20],[5,5,10,10]]}"#,
+    );
     let sh = sc["handle"].as_u64().expect("sunburst raster handle");
     call(office__img_close, &format!(r#"{{"handle":{sh}}}"#));
     // markers + reference lines on a line chart (SVG)
@@ -1295,11 +1576,20 @@ fn chart_incr22_types_and_overlays() {
 #[test]
 fn chart_incr25_types_theming_smooth() {
     // range bars from [lo,hi] pairs
-    let rc = call(office__chart_render, r#"{"type":"range_column","categories":["a","b","c"],"series":[{"data":[[2,8],[3,6],[1,9]]}]}"#);
+    let rc = call(
+        office__chart_render,
+        r#"{"type":"range_column","categories":["a","b","c"],"series":[{"data":[[2,8],[3,6],[1,9]]}]}"#,
+    );
     let rh = rc["handle"].as_u64().expect("range raster handle");
     call(office__img_close, &format!(r#"{{"handle":{rh}}}"#));
-    let rv = call(office__chart_svg, r#"{"type":"range_column","categories":["a","b","c"],"series":[{"data":[[2,8],[3,6],[1,9]]}]}"#);
-    assert!(rv["svg"].as_str().unwrap_or("").contains("<rect"), "range svg bars");
+    let rv = call(
+        office__chart_svg,
+        r#"{"type":"range_column","categories":["a","b","c"],"series":[{"data":[[2,8],[3,6],[1,9]]}]}"#,
+    );
+    assert!(
+        rv["svg"].as_str().unwrap_or("").contains("<rect"),
+        "range svg bars"
+    );
 
     // waffle / slope / percent_stacked / streamgraph
     for kind in ["waffle", "slope", "percent_stacked", "streamgraph"] {
@@ -1308,12 +1598,25 @@ fn chart_incr25_types_theming_smooth() {
         } else {
             r#"[{"name":"s1","data":[5,8,3]},{"name":"s2","data":[2,4,6]}]"#
         };
-        let c = call(office__chart_render, &format!(r#"{{"type":"{kind}","width":400,"height":320,"categories":["a","b","c"],"series":{series}}}"#));
-        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        let c = call(
+            office__chart_render,
+            &format!(
+                r#"{{"type":"{kind}","width":400,"height":320,"categories":["a","b","c"],"series":{series}}}"#
+            ),
+        );
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind} raster: {c}"));
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
-        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","categories":["a","b","c"],"series":{series}}}"#));
+        let v = call(
+            office__chart_svg,
+            &format!(r#"{{"type":"{kind}","categories":["a","b","c"],"series":{series}}}"#),
+        );
         let svg = v["svg"].as_str().unwrap_or("");
-        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{kind} svg malformed");
+        assert!(
+            svg.starts_with("<svg") && svg.ends_with("</svg>"),
+            "{kind} svg malformed"
+        );
     }
 
     // custom palette + background + smooth line
@@ -1335,7 +1638,10 @@ fn chart_log_axis_errorbars_annotations() {
     );
     let svg = lv["svg"].as_str().unwrap_or("");
     assert!(svg.starts_with("<svg"), "log_y svg renders");
-    let lc = call(office__chart_render, r#"{"type":"line","series":[{"data":[1,10,100,1000]}],"log_y":true}"#);
+    let lc = call(
+        office__chart_render,
+        r#"{"type":"line","series":[{"data":[1,10,100,1000]}],"log_y":true}"#,
+    );
     let lh = lc["handle"].as_u64().expect("log_y raster handle");
     call(office__img_close, &format!(r#"{{"handle":{lh}}}"#));
 
@@ -1344,7 +1650,10 @@ fn chart_log_axis_errorbars_annotations() {
         office__chart_svg,
         r#"{"type":"bar","categories":["a","b","c"],"series":[{"data":[5,8,3],"errors":[1,1.5,0.5]}]}"#,
     );
-    assert!(ev["svg"].as_str().unwrap_or("").matches("<line").count() >= 3, "error-bar whiskers present");
+    assert!(
+        ev["svg"].as_str().unwrap_or("").matches("<line").count() >= 3,
+        "error-bar whiskers present"
+    );
 
     // annotations marker + text
     let av = call(
@@ -1361,11 +1670,24 @@ fn chart_grid_dashboard_and_new_types() {
     // marimekko + radial_bar render in both renderers
     for kind in ["marimekko", "radial_bar"] {
         let series = r#"[{"name":"s1","data":[5,8,3,6]},{"name":"s2","data":[2,4,6,1]}]"#;
-        let c = call(office__chart_render, &format!(r#"{{"type":"{kind}","width":400,"height":320,"categories":["a","b","c","d"],"series":{series}}}"#));
-        let h = c["handle"].as_u64().unwrap_or_else(|| panic!("{kind} raster: {c}"));
+        let c = call(
+            office__chart_render,
+            &format!(
+                r#"{{"type":"{kind}","width":400,"height":320,"categories":["a","b","c","d"],"series":{series}}}"#
+            ),
+        );
+        let h = c["handle"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{kind} raster: {c}"));
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
-        let v = call(office__chart_svg, &format!(r#"{{"type":"{kind}","categories":["a","b","c","d"],"series":{series}}}"#));
-        assert!(v["svg"].as_str().unwrap_or("").starts_with("<svg"), "{kind} svg");
+        let v = call(
+            office__chart_svg,
+            &format!(r#"{{"type":"{kind}","categories":["a","b","c","d"],"series":{series}}}"#),
+        );
+        assert!(
+            v["svg"].as_str().unwrap_or("").starts_with("<svg"),
+            "{kind} svg"
+        );
     }
 
     // dashboard grid: 4 different charts tiled into one image, returns a handle
@@ -1375,18 +1697,30 @@ fn chart_grid_dashboard_and_new_types() {
         {"type":"pie","categories":["x","y"],"series":[{"data":[6,4]}]},
         {"type":"sankey","links":[{"source":0,"target":1,"value":5}]}
     ]"#;
-    let g = call(office__chart_grid, &format!(r#"{{"charts":{charts},"cols":2,"cell_width":300,"cell_height":220,"gap":8}}"#));
+    let g = call(
+        office__chart_grid,
+        &format!(r#"{{"charts":{charts},"cols":2,"cell_width":300,"cell_height":220,"gap":8}}"#),
+    );
     assert_eq!(g["charts"], 4, "grid composited 4 charts: {g}");
     let gh = g["handle"].as_u64().expect("grid handle");
-    assert!(g["width"].as_u64().unwrap() >= 600, "grid width spans 2 columns");
+    assert!(
+        g["width"].as_u64().unwrap() >= 600,
+        "grid width spans 2 columns"
+    );
     call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
 
     // grid saved straight to PDF
     let path = tmp("dash.pdf");
-    let gp = call(office__chart_grid, &format!(r#"{{"charts":{charts},"cols":2,"path":"{path}"}}"#));
+    let gp = call(
+        office__chart_grid,
+        &format!(r#"{{"charts":{charts},"cols":2,"path":"{path}"}}"#),
+    );
     assert_eq!(gp["ok"], true, "grid pdf save: {gp}");
     let bytes = std::fs::read(&path).unwrap();
-    assert!(String::from_utf8_lossy(&bytes[..bytes.len().min(8)]).contains("%PDF"), "grid pdf magic");
+    assert!(
+        String::from_utf8_lossy(&bytes[..bytes.len().min(8)]).contains("%PDF"),
+        "grid pdf magic"
+    );
     if let Some(h) = gp["handle"].as_u64() {
         call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
     }
@@ -1396,27 +1730,56 @@ fn chart_grid_dashboard_and_new_types() {
 #[test]
 fn chart_incr32_calendar_parallel_hexbin() {
     // calendar: needs no series, just values
-    let cal = call(office__chart_render, r#"{"type":"calendar","width":420,"height":160,"values":[1,3,0,5,2,8,4,1,0,6,3,2,7,1,5,2,0,9,3,1]}"#);
+    let cal = call(
+        office__chart_render,
+        r#"{"type":"calendar","width":420,"height":160,"values":[1,3,0,5,2,8,4,1,0,6,3,2,7,1,5,2,0,9,3,1]}"#,
+    );
     let ch = cal["handle"].as_u64().expect("calendar handle");
     call(office__img_close, &format!(r#"{{"handle":{ch}}}"#));
-    let cv = call(office__chart_svg, r#"{"type":"calendar","values":[1,3,0,5,2,8,4,1,0,6]}"#);
-    assert!(cv["svg"].as_str().unwrap_or("").contains("<rect"), "calendar svg cells");
+    let cv = call(
+        office__chart_svg,
+        r#"{"type":"calendar","values":[1,3,0,5,2,8,4,1,0,6]}"#,
+    );
+    assert!(
+        cv["svg"].as_str().unwrap_or("").contains("<rect"),
+        "calendar svg cells"
+    );
 
     // parallel coordinates: each series = a row across dimensions
     let par = r#"[{"data":[5,20,3,80]},{"data":[8,12,9,40]},{"data":[2,18,6,60]}]"#;
-    let pc = call(office__chart_render, &format!(r#"{{"type":"parallel","width":420,"height":300,"categories":["a","b","c","d"],"series":{par}}}"#));
+    let pc = call(
+        office__chart_render,
+        &format!(
+            r#"{{"type":"parallel","width":420,"height":300,"categories":["a","b","c","d"],"series":{par}}}"#
+        ),
+    );
     let ph = pc["handle"].as_u64().expect("parallel handle");
     call(office__img_close, &format!(r#"{{"handle":{ph}}}"#));
-    let pv = call(office__chart_svg, &format!(r#"{{"type":"parallel","categories":["a","b","c","d"],"series":{par}}}"#));
-    assert!(pv["svg"].as_str().unwrap_or("").contains("<polyline"), "parallel svg lines");
+    let pv = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"parallel","categories":["a","b","c","d"],"series":{par}}}"#),
+    );
+    assert!(
+        pv["svg"].as_str().unwrap_or("").contains("<polyline"),
+        "parallel svg lines"
+    );
 
     // hexbin: scatter points binned
     let hx = r#"[{"data":[[1,2],[1.1,2.1],[1,2.05],[5,9],[5.1,9],[3,3],[3,3.1],[3.05,3]]}]"#;
-    let hc = call(office__chart_render, &format!(r#"{{"type":"hexbin","width":400,"height":400,"radius":20,"series":{hx}}}"#));
+    let hc = call(
+        office__chart_render,
+        &format!(r#"{{"type":"hexbin","width":400,"height":400,"radius":20,"series":{hx}}}"#),
+    );
     let hh = hc["handle"].as_u64().expect("hexbin handle");
     call(office__img_close, &format!(r#"{{"handle":{hh}}}"#));
-    let hv = call(office__chart_svg, &format!(r#"{{"type":"hexbin","radius":20,"series":{hx}}}"#));
-    assert!(hv["svg"].as_str().unwrap_or("").contains("<polygon"), "hexbin svg cells");
+    let hv = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"hexbin","radius":20,"series":{hx}}}"#),
+    );
+    assert!(
+        hv["svg"].as_str().unwrap_or("").contains("<polygon"),
+        "hexbin svg cells"
+    );
 }
 
 #[test]
@@ -1427,7 +1790,11 @@ fn chart_legend_and_labels_emit() {
         r#"{"type":"bar","categories":["a","b","c"],"series":[{"name":"Alpha","data":[3,6,9]},{"name":"Beta","data":[2,5,1]}],"labels":true,"x_label":"qtr","y_label":"units"}"#,
     );
     let svg = v["svg"].as_str().unwrap_or("");
-    assert!(svg.contains(">Alpha<"), "legend series name present: {}", &svg[..svg.len().min(80)]);
+    assert!(
+        svg.contains(">Alpha<"),
+        "legend series name present: {}",
+        &svg[..svg.len().min(80)]
+    );
     assert!(svg.contains("rotate(-90"), "rotated y-axis title present");
     assert!(svg.contains(">qtr<"), "x-axis title present");
 }
@@ -1435,13 +1802,20 @@ fn chart_legend_and_labels_emit() {
 #[test]
 fn chart_save_new_type_any_format() {
     // a brand-new type round-trips through chart_save's extension dispatch
-    let spec = r#""type":"waterfall","series":[{"data":[10,-3,5,-2]}],"categories":["a","b","c","d"]"#;
+    let spec =
+        r#""type":"waterfall","series":[{"data":[10,-3,5,-2]}],"categories":["a","b","c","d"]"#;
     for (ext, magic) in [("svg", "<svg"), ("png", "PNG"), ("pdf", "%PDF")] {
         let path = tmp(&format!("wf.{ext}"));
-        let v = call(office__chart_save, &format!(r#"{{{spec},"path":"{path}"}}"#));
+        let v = call(
+            office__chart_save,
+            &format!(r#"{{{spec},"path":"{path}"}}"#),
+        );
         assert_eq!(v["ok"], true, "{ext}: {v}");
         let bytes = std::fs::read(&path).unwrap();
-        assert!(String::from_utf8_lossy(&bytes[..bytes.len().min(8)]).contains(magic), "{ext} magic");
+        assert!(
+            String::from_utf8_lossy(&bytes[..bytes.len().min(8)]).contains(magic),
+            "{ext} magic"
+        );
         std::fs::remove_file(&path).ok();
     }
 }
@@ -1492,8 +1866,14 @@ fn xlsx_advanced_setup_writes_and_data_round_trips() {
     assert_eq!(w["ok"], true, "advanced setup write failed: {w}");
     // The data still parses back (setup metadata doesn't disturb cell values).
     let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
-    assert_eq!(r["sheets"][0]["rows"][1][0], "NYC", "data intact with setup");
-    assert_eq!(r["sheets"][0]["rows"][1][1], 100.0, "numeric intact with setup");
+    assert_eq!(
+        r["sheets"][0]["rows"][1][0], "NYC",
+        "data intact with setup"
+    );
+    assert_eq!(
+        r["sheets"][0]["rows"][1][1], 100.0,
+        "numeric intact with setup"
+    );
     std::fs::remove_file(&path).ok();
 }
 
@@ -1517,7 +1897,10 @@ fn xlsx_sparklines_grouping_hide_autofit() {
     );
     assert_eq!(w["ok"], true, "sparkline/group write failed: {w}");
     let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
-    assert_eq!(r["sheets"][0]["rows"][1][0], 3.0, "data intact with sparklines/grouping");
+    assert_eq!(
+        r["sheets"][0]["rows"][1][0], 3.0,
+        "data intact with sparklines/grouping"
+    );
     std::fs::remove_file(&path).ok();
 }
 
@@ -1536,7 +1919,10 @@ fn xlsx_properties_and_rich_strings() {
     );
     assert_eq!(w["ok"], true, "properties/rich write failed: {w}");
     let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
-    assert_eq!(r["sheets"][0]["rows"][0][0], "Hello World", "rich string concatenates on read");
+    assert_eq!(
+        r["sheets"][0]["rows"][0][0], "Hello World",
+        "rich string concatenates on read"
+    );
     std::fs::remove_file(&path).ok();
 }
 
@@ -1556,8 +1942,17 @@ fn docx_styled_table_round_trips() {
     );
     assert_eq!(w["ok"], true, "styled table write failed: {w}");
     let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
-    let joined: String = r["paragraphs"].as_array().unwrap().iter().filter_map(|p| p.as_str()).collect::<Vec<_>>().join(" ");
-    assert!(joined.contains("Header") && joined.contains("A"), "styled table cells round-trip: {joined:?}");
+    let joined: String = r["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        joined.contains("Header") && joined.contains("A"),
+        "styled table cells round-trip: {joined:?}"
+    );
     std::fs::remove_file(&path).ok();
 }
 
@@ -1573,9 +1968,15 @@ fn xlsx_formula_write_then_read() {
         ),
     );
     assert_eq!(w["ok"], true, "formula write failed: {w}");
-    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}","formulas":true}}"#));
+    let r = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{path}","formulas":true}}"#),
+    );
     let f = r["sheets"][0]["formulas"][0][2].as_str().unwrap_or("");
-    assert!(f.contains("A1") && f.contains("B1"), "formula round-trips, got: {f:?}");
+    assert!(
+        f.contains("A1") && f.contains("B1"),
+        "formula round-trips, got: {f:?}"
+    );
     std::fs::remove_file(&path).ok();
 }
 
@@ -1596,8 +1997,15 @@ fn docx_lists_links_headers_round_trip() {
     assert_eq!(w["ok"], true, "docx rich write failed: {w}");
     let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
     let paras = r["paragraphs"].as_array().unwrap();
-    let joined: String = paras.iter().filter_map(|p| p.as_str()).collect::<Vec<_>>().join("\n");
-    assert!(joined.contains("First point"), "ordered list item present: {joined:?}");
+    let joined: String = paras
+        .iter()
+        .filter_map(|p| p.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        joined.contains("First point"),
+        "ordered list item present: {joined:?}"
+    );
     assert!(joined.contains("bullet a"), "bullet list item present");
     assert!(joined.contains("see site"), "hyperlink text present");
     std::fs::remove_file(&path).ok();
@@ -1638,7 +2046,10 @@ fn barcode_qr_renders_and_saves() {
 
     // round-trips through the shared image surface (save as png)
     let path = tmp("qr.png");
-    let sv = call(office__img_save, &format!(r#"{{"handle":{h},"path":"{path}"}}"#));
+    let sv = call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{path}"}}"#),
+    );
     assert_eq!(sv["ok"], true, "{sv}");
     let bytes = std::fs::read(&path).unwrap();
     assert_eq!(&bytes[1..4], b"PNG", "png magic");
@@ -1770,16 +2181,27 @@ fn meta_unsupported_format_errors() {
     let path = tmp("meta.txt");
     std::fs::write(&path, "x").ok();
     let r = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
-    assert!(err_of(&r).contains("unsupported format"), "got: {}", err_of(&r));
+    assert!(
+        err_of(&r).contains("unsupported format"),
+        "got: {}",
+        err_of(&r)
+    );
     std::fs::remove_file(&path).ok();
 }
 
 #[test]
 fn barcode_invalid_inputs_error() {
     // EAN-13 needs digits only -> error surfaced, not a panic.
-    let v = call(office__barcode_1d, r#"{"symbology":"ean13","data":"not-digits"}"#);
+    let v = call(
+        office__barcode_1d,
+        r#"{"symbology":"ean13","data":"not-digits"}"#,
+    );
     assert!(!err_of(&v).is_empty(), "expected error, got: {v}");
     // unknown symbology name
     let u = call(office__barcode_1d, r#"{"symbology":"nope","data":"x"}"#);
-    assert!(err_of(&u).contains("unknown symbology"), "got: {}", err_of(&u));
+    assert!(
+        err_of(&u).contains("unknown symbology"),
+        "got: {}",
+        err_of(&u)
+    );
 }
