@@ -217,6 +217,14 @@ fn Office::doc_stats ($path) {
     Office::_decode("doc_stats", office__doc_stats(to_json({ path => $path })))
 }
 
+## Append blocks to an existing document. $blocks is an arrayref of doc_write
+## blocks. opts: output (default: in place), page_break => 1 to break before the
+## appended content, format => override. Returns { ok, path, blocks, added }.
+fn Office::doc_append ($path, $blocks, %opts) {
+    Office::_decode("doc_append",
+        office__doc_append(to_json({ path => $path, blocks => $blocks, output => $opts{output}, page_break => $opts{page_break}, format => $opts{format} })))
+}
+
 ## Word-frequency analysis for any readable document (docx/odt/html/md/rtf/txt/
 ## pdf). opts: top => N (default 20), min_length => N (default 1), ignore_case
 ## => 0, stopwords => 1 (filter common English words). Returns { total, unique,

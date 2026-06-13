@@ -998,6 +998,35 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn doc_append_blocks() {
+    let path = tmp("ap.docx");
+    let w = call(
+        office__doc_write,
+        &format!(r#"{{"path":"{path}","blocks":[{{"kind":"para","text":"first"}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("ap_out.docx");
+    let r = call(
+        office__doc_append,
+        &format!(
+            r#"{{"path":"{path}","blocks":[{{"kind":"para","text":"second"}}],"output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["added"], 1, "added 1 block: {r}");
+    assert_eq!(r["blocks"], 2, "2 blocks total: {r}");
+    let rd = call(office__doc_read, &format!(r#"{{"path":"{out}"}}"#));
+    let joined = rd["paragraphs"].to_string();
+    assert!(
+        joined.contains("first") && joined.contains("second"),
+        "both paras: {joined}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_wordfreq_ranks_words() {
     let path = tmp("wf.txt");
     std::fs::write(&path, "the cat sat on the mat the cat ran").unwrap();
