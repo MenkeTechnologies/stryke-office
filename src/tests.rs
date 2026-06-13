@@ -198,6 +198,35 @@ fn sheet_find_locates_cells() {
 }
 
 #[test]
+fn sheet_write_html_and_markdown_tables() {
+    // HTML table
+    let h = tmp("table.html");
+    let wh = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{h}","sheets":[{{"name":"D","rows":[["a","b"],[1,2]]}}]}}"#),
+    );
+    assert_eq!(wh["ok"], true, "html write: {wh}");
+    let html = std::fs::read_to_string(&h).unwrap();
+    assert!(html.contains("<th>a</th>"), "header th: {html}");
+    assert!(html.contains("<td>1</td>"), "data td: {html}");
+
+    // Markdown table
+    let m = tmp("table.md");
+    let wm = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{m}","sheets":[{{"name":"D","rows":[["a","b"],[1,2]]}}]}}"#),
+    );
+    assert_eq!(wm["ok"], true, "md write: {wm}");
+    let md = std::fs::read_to_string(&m).unwrap();
+    assert!(md.contains("| a | b |"), "md header row: {md}");
+    assert!(md.contains("| --- | --- |"), "md separator: {md}");
+    assert!(md.contains("| 1 | 2 |"), "md data row: {md}");
+
+    std::fs::remove_file(&h).ok();
+    std::fs::remove_file(&m).ok();
+}
+
+#[test]
 fn sheet_dedupe_rows() {
     let path = tmp("dedup.xlsx");
     let w = call(
