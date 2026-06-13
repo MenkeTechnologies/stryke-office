@@ -276,8 +276,10 @@ opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,
 `smooth => 1` (Catmull-Rom spline lines), `palette => ["#…"]` (custom color
-cycle), `background => "#…"` (canvas). Every type renders identically in
-raster **and** SVG.
+cycle), `background => "#…"` (canvas), `log_y => 1` (logarithmic Y axis when
+the range is all-positive), per-series `errors => [e,…]` (error-bar whiskers),
+`annotations => [{x, y, text, color}]` (point callouts). Every type renders
+identically in raster **and** SVG.
 
 **Raster and vector output, any format.** Three entry points:
 - `chart_render(type, series, %opts)` → raster image handle (then `img_save`

@@ -1213,6 +1213,36 @@ fn chart_incr25_types_theming_smooth() {
 }
 
 #[test]
+fn chart_log_axis_errorbars_annotations() {
+    // log_y scale on a wide-range line
+    let lv = call(
+        office__chart_svg,
+        r#"{"type":"line","categories":["a","b","c","d"],"series":[{"data":[1,10,100,1000]}],"log_y":true}"#,
+    );
+    let svg = lv["svg"].as_str().unwrap_or("");
+    assert!(svg.starts_with("<svg"), "log_y svg renders");
+    let lc = call(office__chart_render, r#"{"type":"line","series":[{"data":[1,10,100,1000]}],"log_y":true}"#);
+    let lh = lc["handle"].as_u64().expect("log_y raster handle");
+    call(office__img_close, &format!(r#"{{"handle":{lh}}}"#));
+
+    // error bars on a bar chart (SVG): whiskers drawn
+    let ev = call(
+        office__chart_svg,
+        r#"{"type":"bar","categories":["a","b","c"],"series":[{"data":[5,8,3],"errors":[1,1.5,0.5]}]}"#,
+    );
+    assert!(ev["svg"].as_str().unwrap_or("").matches("<line").count() >= 3, "error-bar whiskers present");
+
+    // annotations marker + text
+    let av = call(
+        office__chart_svg,
+        r#"{"type":"line","categories":["a","b","c","d"],"series":[{"data":[3,7,5,9]}],"annotations":[{"x":1,"y":7,"text":"peak"}]}"#,
+    );
+    let asvg = av["svg"].as_str().unwrap_or("");
+    assert!(asvg.contains(">peak<"), "annotation text present");
+    assert!(asvg.contains("<circle"), "annotation marker present");
+}
+
+#[test]
 fn chart_legend_and_labels_emit() {
     // legend swatches + value labels appear in the SVG
     let v = call(
