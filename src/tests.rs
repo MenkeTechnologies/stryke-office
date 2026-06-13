@@ -872,6 +872,60 @@ fn image_extended_processing_ops() {
 }
 
 #[test]
+fn image_animation_drawing_transform_base64() {
+    // build 3 distinct frames, write an animated GIF, read frames back
+    let mut handles = Vec::new();
+    for color in ["[200,0,0,255]", "[0,200,0,255]", "[0,0,200,255]"] {
+        let n = call(office__img_new, &format!(r#"{{"width":32,"height":32,"color":{color}}}"#));
+        handles.push(n["handle"].as_u64().unwrap());
+    }
+    let gif = tmp("anim.gif");
+    let hs = format!("[{}]", handles.iter().map(|h| h.to_string()).collect::<Vec<_>>().join(","));
+    let w = call(office__img_save_animated, &format!(r#"{{"path":"{gif}","handles":{hs},"delay":80,"repeat":"infinite"}}"#));
+    assert_eq!(w["ok"], true, "save_animated failed: {w}");
+    let fr = call(office__img_open_frames, &format!(r#"{{"path":"{gif}"}}"#));
+    assert_eq!(fr["count"], 3, "3 frames round-trip: {fr}");
+    assert_eq!(fr["frames"][0]["width"], 32, "frame dims preserved");
+    for f in fr["frames"].as_array().unwrap() {
+        call(office__img_close, &format!(r#"{{"handle":{}}}"#, f["handle"].as_u64().unwrap()));
+    }
+    std::fs::remove_file(&gif).ok();
+
+    // montage the 3 source frames into a grid
+    let mont = call(office__img_montage, &format!(r#"{{"handles":{hs},"cols":2,"gap":3}}"#));
+    let mh = mont["handle"].as_u64().expect("montage handle");
+    assert!(mont["width"].as_u64().unwrap() >= 32, "montage sized");
+    call(office__img_close, &format!(r#"{{"handle":{mh}}}"#));
+
+    // advanced drawing + gradient + warp on a fresh canvas
+    let base = call(office__img_new, r#"{"width":64,"height":64,"color":[255,255,255,255]}"#);
+    let h = base["handle"].as_u64().unwrap();
+    for (f, arg) in [
+        (office__img_gradient as extern "C" fn(*const c_char) -> *const c_char,
+         r##"{"handle":H,"kind":"radial","from":"#ff0000","to":"#0000ff"}"##),
+        (office__img_draw_ellipse, r#"{"handle":H,"x":32,"y":32,"rx":20,"ry":12,"color":[0,0,0,255]}"#),
+        (office__img_draw_polygon, r#"{"handle":H,"points":[[5,5],[60,10],[30,55]],"color":[0,128,0,200]}"#),
+        (office__img_draw_text_multiline, r#"{"handle":H,"x":2,"y":2,"text":"a\nb\nc","size":10,"color":[0,0,0,255]}"#),
+        (office__img_warp, r#"{"handle":H,"matrix":[1,0.2,0,0,1,0,0,0,1]}"#),
+    ] {
+        let v = call(f, &arg.replace('H', &h.to_string()));
+        assert_eq!(v["ok"], true, "draw/transform failed: {v}");
+    }
+
+    // base64 round-trip: encode → decode → same dimensions
+    let enc = call(office__img_to_base64, &format!(r#"{{"handle":{h},"format":"png"}}"#));
+    let b64 = enc["base64"].as_str().expect("base64 string");
+    assert!(!b64.is_empty(), "base64 non-empty");
+    let dec = call(office__img_from_base64, &format!(r#"{{"base64":"{b64}"}}"#));
+    assert_eq!(dec["width"], 64, "base64 decode dims: {dec}");
+    let dh = dec["handle"].as_u64().unwrap();
+
+    for handle in handles.iter().chain([&h, &dh]) {
+        call(office__img_close, &format!(r#"{{"handle":{handle}}}"#));
+    }
+}
+
+#[test]
 fn chart_radar_and_bubble_render() {
     let c = call(
         office__chart_render,

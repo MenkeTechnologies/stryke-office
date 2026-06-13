@@ -1387,6 +1387,18 @@ export!(office__img_merge, op_img_merge);
 export!(office__img_dilate, op_img_dilate);
 export!(office__img_erode, op_img_erode);
 
+// animation, advanced drawing, transforms, byte I/O
+export!(office__img_open_frames, op_img_open_frames);
+export!(office__img_save_animated, op_img_save_animated);
+export!(office__img_montage, op_img_montage);
+export!(office__img_gradient, op_img_gradient);
+export!(office__img_draw_ellipse, op_img_draw_ellipse);
+export!(office__img_draw_polygon, op_img_draw_polygon);
+export!(office__img_draw_text_multiline, op_img_draw_text_multiline);
+export!(office__img_warp, op_img_warp);
+export!(office__img_to_base64, op_img_to_base64);
+export!(office__img_from_base64, op_img_from_base64);
+
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
 include!("chart_svg.rs");

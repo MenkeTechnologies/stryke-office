@@ -435,6 +435,73 @@ fn Office::img_erode ($handle, %opts) {
     Office::_decode("img_erode", office__img_erode(to_json({ handle => $handle, iterations => $opts{iterations} })))
 }
 
+# ── animation, advanced drawing, transforms, byte I/O ───────────────
+
+## Open an animated image (gif/webp). Returns { count, frames => [{handle,
+## width, height, delay_ms}] }; close each frame handle when done. A static
+## image comes back as a single frame.
+fn Office::img_open_frames ($path) {
+    Office::_decode("img_open_frames", office__img_open_frames(to_json({ path => $path })))
+}
+
+## Write an animated GIF from image handles (resized to the first frame).
+## opts: delay (ms, default 100), delays => [ms,...] per frame, repeat =>
+## "infinite" (default) or an integer loop count.
+fn Office::img_save_animated ($path, $handles, %opts) {
+    Office::_decode("img_save_animated",
+        office__img_save_animated(to_json({ path => $path, handles => $handles, delay => $opts{delay}, delays => $opts{delays}, repeat => $opts{repeat} })))
+}
+
+## Combine image handles into a grid montage. opts: cols (default
+## ceil(sqrt(n))), gap (default 4), bg. Returns a new image handle.
+fn Office::img_montage ($handles, %opts) {
+    Office::_decode("img_montage",
+        office__img_montage(to_json({ handles => $handles, cols => $opts{cols}, gap => $opts{gap}, bg => $opts{bg} })))
+}
+
+## Fill the image with a gradient. opts: kind => "linear"|"radial", from, to,
+## angle (deg, linear; 0 = left->right).
+fn Office::img_gradient ($handle, %opts) {
+    Office::_decode("img_gradient",
+        office__img_gradient(to_json({ handle => $handle, kind => $opts{kind}, from => $opts{from}, to => $opts{to}, angle => $opts{angle} })))
+}
+
+## Draw an ellipse centered at ($x,$y) with radii ($rx,$ry). opts: fill => 1
+## (default) or 0.
+fn Office::img_draw_ellipse ($handle, $x, $y, $rx, $ry, $color, %opts) {
+    Office::_decode("img_draw_ellipse",
+        office__img_draw_ellipse(to_json({ handle => $handle, x => $x, y => $y, rx => $rx, ry => $ry, color => $color, fill => $opts{fill} })))
+}
+
+## Draw a filled polygon from $points ([[x,y],...]).
+fn Office::img_draw_polygon ($handle, $points, $color) {
+    Office::_decode("img_draw_polygon",
+        office__img_draw_polygon(to_json({ handle => $handle, points => $points, color => $color })))
+}
+
+## Draw multi-line text (splits on "\n"). opts: size (16), line_height, font.
+fn Office::img_draw_text_multiline ($handle, $x, $y, $text, $color, %opts) {
+    Office::_decode("img_draw_text_multiline",
+        office__img_draw_text_multiline(to_json({ handle => $handle, x => $x, y => $y, text => $text, color => $color, size => $opts{size}, line_height => $opts{line_height}, font => $opts{font} })))
+}
+
+## Apply a 3x3 projective transform ($matrix = 9 row-major numbers): affine
+## or perspective. Out-of-bounds fills transparent.
+fn Office::img_warp ($handle, $matrix) {
+    Office::_decode("img_warp", office__img_warp(to_json({ handle => $handle, matrix => $matrix })))
+}
+
+## Encode an image handle to a base64 string. opts: format (default "png").
+## Returns { base64, format, bytes }.
+fn Office::img_to_base64 ($handle, %opts) {
+    Office::_decode("img_to_base64", office__img_to_base64(to_json({ handle => $handle, format => $opts{format} })))
+}
+
+## Decode a base64 string into a new image handle. Returns image info.
+fn Office::img_from_base64 ($base64) {
+    Office::_decode("img_from_base64", office__img_from_base64(to_json({ base64 => $base64 })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format

@@ -306,6 +306,20 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_split($h)` / `img_merge($r, $g, $b, %opts)` | split to channel images / merge back |
 | `img_dilate($h, %opts)` / `img_erode($h, %opts)` | morphology; `iterations` |
 
+#### Animation, advanced drawing, transforms, byte I/O
+
+| Function | Notes |
+|---|---|
+| `img_open_frames($path)` | split animated gif/webp → `{count, frames:[{handle,width,height,delay_ms}]}` |
+| `img_save_animated($path, $handles, %opts)` | write animated GIF; `delay`/`delays`/`repeat` |
+| `img_montage($handles, %opts)` | grid montage → new handle; `cols`/`gap`/`bg` |
+| `img_gradient($h, %opts)` | fill `linear`/`radial` between `from`/`to`; `angle` |
+| `img_draw_ellipse($h, $x, $y, $rx, $ry, $color, %opts)` | `fill` opt |
+| `img_draw_polygon($h, $points, $color)` | `points` = `[[x,y],…]` |
+| `img_draw_text_multiline($h, $x, $y, $text, $color, %opts)` | splits on `\n`; `size`/`line_height`/`font` |
+| `img_warp($h, $matrix)` | 3×3 projective (affine/perspective); 9 numbers |
+| `img_to_base64($h, %opts)` / `img_from_base64($b64)` | encode/decode (`format` opt); embed images as strings |
+
 ## [0x05] No external binaries
 
 Every format is handled by a vendored Rust crate, statically linked into

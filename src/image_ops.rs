@@ -1198,3 +1198,340 @@ fn op_img_erode(opts: Value) -> Result<Value> {
     })?;
     Ok(json!({"ok": true}))
 }
+
+// ── animation, advanced drawing, transforms, byte I/O ────────────────────────
+
+/// Open an animated image (gif/webp) and split it into per-frame handles.
+/// Returns `{ frames => [{handle, width, height, delay_ms}], count }`. A
+/// non-animated path comes back as a single frame.
+fn op_img_open_frames(opts: Value) -> Result<Value> {
+    use image::AnimationDecoder;
+    let path = req_str(&opts, "path")?;
+    let bytes = std::fs::read(path).map_err(|e| anyhow!("open {path}: {e}"))?;
+    let frames: Vec<image::Frame> = match ext_of(path).as_str() {
+        "gif" => image::codecs::gif::GifDecoder::new(Cursor::new(&bytes))
+            .map_err(|e| anyhow!("gif decode: {e}"))?
+            .into_frames()
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| anyhow!("gif frames: {e}"))?,
+        "webp" => image::codecs::webp::WebPDecoder::new(Cursor::new(&bytes))
+            .map_err(|e| anyhow!("webp decode: {e}"))?
+            .into_frames()
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| anyhow!("webp frames: {e}"))?,
+        _ => {
+            // Static image: one frame.
+            let img = image::load_from_memory(&bytes).map_err(|e| anyhow!("decode {path}: {e}"))?;
+            let h = insert_image(img);
+            return with_image(h, |img| {
+                Ok(json!({"count": 1, "frames": [{
+                    "handle": h, "width": img.width(), "height": img.height(), "delay_ms": 0
+                }]}))
+            });
+        }
+    };
+    let mut out = Vec::with_capacity(frames.len());
+    for f in frames {
+        let (n, d) = f.delay().numer_denom_ms();
+        let delay_ms = if d == 0 { 0.0 } else { n as f64 / d as f64 };
+        let (w, hgt) = (f.buffer().width(), f.buffer().height());
+        let handle = insert_image(DynamicImage::ImageRgba8(f.into_buffer()));
+        out.push(json!({"handle": handle, "width": w, "height": hgt, "delay_ms": delay_ms}));
+    }
+    Ok(json!({"count": out.len(), "frames": out}))
+}
+
+/// Write an animated GIF from a list of image handles (resized to the first
+/// frame's size). opts: delay (ms, default 100), delays => [ms,...] per frame,
+/// repeat => "infinite" (default) or an integer loop count.
+fn op_img_save_animated(opts: Value) -> Result<Value> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    use image::{Delay, Frame};
+    let path = req_str(&opts, "path")?.to_string();
+    let handles: Vec<u64> = opts
+        .get("handles")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing handles (expected array)"))?
+        .iter()
+        .filter_map(Value::as_u64)
+        .collect();
+    if handles.is_empty() {
+        return Err(anyhow!("no frames to write"));
+    }
+    let default_delay = opts.get("delay").and_then(Value::as_u64).unwrap_or(100);
+    let per: Vec<u64> = opts
+        .get("delays")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_u64).collect())
+        .unwrap_or_default();
+    let first = rgba_of(handles[0])?;
+    let (w, hgt) = (first.width(), first.height());
+    let file = std::fs::File::create(&path)?;
+    let mut enc = GifEncoder::new(file);
+    let repeat = match opts.get("repeat") {
+        Some(Value::Number(n)) => Repeat::Finite(n.as_u64().unwrap_or(0) as u16),
+        _ => Repeat::Infinite,
+    };
+    enc.set_repeat(repeat).map_err(|e| anyhow!("gif repeat: {e}"))?;
+    for (i, &h) in handles.iter().enumerate() {
+        let mut rgba = rgba_of(h)?;
+        if rgba.width() != w || rgba.height() != hgt {
+            rgba = image::imageops::resize(&rgba, w, hgt, image::imageops::FilterType::Triangle);
+        }
+        let ms = per.get(i).copied().unwrap_or(default_delay);
+        let frame = Frame::from_parts(rgba, 0, 0, Delay::from_numer_denom_ms(ms as u32, 1));
+        enc.encode_frame(frame).map_err(|e| anyhow!("encode frame {i}: {e}"))?;
+    }
+    Ok(json!({"ok": true, "path": path, "frames": handles.len()}))
+}
+
+/// Combine handles into a grid montage. opts: cols (default ceil(sqrt(n))),
+/// gap (default 4), bg (default opaque white). Returns a new image handle.
+fn op_img_montage(opts: Value) -> Result<Value> {
+    let handles: Vec<u64> = opts
+        .get("handles")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing handles (expected array)"))?
+        .iter()
+        .filter_map(Value::as_u64)
+        .collect();
+    if handles.is_empty() {
+        return Err(anyhow!("no images to montage"));
+    }
+    let imgs: Vec<image::RgbaImage> = handles.iter().map(|&h| rgba_of(h)).collect::<Result<_>>()?;
+    let n = imgs.len();
+    let cols = opts.get("cols").and_then(Value::as_u64).map(|c| c as usize).unwrap_or_else(|| (n as f64).sqrt().ceil() as usize).max(1);
+    let rows = n.div_ceil(cols);
+    let gap = opts.get("gap").and_then(Value::as_u64).unwrap_or(4) as u32;
+    let bg = parse_color(opts.get("bg").or(Some(&Value::String("#ffffff".into()))));
+    let cell_w = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
+    let cell_h = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
+    let total_w = cols as u32 * cell_w + (cols as u32 + 1) * gap;
+    let total_h = rows as u32 * cell_h + (rows as u32 + 1) * gap;
+    let mut canvas = image::RgbaImage::from_pixel(total_w, total_h, bg);
+    for (i, im) in imgs.iter().enumerate() {
+        let (cr, cc) = (i / cols, i % cols);
+        let x = gap + cc as u32 * (cell_w + gap);
+        let y = gap + cr as u32 * (cell_h + gap);
+        image::imageops::overlay(&mut canvas, im, x as i64, y as i64);
+    }
+    let handle = insert_image(DynamicImage::ImageRgba8(canvas));
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
+/// Fill the image with a gradient. opts: kind => "linear"|"radial"
+/// (default linear), from (color), to (color), angle (deg, linear only,
+/// default 0 = left→right).
+fn op_img_gradient(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let kind = opts.get("kind").and_then(Value::as_str).unwrap_or("linear").to_string();
+    let from = parse_color(opts.get("from"));
+    let to = parse_color(opts.get("to").or(Some(&Value::String("#ffffff".into()))));
+    let angle = opts.get("angle").and_then(Value::as_f64).unwrap_or(0.0).to_radians();
+    transform(h, move |img| {
+        let (w, hgt) = (img.width(), img.height());
+        let mut buf = image::RgbaImage::new(w, hgt);
+        let (cx, cy) = (w as f64 / 2.0, hgt as f64 / 2.0);
+        let maxd = (cx * cx + cy * cy).sqrt().max(1.0);
+        let (dx, dy) = (angle.cos(), angle.sin());
+        let lerp = |t: f64, c: usize| (from.0[c] as f64 + (to.0[c] as f64 - from.0[c] as f64) * t).clamp(0.0, 255.0) as u8;
+        for (x, y, px) in buf.enumerate_pixels_mut() {
+            let t = if kind == "radial" {
+                (((x as f64 - cx).powi(2) + (y as f64 - cy).powi(2)).sqrt() / maxd).clamp(0.0, 1.0)
+            } else {
+                // projection of (x,y) onto the gradient direction, normalized
+                let proj = (x as f64 * dx + y as f64 * dy) / ((w as f64 - 1.0).max(1.0) * dx.abs() + (hgt as f64 - 1.0).max(1.0) * dy.abs()).max(1.0);
+                proj.clamp(0.0, 1.0)
+            };
+            *px = image::Rgba([lerp(t, 0), lerp(t, 1), lerp(t, 2), lerp(t, 3)]);
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Draw an axis-aligned ellipse centered at ($x,$y) with radii ($rx,$ry).
+/// opts: fill => 1 (default) or 0.
+fn op_img_draw_ellipse(opts: Value) -> Result<Value> {
+    use imageproc::drawing::{draw_filled_ellipse_mut, draw_hollow_ellipse_mut};
+    let h = req_u64_img(&opts, "handle")?;
+    let x = opt_i64(&opts, "x", 0) as i32;
+    let y = opt_i64(&opts, "y", 0) as i32;
+    let rx = req_u64_img(&opts, "rx")? as i32;
+    let ry = req_u64_img(&opts, "ry")? as i32;
+    let color = parse_color(opts.get("color"));
+    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        if fill {
+            draw_filled_ellipse_mut(&mut buf, (x, y), rx, ry, color);
+        } else {
+            draw_hollow_ellipse_mut(&mut buf, (x, y), rx, ry, color);
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Draw a filled polygon from $points (`[[x,y],...]`).
+fn op_img_draw_polygon(opts: Value) -> Result<Value> {
+    use imageproc::drawing::draw_polygon_mut;
+    use imageproc::point::Point;
+    let h = req_u64_img(&opts, "handle")?;
+    let color = parse_color(opts.get("color"));
+    let pts: Vec<Point<i32>> = opts
+        .get("points")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing points (expected [[x,y],...])"))?
+        .iter()
+        .filter_map(|p| {
+            let a = p.as_array()?;
+            Some(Point::new(a.first()?.as_i64()? as i32, a.get(1)?.as_i64()? as i32))
+        })
+        .collect();
+    if pts.len() < 3 {
+        return Err(anyhow!("polygon needs at least 3 points"));
+    }
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let mut p = pts;
+        if p.first() == p.last() {
+            p.pop(); // draw_polygon_mut auto-closes; reject duplicate end point
+        }
+        draw_polygon_mut(&mut buf, &p, color);
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Draw multi-line text (splits on "\n"). opts: size (16), line_height
+/// (default 1.2 * size), font.
+fn op_img_draw_text_multiline(opts: Value) -> Result<Value> {
+    use ab_glyph::{FontRef, PxScale};
+    use imageproc::drawing::draw_text_mut;
+    let h = req_u64_img(&opts, "handle")?;
+    let x = opt_i64(&opts, "x", 0) as i32;
+    let y = opt_i64(&opts, "y", 0) as i32;
+    let text = req_str(&opts, "text")?.to_string();
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(16.0) as f32;
+    let line_h = opts.get("line_height").and_then(Value::as_f64).unwrap_or((size * 1.2) as f64) as i32;
+    let color = parse_color(opts.get("color"));
+    let font_bytes: Vec<u8> = match opts.get("font").and_then(Value::as_str) {
+        Some(p) => std::fs::read(p).map_err(|e| anyhow!("font {p}: {e}"))?,
+        None => FONT_BYTES.to_vec(),
+    };
+    transform(h, move |img| {
+        let mut buf = img.to_rgba8();
+        let font = FontRef::try_from_slice(&font_bytes).map_err(|_| anyhow!("invalid font"))?;
+        let scale = PxScale::from(size);
+        for (i, line) in text.split('\n').enumerate() {
+            draw_text_mut(&mut buf, color, x, y + i as i32 * line_h, scale, &font, line);
+        }
+        Ok(DynamicImage::ImageRgba8(buf))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+/// Apply a 3x3 projective transform (`matrix` = 9 row-major numbers): covers
+/// affine + perspective warps. Out-of-bounds fills transparent.
+fn op_img_warp(opts: Value) -> Result<Value> {
+    use imageproc::geometric_transformations::{warp, Border, Interpolation, Projection};
+    let h = req_u64_img(&opts, "handle")?;
+    let arr = opts
+        .get("matrix")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing matrix (expected 9 numbers)"))?;
+    if arr.len() < 9 {
+        return Err(anyhow!("matrix must have 9 numbers"));
+    }
+    let mut m = [0.0f32; 9];
+    for (i, slot) in m.iter_mut().enumerate() {
+        *slot = arr[i].as_f64().unwrap_or(0.0) as f32;
+    }
+    let proj = Projection::from_matrix(m).ok_or_else(|| anyhow!("matrix is not invertible"))?;
+    transform(h, move |img| {
+        let rgba = img.to_rgba8();
+        let out = warp(&rgba, proj, Interpolation::Bilinear, Border::Constant(image::Rgba([0, 0, 0, 0])));
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    Ok(json!({"ok": true}))
+}
+
+// Standard base64 alphabet (RFC 4648) for image byte I/O.
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(B64[(n >> 18 & 63) as usize] as char);
+        out.push(B64[(n >> 12 & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { B64[(n >> 6 & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { B64[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
+fn base64_decode(s: &str) -> Result<Vec<u8>> {
+    let mut rev = [255u8; 256];
+    for (i, &c) in B64.iter().enumerate() {
+        rev[c as usize] = i as u8;
+    }
+    let clean: Vec<u8> = s.bytes().filter(|&c| c != b'=' && !c.is_ascii_whitespace()).collect();
+    let mut out = Vec::with_capacity(clean.len() / 4 * 3);
+    for chunk in clean.chunks(4) {
+        let mut acc = 0u32;
+        let mut bits = 0;
+        for &c in chunk {
+            let v = rev[c as usize];
+            if v == 255 {
+                return Err(anyhow!("invalid base64 character"));
+            }
+            acc = (acc << 6) | v as u32;
+            bits += 6;
+        }
+        // emit the high bytes that are fully populated
+        let nbytes = (bits / 8) as usize;
+        let shifted = acc << (24 - bits);
+        for b in 0..nbytes {
+            out.push((shifted >> (16 - b * 8)) as u8);
+        }
+    }
+    Ok(out)
+}
+
+/// Encode an image handle to a base64 string. opts: format (default "png").
+/// Returns `{ base64, format, bytes }`.
+fn op_img_to_base64(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let fmt = opts.get("format").and_then(Value::as_str).unwrap_or("png").to_ascii_lowercase();
+    let format = match fmt.as_str() {
+        "jpg" | "jpeg" => image::ImageFormat::Jpeg,
+        "gif" => image::ImageFormat::Gif,
+        "bmp" => image::ImageFormat::Bmp,
+        "webp" => image::ImageFormat::WebP,
+        "tif" | "tiff" => image::ImageFormat::Tiff,
+        _ => image::ImageFormat::Png,
+    };
+    with_image(h, |img| {
+        let mut buf = Cursor::new(Vec::new());
+        let to_write = if matches!(format, image::ImageFormat::Jpeg) {
+            DynamicImage::ImageRgb8(img.to_rgb8())
+        } else {
+            img.clone()
+        };
+        to_write.write_to(&mut buf, format).map_err(|e| anyhow!("encode {fmt}: {e}"))?;
+        let bytes = buf.into_inner();
+        Ok(json!({"base64": base64_encode(&bytes), "format": fmt, "bytes": bytes.len()}))
+    })
+}
+
+/// Decode a base64 string into a new image handle. Returns image info.
+fn op_img_from_base64(opts: Value) -> Result<Value> {
+    let b64 = req_str(&opts, "base64")?;
+    let bytes = base64_decode(b64)?;
+    let img = image::load_from_memory(&bytes).map_err(|e| anyhow!("decode base64 image: {e}"))?;
+    let handle = insert_image(img);
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
