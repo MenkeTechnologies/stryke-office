@@ -1557,6 +1557,19 @@ export!(office__img_crop_circle, op_img_crop_circle);
 export!(office__img_round_corners, op_img_round_corners);
 export!(office__img_drop_shadow, op_img_drop_shadow);
 
+// color science + distortions
+export!(office__img_levels, op_img_levels);
+export!(office__img_curves, op_img_curves);
+export!(office__img_hsl, op_img_hsl);
+export!(office__img_temperature, op_img_temperature);
+export!(office__img_channel_mixer, op_img_channel_mixer);
+export!(office__img_swirl, op_img_swirl);
+export!(office__img_wave, op_img_wave);
+export!(office__img_fisheye, op_img_fisheye);
+export!(office__img_kaleidoscope, op_img_kaleidoscope);
+export!(office__img_spritesheet, op_img_spritesheet);
+export!(office__img_seam_carve, op_img_seam_carve);
+
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
 include!("chart_svg.rs");

@@ -598,6 +598,69 @@ fn Office::img_drop_shadow ($handle, %opts) {
         office__img_drop_shadow(to_json({ handle => $handle, dx => $opts{dx}, dy => $opts{dy}, blur => $opts{blur}, color => $opts{color}, opacity => $opts{opacity} })))
 }
 
+# ── color science + distortions ─────────────────────────────────────
+
+## Per-channel levels. opts: in_black (0), in_white (255), gamma (1),
+## out_black (0), out_white (255).
+fn Office::img_levels ($handle, %opts) {
+    Office::_decode("img_levels",
+        office__img_levels(to_json({ handle => $handle, in_black => $opts{in_black}, in_white => $opts{in_white}, gamma => $opts{gamma}, out_black => $opts{out_black}, out_white => $opts{out_white} })))
+}
+
+## Tone curve from control $points ([[x,y],...], 0..255), applied to RGB.
+fn Office::img_curves ($handle, $points) {
+    Office::_decode("img_curves", office__img_curves(to_json({ handle => $handle, points => $points })))
+}
+
+## Adjust HSL. opts: hue (deg shift), saturation (multiplier), lightness
+## (multiplier).
+fn Office::img_hsl ($handle, %opts) {
+    Office::_decode("img_hsl",
+        office__img_hsl(to_json({ handle => $handle, hue => $opts{hue}, saturation => $opts{saturation}, lightness => $opts{lightness} })))
+}
+
+## White-balance shift. $amount -100..100 (positive = warmer).
+fn Office::img_temperature ($handle, $amount) {
+    Office::_decode("img_temperature", office__img_temperature(to_json({ handle => $handle, amount => $amount })))
+}
+
+## Channel mixer: 9-number row-major matrix mixing source RGB into output RGB.
+fn Office::img_channel_mixer ($handle, $matrix) {
+    Office::_decode("img_channel_mixer", office__img_channel_mixer(to_json({ handle => $handle, matrix => $matrix })))
+}
+
+## Swirl distortion around center. opts: strength (radians, 3), radius (px).
+fn Office::img_swirl ($handle, %opts) {
+    Office::_decode("img_swirl", office__img_swirl(to_json({ handle => $handle, strength => $opts{strength}, radius => $opts{radius} })))
+}
+
+## Sinusoidal wave displacement. opts: amplitude (10), wavelength (40),
+## axis ("x"|"y").
+fn Office::img_wave ($handle, %opts) {
+    Office::_decode("img_wave", office__img_wave(to_json({ handle => $handle, amplitude => $opts{amplitude}, wavelength => $opts{wavelength}, axis => $opts{axis} })))
+}
+
+## Fisheye (barrel) distortion. opts: strength 0..1 (0.5).
+fn Office::img_fisheye ($handle, %opts) {
+    Office::_decode("img_fisheye", office__img_fisheye(to_json({ handle => $handle, strength => $opts{strength} })))
+}
+
+## Kaleidoscope mirror. opts: segments (6).
+fn Office::img_kaleidoscope ($handle, %opts) {
+    Office::_decode("img_kaleidoscope", office__img_kaleidoscope(to_json({ handle => $handle, segments => $opts{segments} })))
+}
+
+## Split into a grid of sub-images. opts: cols (1), rows (1). Returns
+## { handles => [...], cols, rows, cell_width, cell_height }.
+fn Office::img_spritesheet ($handle, %opts) {
+    Office::_decode("img_spritesheet", office__img_spritesheet(to_json({ handle => $handle, cols => $opts{cols}, rows => $opts{rows} })))
+}
+
+## Content-aware width reduction (seam carving) to $width px.
+fn Office::img_seam_carve ($handle, $width) {
+    Office::_decode("img_seam_carve", office__img_seam_carve(to_json({ handle => $handle, width => $width })))
+}
+
 # ── charts (data -> image handle -> any format) ─────────────────────
 #
 # Render a chart to an image handle, then img_save it in whatever format
