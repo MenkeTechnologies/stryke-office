@@ -340,6 +340,60 @@ fn doc_stats_word_count_across_formats() {
 }
 
 #[test]
+fn doc_merge_concatenates_and_converts() {
+    // two source docx
+    let a = tmp("merge_a.docx");
+    let b = tmp("merge_b.docx");
+    for (path, head, body) in [(&a, "Alpha", "first doc"), (&b, "Bravo", "second doc")] {
+        let w = call(
+            office__doc_write,
+            &format!(
+                r#"{{"path":"{path}","blocks":[
+                    {{"kind":"heading","level":1,"text":"{head}"}},
+                    {{"kind":"para","text":"{body}"}}
+                ]}}"#
+            ),
+        );
+        assert_eq!(w["ok"], true, "write {head}: {w}");
+    }
+
+    // merge into a docx
+    let merged = tmp("merged.docx");
+    let m = call(
+        office__doc_merge,
+        &format!(r#"{{"inputs":["{a}","{b}"],"output":"{merged}"}}"#),
+    );
+    assert_eq!(m["ok"], true, "merge: {m}");
+    assert_eq!(m["sources"], 2, "two sources: {m}");
+    // both documents' content present: 1+2+1+2 = 6 words
+    let s = call(office__doc_stats, &format!(r#"{{"path":"{merged}"}}"#));
+    assert_eq!(s["words"], 6, "merged word count: {s}");
+    let paras = call(office__doc_read, &format!(r#"{{"path":"{merged}"}}"#));
+    let joined = paras["paragraphs"].to_string();
+    assert!(
+        joined.contains("Alpha") && joined.contains("Bravo"),
+        "both heads: {joined}"
+    );
+
+    // merge doubles as conversion: same sources -> markdown
+    let md = tmp("merged.md");
+    let mm = call(
+        office__doc_merge,
+        &format!(r#"{{"inputs":["{a}","{b}"],"output":"{md}","page_breaks":false}}"#),
+    );
+    assert_eq!(mm["ok"], true, "merge->md: {mm}");
+    let text = std::fs::read_to_string(&md).unwrap();
+    assert!(
+        text.contains("# Alpha") && text.contains("# Bravo"),
+        "md headings: {text}"
+    );
+
+    for f in [&a, &b, &merged, &md] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn doc_blocks_ordered_structural_read() {
     // docx: write headings/paras/table in order, recover the block sequence
     let dx = tmp("blocks.docx");

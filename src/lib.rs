@@ -1701,6 +1701,7 @@ export!(office__doc_tables, op_doc_tables);
 export!(office__doc_blocks, op_doc_blocks);
 export!(office__doc_links, op_doc_links);
 export!(office__doc_stats, op_doc_stats);
+export!(office__doc_merge, op_doc_merge);
 
 // plain-text office formats (csv/tsv, html/md/rtf/txt)
 include!("doc_formats.rs");

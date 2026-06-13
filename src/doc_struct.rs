@@ -341,6 +341,79 @@ fn extract_blocks_odt(xml: &[u8]) -> Vec<Value> {
     blocks
 }
 
+// ── merge / convert ───────────────────────────────────────────────────────────
+
+/// Read any supported document into `doc_write`-compatible blocks: docx/odt via
+/// the structural reader (headings/paras/tables), pdf via its text lines, and
+/// the flow formats (html/md/rtf/txt) via their paragraph reader.
+fn doc_blocks_or_paras(path: &str) -> Result<Vec<Value>> {
+    let paras_to_blocks = |v: Value| -> Vec<Value> {
+        v.get("paragraphs")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| p.as_str())
+                    .map(|t| json!({ "kind": "para", "text": t }))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    match ext_of(path).as_str() {
+        "docx" | "odt" => Ok(op_doc_blocks(json!({ "path": path }))?
+            .get("blocks")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()),
+        "pdf" => {
+            let bytes = std::fs::read(path)?;
+            let text =
+                lo_core::extract_text_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
+            Ok(text
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| json!({ "kind": "para", "text": l }))
+                .collect())
+        }
+        _ => Ok(paras_to_blocks(op_doc_read(json!({ "path": path }))?)),
+    }
+}
+
+/// Concatenate several documents into one. opts: inputs => [paths],
+/// output => path, page_breaks => bool (insert a page break between sources;
+/// default true), format => override target format. The target format comes
+/// from `output`'s extension, so merge doubles as conversion (read docx, write
+/// md/html/pdf/…). Returns `{ ok, path, sources, blocks }`.
+fn op_doc_merge(opts: Value) -> Result<Value> {
+    let inputs = opts
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing inputs (expected array of paths)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+    let page_breaks = opts
+        .get("page_breaks")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    let mut blocks: Vec<Value> = Vec::new();
+    for (i, inp) in inputs.iter().enumerate() {
+        let path = inp
+            .as_str()
+            .ok_or_else(|| anyhow!("input path must be a string"))?;
+        if i > 0 && page_breaks {
+            blocks.push(json!({ "kind": "pagebreak" }));
+        }
+        blocks.append(&mut doc_blocks_or_paras(path)?);
+    }
+
+    let n = blocks.len();
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "blocks": n }))
+}
+
 // ── statistics (Word-style word count, across every readable format) ──────────
 
 /// Word-count style statistics for any document we can read as text — docx,

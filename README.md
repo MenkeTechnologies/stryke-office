@@ -148,6 +148,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |
 | `Office::doc_stats($path)` | `{words, characters, characters_no_spaces, lines, paragraphs, pages?}` | Word-style counts across docx/odt/html/md/rtf/txt/pdf |
+| `Office::doc_merge($inputs, $output, %opts)` | `{sources, blocks}` | concatenate documents into one; target ext converts too; `page_breaks` toggle |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |
 | `Office::slides_read($path)` | arrayref of `{text => [...], notes => [...]}` | pptx/odp; `notes` = speaker notes |
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
@@ -651,7 +652,7 @@ stryke-office/
   src/meta_ops.rs        # document metadata read/write (OOXML/ODF/PDF)
   src/extract.rs         # embedded media extraction (-> image handles)
   src/textops.rs         # template text search/replace (run-coalescing)
-  src/doc_struct.rs      # structured document reads (tables, ordered blocks, hyperlinks, word-count stats)
+  src/doc_struct.rs      # structured document reads (tables, blocks, hyperlinks, stats) + doc_merge/convert
   src/pdf_build.rs       # multi-element paginated PDF document builder
   src/pdf_ops.rs         # PDF merge/split/rotate/info/encrypt/decrypt/compress/delete/reorder (lopdf)
   src/pdf_attach.rs      # PDF file attachments: embed + list/extract (lopdf)
