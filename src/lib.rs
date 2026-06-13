@@ -534,6 +534,41 @@ fn write_xlsx(path: &str, sheets: &[Value], opts: &Value) -> Result<()> {
         write_xlsx_cond_val(ws, s)?;
         write_xlsx_setup(ws, &name, s)?;
     }
+    // Workbook document properties: `properties:{title, author, subject,
+    // company, manager, keywords, comments, category, status}`.
+    if let Some(p) = opts.get("properties").and_then(Value::as_object) {
+        use rust_xlsxwriter::DocProperties;
+        let mut props = DocProperties::new();
+        let g = |k: &str| p.get(k).and_then(Value::as_str);
+        if let Some(v) = g("title") {
+            props = props.set_title(v);
+        }
+        if let Some(v) = g("author") {
+            props = props.set_author(v);
+        }
+        if let Some(v) = g("subject") {
+            props = props.set_subject(v);
+        }
+        if let Some(v) = g("company") {
+            props = props.set_company(v);
+        }
+        if let Some(v) = g("manager") {
+            props = props.set_manager(v);
+        }
+        if let Some(v) = g("keywords") {
+            props = props.set_keywords(v);
+        }
+        if let Some(v) = g("comments") {
+            props = props.set_comment(v);
+        }
+        if let Some(v) = g("category") {
+            props = props.set_category(v);
+        }
+        if let Some(v) = g("status") {
+            props = props.set_status(v);
+        }
+        wb.set_properties(&props);
+    }
     // Workbook-level defined names: `defined_names:[{name, formula}]`.
     if let Some(dn) = opts.get("defined_names").and_then(Value::as_array) {
         for d in dn {
@@ -757,6 +792,25 @@ fn write_xlsx_cell(
             ws.write_number(r, c, n.as_f64().unwrap_or(0.0))?;
         }
         Value::Object(o) => {
+            // Rich string: `{rich:[{text, +styling}, ...]}` → multiple formats
+            // within one cell.
+            if let Some(runs) = o.get("rich").and_then(Value::as_array) {
+                let parts: Vec<(rust_xlsxwriter::Format, String)> = runs
+                    .iter()
+                    .filter_map(|r| {
+                        let obj = r.as_object()?;
+                        let text = obj.get("text").map(cell_to_string).unwrap_or_default();
+                        let fmt = xlsx_format(obj).unwrap_or_default();
+                        Some((fmt, text))
+                    })
+                    .collect();
+                let refs: Vec<(&rust_xlsxwriter::Format, &str)> =
+                    parts.iter().map(|(f, t)| (f, t.as_str())).collect();
+                if !refs.is_empty() {
+                    ws.write_rich_string(r, c, &refs)?;
+                }
+                return Ok(());
+            }
             if let Some(link) = o.get("link").and_then(Value::as_str) {
                 let url = rust_xlsxwriter::Url::new(link);
                 match o
@@ -996,7 +1050,7 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
     use docx_rs::{
         AbstractNumbering, BreakType, Docx, Footer, Header, Hyperlink, HyperlinkType, IndentLevel,
         Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Paragraph, Pic, Run,
-        Start, Table, TableCell, TableRow,
+        Shading, Start, Table, TableCell, TableRow, VAlignType, WidthType,
     };
     let mut docx = Docx::new();
     if let Some(ps) = opts.get("page_size").and_then(Value::as_array) {
@@ -1056,7 +1110,28 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
                         let mut cells = Vec::new();
                         if let Some(rc) = row.as_array() {
                             for cell in rc {
-                                cells.push(TableCell::new().add_paragraph(docx_para(cell)));
+                                // Styled cell: object keys bg, span, width (dxa),
+                                // valign ("top"/"center"/"bottom").
+                                let mut tc = TableCell::new().add_paragraph(docx_para(cell));
+                                if let Some(o) = cell.as_object() {
+                                    if let Some(bg) = o.get("bg").and_then(Value::as_str) {
+                                        tc = tc.shading(Shading::new().fill(bg.trim_start_matches('#')));
+                                    }
+                                    if let Some(span) = o.get("span").and_then(Value::as_u64) {
+                                        tc = tc.grid_span(span as usize);
+                                    }
+                                    if let Some(w) = o.get("width").and_then(Value::as_u64) {
+                                        tc = tc.width(w as usize, WidthType::Dxa);
+                                    }
+                                    if let Some(va) = o.get("valign").and_then(Value::as_str) {
+                                        tc = tc.vertical_align(match va {
+                                            "top" => VAlignType::Top,
+                                            "bottom" => VAlignType::Bottom,
+                                            _ => VAlignType::Center,
+                                        });
+                                    }
+                                }
+                                cells.push(tc);
                             }
                         }
                         trows.push(TableRow::new(cells));
