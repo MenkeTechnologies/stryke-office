@@ -176,6 +176,60 @@ fn pdf_write_then_read_round_trips() {
 }
 
 #[test]
+fn csv_and_tsv_round_trip() {
+    for (ext, _d) in [("csv", ','), ("tsv", '\t')] {
+        let path = tmp(&format!("rt.{ext}"));
+        let w = call(
+            office__sheet_write,
+            &format!(
+                r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["name","qty"],["wid, get",3],["g\"o",7]]}}]}}"#
+            ),
+        );
+        assert_eq!(w["ok"], true, "{ext} write failed: {w}");
+        let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+        assert_eq!(r["sheets"][0]["rows"][0][0], "name", "{ext} header");
+        assert_eq!(
+            r["sheets"][0]["rows"][1][0], "wid, get",
+            "{ext} quoted-comma field"
+        );
+        assert_eq!(r["sheets"][0]["rows"][1][1], 3.0, "{ext} numeric field");
+        assert_eq!(
+            r["sheets"][0]["rows"][2][0], "g\"o",
+            "{ext} quoted-quote field"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+}
+
+#[test]
+fn html_md_rtf_txt_doc_round_trip() {
+    for ext in ["html", "md", "rtf", "txt"] {
+        let path = tmp(&format!("rt.{ext}"));
+        let w = call(
+            office__doc_write,
+            &format!(
+                r#"{{"path":"{path}","blocks":[{{"kind":"heading","level":1,"text":"Title"}},{{"kind":"para","runs":[{{"text":"bold ","bold":true}},{{"text":"rest"}}]}}]}}"#
+            ),
+        );
+        assert_eq!(w["ok"], true, "{ext} write failed: {w}");
+        let r = call(office__doc_read, &format!(r#"{{"path":"{path}"}}"#));
+        let joined = r["paragraphs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p.as_str().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("|");
+        assert!(joined.contains("Title"), "{ext}: title present: {joined}");
+        assert!(
+            joined.contains("bold") && joined.contains("rest"),
+            "{ext}: runs present: {joined}"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+}
+
+#[test]
 fn missing_path_errors_cleanly() {
     let v = call(office__sheet_read, "{}");
     assert_eq!(err_of(&v), "missing path");

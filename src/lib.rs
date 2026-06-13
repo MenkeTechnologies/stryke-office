@@ -257,8 +257,11 @@ fn attr(e: &quick_xml::events::BytesStart, key: &[u8]) -> Option<String> {
 fn op_sheet_read(opts: Value) -> Result<Value> {
     use calamine::{open_workbook_auto, Data, Reader};
     let path = req_str(&opts, "path")?;
-    if ext_of(path) == "ods" {
-        return read_ods(path);
+    match ext_of(path).as_str() {
+        "ods" => return read_ods(path),
+        "csv" => return read_csv(path, ','),
+        "tsv" => return read_csv(path, '\t'),
+        _ => {}
     }
     let mut wb = open_workbook_auto(path)?;
     let names = wb.sheet_names().to_owned();
@@ -678,6 +681,16 @@ fn op_sheet_write(opts: Value) -> Result<Value> {
             write_ods(&path, &sheets)?;
             sheets.len()
         }
+        "csv" | "tsv" => {
+            let sheets = json_sheets(&opts)?;
+            let delim = if target_ext(&opts, &path) == "tsv" {
+                '\t'
+            } else {
+                ','
+            };
+            write_csv(&path, &sheets, delim)?;
+            sheets.len()
+        }
         other => return Err(anyhow!("unsupported spreadsheet write format: {other}")),
     };
     Ok(json!({"ok": true, "path": path, "sheets": n}))
@@ -696,6 +709,9 @@ fn op_doc_read(opts: Value) -> Result<Value> {
         "odt" => {
             let xml = read_zip_entry(&bytes, "content.xml")?;
             extract_paragraphs(&xml, &["text:p", "text:h"])
+        }
+        e @ ("html" | "htm" | "md" | "markdown" | "txt" | "rtf") => {
+            return read_doc_text(path, e);
         }
         other => return Err(anyhow!("unsupported document read format: {other}")),
     };
@@ -885,6 +901,17 @@ fn op_doc_write(opts: Value) -> Result<Value> {
     match target_ext(&opts, &path).as_str() {
         "docx" => write_docx(&path, &blocks, &opts)?,
         "odt" => write_odt(&path, &blocks)?,
+        "html" | "htm" => write_doc_html(&path, &blocks)?,
+        "md" | "markdown" => write_doc_md(&path, &blocks)?,
+        "rtf" => write_doc_rtf(&path, &blocks)?,
+        "txt" => std::fs::write(
+            &path,
+            blocks
+                .iter()
+                .map(block_plain_text)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )?,
         other => return Err(anyhow!("unsupported document write format: {other}")),
     }
     Ok(json!({"ok": true, "path": path, "blocks": blocks.len()}))
@@ -1112,6 +1139,9 @@ export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
+
+// plain-text office formats (csv/tsv, html/md/rtf/txt)
+include!("doc_formats.rs");
 
 // PIL-style image I/O + manipulation (image crate)
 include!("image_ops.rs");
