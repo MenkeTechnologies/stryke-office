@@ -169,6 +169,11 @@ assert_eq $gcr->{value}, "a|b", "sheet_group_concat: values joined per group"
 # vlookup on the same file
 val $lk = Office::sheet_lookup($gcx, "g", "y", "v")
 assert_eq $lk->{value}, "c", "sheet_lookup: returns matching value"
+# explode: a 4-row sheet has no multi-value cells, so explode keeps 3 data rows
+val $exo = "$dir/$tag-explode-out.xlsx"
+val $exr = Office::sheet_explode($gcx, "v", $exo, sep => ",")
+assert_eq $exr->{rows}, 3, "sheet_explode: row count after explode"
+unlink $exo
 # countif on the same file (g == x -> 2)
 val $cif = Office::sheet_countif($gcx, "g", op => "eq", value => "x")
 assert_eq $cif->{count}, 2, "sheet_countif: matched rows"
