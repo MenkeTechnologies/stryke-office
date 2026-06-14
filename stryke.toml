@@ -96,6 +96,7 @@ exports = [
     "office__sheet_top",
     "office__sheet_rename",
     "office__sheet_add",
+    "office__sheet_copy",
     "office__sheet_remove",
     "office__sheet_reorder",
     "office__sheet_diff",

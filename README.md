@@ -205,6 +205,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_transform($path, $column, $op, $output, %opts)` | `{ok, path, transformed}` | apply a per-column op (upper/lower/trim/title/round/floor/ceil/abs/int); `digits`/`into` opts |
 | `Office::sheet_rename($path, $to, %opts)` | `{renamed}` | rename a sheet in a workbook; `from` selects which |
 | `Office::sheet_add($path, $name, %opts)` | `{sheets}` | add a new sheet to a workbook; `rows`/`position` opts |
+| `Office::sheet_copy($path, %opts)` | `{ok, path, name, sheets}` | duplicate a worksheet within a workbook; `sheet`/`name`/`position` opts |
 | `Office::sheet_remove($path, $sheet, %opts)` | `{removed, sheets}` | remove a sheet from a workbook (by name/index) |
 | `Office::sheet_reorder($path, $order, %opts)` | `{sheets}` | reorder/subset workbook sheets by an `order` list |
 | `Office::info($path)` | `{type, format, …}` | universal inspector: identify any office/image file + type summary |

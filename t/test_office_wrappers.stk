@@ -357,6 +357,18 @@ assert_eq $pcb->[0]{rows}[2][1], 50, "sheet_pct_change: +50%"
 assert_eq $pcb->[0]{rows}[3][1], -50, "sheet_pct_change: -50%"
 unlink $pcx
 unlink $pco
+# sheet_copy: duplicate a worksheet within a workbook
+val $scx = "$dir/$tag-scopy.xlsx"
+Office::sheet_write($scx, [{ name => "Tmpl", rows => [["x"], [1], [2]] }, { name => "Other", rows => [["y"], [9]] }])
+val $sco = "$dir/$tag-scopy-out.xlsx"
+val $scr = Office::sheet_copy($scx, sheet => "Tmpl", name => "Tmpl 2", output => $sco)
+assert_eq $scr->{sheets}, 3, "sheet_copy: three sheets"
+assert_eq $scr->{name}, "Tmpl 2", "sheet_copy: copy name"
+val $scb = Office::sheet_read($sco)
+assert_eq $scb->[1]{name}, "Tmpl 2", "sheet_copy: copy inserted after source"
+assert_eq $scb->[1]{rows}[1][0], 1, "sheet_copy: data carried over"
+unlink $scx
+unlink $sco
 # sheet_outliers: IQR fence flags the extreme value
 val $oux = "$dir/$tag-outliers.xlsx"
 Office::sheet_write($oux, [{ name => "D", rows => [["v"], [10], [11], [12], [13], [14], [100]] }])
