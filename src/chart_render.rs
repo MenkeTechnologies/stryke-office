@@ -324,6 +324,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_bin2d(&mut img, &fnt, series, &opts, l, t, r, b, black)
         }
+        "pairs" | "splom" | "scattermatrix" => {
+            require_series(&opts)?;
+            render_pairs(&mut img, &fnt, series, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -545,7 +549,9 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     }
 
     // Shared legend (series names, or pie/funnel categories).
-    if opts.get("legend").and_then(flag_of) != Some(false) {
+    if opts.get("legend").and_then(flag_of) != Some(false)
+        && !matches!(kind.as_str(), "pairs" | "splom" | "scattermatrix")
+    {
         let entries = legend_entries(&kind, series, &cats);
         draw_legend(&mut img, &fnt, &entries, w as i32, t, black);
     }
@@ -1951,6 +1957,71 @@ fn render_bin2d(
     }
     draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmin));
     draw_text_mut(img, black, ((l as f64 + pw) - 36.0) as i32, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmax));
+}
+
+/// Scatterplot matrix / SPLOM (base R `pairs()`) — each series is one variable
+/// column (`data => [v1,v2,…]`, all equal length); an m×m grid of panels plots
+/// every variable pair, with variable names on the diagonal. Off-diagonal panel
+/// (row i, col j) scatters variable j (x) against variable i (y), each panel
+/// auto-scaled to its variables' ranges.
+#[allow(clippy::too_many_arguments)]
+fn render_pairs(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    use imageproc::drawing::draw_hollow_rect_mut;
+    let m = series.len();
+    if m < 2 {
+        return;
+    }
+    let cols: Vec<Vec<f64>> = series.iter().map(series_nums).collect();
+    let n = cols.iter().map(Vec::len).min().unwrap_or(0);
+    if n == 0 {
+        return;
+    }
+    // per-variable range
+    let ranges: Vec<(f64, f64)> = cols
+        .iter()
+        .map(|c| {
+            let (lo, mut hi) = c.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &v| (a.min(v), b.max(v)));
+            if hi <= lo {
+                hi = lo + 1.0;
+            }
+            (lo, hi)
+        })
+        .collect();
+
+    let cw = (r - l) as f64 / m as f64;
+    let ch = (b - t) as f64 / m as f64;
+    let pad = 6.0;
+    let base = palette(0);
+    for i in 0..m {
+        for j in 0..m {
+            let x0 = l as f64 + j as f64 * cw;
+            let y0 = t as f64 + i as f64 * ch;
+            // panel border
+            draw_hollow_rect_mut(img, Rect::at(x0 as i32, y0 as i32).of_size(cw.max(1.0) as u32, ch.max(1.0) as u32), grid);
+            if i == j {
+                let name = series[i].get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("V{}", i + 1));
+                draw_text_mut(img, black, (x0 + cw / 2.0 - name.len() as f64 * 3.5) as i32, (y0 + ch / 2.0 - 7.0) as i32, PxScale::from(14.0), fnt, &name);
+                continue;
+            }
+            let (jx0, jx1) = ranges[j];
+            let (iy0, iy1) = ranges[i];
+            let px = |v: f64| x0 + pad + (v - jx0) / (jx1 - jx0) * (cw - 2.0 * pad);
+            let py = |v: f64| y0 + ch - pad - (v - iy0) / (iy1 - iy0) * (ch - 2.0 * pad);
+            for k in 0..n {
+                draw_filled_circle_mut(img, (px(cols[j][k]) as i32, py(cols[i][k]) as i32), 2, base);
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
