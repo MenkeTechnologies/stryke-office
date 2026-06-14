@@ -2494,6 +2494,171 @@ fn op_sheet_regress(opts: Value) -> Result<Value> {
     Ok(result)
 }
 
+/// Log Gamma function (Lanczos approximation, Numerical Recipes `gammln`).
+fn gammln(xx: f64) -> f64 {
+    const COF: [f64; 6] = [
+        76.18009172947146,
+        -86.50532032941677,
+        24.01409824083091,
+        -1.231739572450155,
+        0.1208650973866179e-2,
+        -0.5395239384953e-5,
+    ];
+    let x = xx;
+    let mut y = xx;
+    let mut tmp = x + 5.5;
+    tmp -= (x + 0.5) * tmp.ln();
+    let mut ser = 1.000000000190015;
+    for &c in &COF {
+        y += 1.0;
+        ser += c / y;
+    }
+    -tmp + (2.5066282746310005 * ser / x).ln()
+}
+
+/// Continued-fraction evaluation for the incomplete beta (NR `betacf`).
+fn betacf(a: f64, b: f64, x: f64) -> f64 {
+    const FPMIN: f64 = 1e-30;
+    const EPS: f64 = 3e-12;
+    let qab = a + b;
+    let qap = a + 1.0;
+    let qam = a - 1.0;
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    if d.abs() < FPMIN {
+        d = FPMIN;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    for m in 1..=200 {
+        let m = m as f64;
+        let aa = m * (b - m) * x / ((qam + 2.0 * m) * (a + 2.0 * m));
+        d = 1.0 + aa * d;
+        if d.abs() < FPMIN {
+            d = FPMIN;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < FPMIN {
+            c = FPMIN;
+        }
+        d = 1.0 / d;
+        h *= d * c;
+        let aa = -(a + m) * (qab + m) * x / ((a + 2.0 * m) * (qap + 2.0 * m));
+        d = 1.0 + aa * d;
+        if d.abs() < FPMIN {
+            d = FPMIN;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < FPMIN {
+            c = FPMIN;
+        }
+        d = 1.0 / d;
+        let del = d * c;
+        h *= del;
+        if (del - 1.0).abs() < EPS {
+            break;
+        }
+    }
+    h
+}
+
+/// Regularized incomplete beta function I_x(a,b) (NR `betai`). Gives Student-t
+/// and F tail probabilities.
+fn betai(a: f64, b: f64, x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    if x >= 1.0 {
+        return 1.0;
+    }
+    let bt = (gammln(a + b) - gammln(a) - gammln(b) + a * x.ln() + b * (1.0 - x).ln()).exp();
+    if x < (a + 1.0) / (a + b + 2.0) {
+        bt * betacf(a, b, x) / a
+    } else {
+        1.0 - bt * betacf(b, a, 1.0 - x) / b
+    }
+}
+
+/// Welch's unequal-variance two-sample t-test between two numeric columns. opts:
+/// path, a => first sample column, b => second sample column (each read
+/// independently; lengths may differ), sheet, header (default true), decimals =>
+/// round reported stats. Returns `{ ok, t, df, p, mean_a, mean_b, n_a, n_b }`
+/// where `p` is the two-sided Student-t p-value (regularized incomplete beta).
+fn op_sheet_ttest(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let acol = resolve_col(opts.get("a"), header_row)?;
+    let bcol = resolve_col(opts.get("b"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let gather = |col: usize| -> Vec<f64> {
+        rows[data_start..]
+            .iter()
+            .filter_map(|r| {
+                r.as_array()
+                    .and_then(|a| a.get(col))
+                    .and_then(sheet_cell_num)
+            })
+            .collect()
+    };
+    let (xa, xb) = (gather(acol), gather(bcol));
+    let (na, nb) = (xa.len(), xb.len());
+    if na < 2 || nb < 2 {
+        return Err(anyhow!("each sample needs at least two numeric values"));
+    }
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+    let var =
+        |v: &[f64], m: f64| v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (v.len() - 1) as f64;
+    let (ma, mb) = (mean(&xa), mean(&xb));
+    let (va, vb) = (var(&xa, ma), var(&xb, mb));
+    let sea = va / na as f64;
+    let seb = vb / nb as f64;
+    let se = (sea + seb).sqrt();
+    if se < f64::EPSILON {
+        return Err(anyhow!(
+            "zero pooled standard error (both samples constant)"
+        ));
+    }
+    let t = (ma - mb) / se;
+    let df = (sea + seb).powi(2) / (sea * sea / (na - 1) as f64 + seb * seb / (nb - 1) as f64);
+    let p = betai(0.5 * df, 0.5, df / (df + t * t));
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    Ok(json!({
+        "ok": true,
+        "t": round(t),
+        "df": round(df),
+        "p": round(p),
+        "mean_a": round(ma),
+        "mean_b": round(mb),
+        "n_a": na,
+        "n_b": nb,
+    }))
+}
+
 fn op_sheet_cov(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -13810,6 +13975,7 @@ export!(office__sheet_sparkline, op_sheet_sparkline);
 export!(office__sheet_argmax, op_sheet_argmax);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_regress, op_sheet_regress);
+export!(office__sheet_ttest, op_sheet_ttest);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
 export!(office__sheet_to_latex, op_sheet_to_latex);

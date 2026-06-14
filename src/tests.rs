@@ -632,6 +632,62 @@ fn sheet_regress_ols() {
 }
 
 #[test]
+fn sheet_ttest_welch() {
+    let path = tmp("ttest.xlsx");
+    // a centered at 3, b centered at 12 (well separated); equal spread
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"T","rows":[
+                ["a","b"],
+                [1,10],
+                [2,11],
+                [3,12],
+                [4,13],
+                [5,14]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let s = call(
+        office__sheet_ttest,
+        &format!(r#"{{"path":"{path}","a":"a","b":"b"}}"#),
+    );
+    assert_eq!(s["n_a"].as_u64().unwrap(), 5, "n_a: {s}");
+    assert_eq!(s["mean_a"].as_f64().unwrap(), 3.0, "mean_a: {s}");
+    assert_eq!(s["mean_b"].as_f64().unwrap(), 12.0, "mean_b: {s}");
+    // means 3 vs 12, SE = 1 -> t = -9
+    assert!((s["t"].as_f64().unwrap() + 9.0).abs() < 1e-6, "t=-9: {s}");
+    // strongly significant
+    assert!(s["p"].as_f64().unwrap() < 0.001, "p tiny: {s}");
+
+    // identical columns -> t=0, p=1
+    let path2 = tmp("ttest_eq.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path2}","sheets":[{{"name":"T","rows":[["a","b"],[1,1],[2,2],[3,3],[4,4]]}}]}}"#
+        ),
+    );
+    let s2 = call(
+        office__sheet_ttest,
+        &format!(r#"{{"path":"{path2}","a":"a","b":"b"}}"#),
+    );
+    assert!(
+        s2["t"].as_f64().unwrap().abs() < 1e-12,
+        "t=0 identical: {s2}"
+    );
+    assert!(
+        (s2["p"].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "p=1 identical: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_cov_matrix() {
     let path = tmp("cov.xlsx");
     // x = [1,2,3], y = 2x. Sample var(x) = 1; cov(x,y) = 2; var(y) = 4.

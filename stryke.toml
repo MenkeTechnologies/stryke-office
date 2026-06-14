@@ -28,6 +28,7 @@ exports = [
     "office__sheet_argmax",
     "office__sheet_corr",
     "office__sheet_regress",
+    "office__sheet_ttest",
     "office__sheet_to_md",
     "office__sheet_to_sql",
     "office__sheet_to_latex",
