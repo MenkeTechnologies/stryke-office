@@ -185,6 +185,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/value, `by` columns, `value` constant |
 | `Office::sheet_drop_empty($path, $output, %opts)` | `{ok, path, rows_removed, cols_removed}` | drop fully-empty rows and/or columns; `rows`/`cols` opts |
 | `Office::sheet_add_header($path, $names, $output, %opts)` | `{ok, path, columns}` | prepend a header row of column names (for headerless data) |
+| `Office::sheet_calc($path, $left, $op, $output, %opts)` | `{ok, path, column}` | append a computed column (`+ - * / %`) between two columns or a column and `value`; `into` required |
 | `Office::sheet_split($path, $dir, %opts)` | `{count, files}` | explode a workbook into one file per sheet; `format`/`prefix` opts |
 | `Office::sheet_chunk($path, $size, $dir, %opts)` | `{count, files}` | split rows into fixed-size chunks across files (header repeated) |
 | `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
