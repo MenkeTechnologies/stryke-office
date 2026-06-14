@@ -2227,6 +2227,50 @@ fn sheet_strip_whitespace() {
 }
 
 #[test]
+fn sheet_pad_fixed_width() {
+    let path = tmp("pad.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["id"],["5"],["42"],["12345"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // zero-pad to width 4, left (default)
+    let out = tmp("pad_out.xlsx");
+    let r = call(
+        office__sheet_pad,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"id","width":4}}"#),
+    );
+    assert_eq!(r["padded"], 2, "two shorter values padded: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "0005", "5 -> 0005: {rd}");
+    assert_eq!(rows[2][0], "0042", "42 -> 0042: {rd}");
+    assert_eq!(rows[3][0], "12345", "already wide -> unchanged: {rd}");
+
+    // right side pad with a custom fill into a new column
+    let outr = tmp("pad_r.xlsx");
+    call(
+        office__sheet_pad,
+        &serde_json::json!({
+            "path": path, "output": outr, "column": "id",
+            "width": 3, "fill": ".", "side": "right", "into": "padded"
+        })
+        .to_string(),
+    );
+    let rdr = call(office__sheet_read, &format!(r#"{{"path":"{outr}"}}"#));
+    let rowsr = rdr["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rowsr[0][1], "padded", "new column header: {rdr}");
+    assert_eq!(rowsr[1][1], "5..", "5 -> 5.. (right): {rdr}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outr).ok();
+}
+
+#[test]
 fn sheet_coalesce_first_nonblank() {
     let path = tmp("coalesce.xlsx");
     // primary blank in row1, present in row2; secondary fallback used in row1.
