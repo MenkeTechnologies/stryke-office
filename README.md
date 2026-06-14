@@ -159,6 +159,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_rank($path, $by, $output, %opts)` | `{ok, path, ranked}` | append a rank column by a column without reordering (Excel `RANK`); `ascending`/`dense`/`name` opts |
 | `Office::sheet_freq($path, $column, %opts)` | `{column, total, distinct, values}` | value-counts of a column sorted by frequency (pandas `value_counts`); `ignore_case`/`top` opts |
 | `Office::sheet_group_concat($path, $group_by, $value, $output, %opts)` | `{ok, path, groups}` | group by a column, concatenate another's values (SQL `GROUP_CONCAT`); `sep`/`distinct` opts |
+| `Office::sheet_lookup($path, $lookup, $key, $result, %opts)` | `{found, value, row}` | VLOOKUP — find a key in one column, return the cell from another; `ignore_case` opt |
 | `Office::sheet_split_column($path, $column, $output, %opts)` | `{ok, path, columns}` | split a column into several by a delimiter (Text to Columns); `delimiter`/`into`/`max`/`keep` opts |
 | `Office::sheet_concat_columns($path, $columns, $output, %opts)` | `{ok, path, into}` | join several columns into one with a separator (Excel `TEXTJOIN`); `separator`/`into`/`skip_blanks`/`keep` opts |
 | `Office::sheet_filter($path, $by, $output, %opts)` | `{kept, removed, column}` | keep rows matching `op` (eq/ne/contains/gt/lt/ge/le) on a column |

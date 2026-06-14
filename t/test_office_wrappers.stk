@@ -137,6 +137,9 @@ val $gco2 = "$dir/$tag-gc-out.xlsx"
 Office::sheet_group_concat($gcx, "g", "v", $gco2, sep => "|")
 val $gcr = Office::sheet_get_cell($gco2, "B2")
 assert_eq $gcr->{value}, "a|b", "sheet_group_concat: values joined per group"
+# vlookup on the same file
+val $lk = Office::sheet_lookup($gcx, "g", "y", "v")
+assert_eq $lk->{value}, "c", "sheet_lookup: returns matching value"
 unlink $gcx
 unlink $gco2
 

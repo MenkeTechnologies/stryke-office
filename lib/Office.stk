@@ -301,6 +301,13 @@ fn Office::sheet_group_concat ($path, $group_by, $value, $output, %opts) {
         office__sheet_group_concat(to_json({ path => $path, group_by => $group_by, value => $value, output => $output, sep => $opts{sep}, distinct => $opts{distinct}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## VLOOKUP: find $key in the $lookup column, return the cell from $result.
+## opts: ignore_case, sheet, header. Returns { found, value, row }.
+fn Office::sheet_lookup ($path, $lookup, $key, $result, %opts) {
+    Office::_decode("sheet_lookup",
+        office__sheet_lookup(to_json({ path => $path, lookup => $lookup, key => $key, result => $result, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Value-counts of one column, sorted by frequency (pandas value_counts).
 ## opts: sheet, header, ignore_case, top. Returns { column, total, distinct, values }.
 fn Office::sheet_freq ($path, $column, %opts) {
