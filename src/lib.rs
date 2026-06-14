@@ -1793,6 +1793,100 @@ fn op_sheet_corr(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "columns": names, "matrix": matrix }))
 }
 
+/// Sample covariance over paired observations (divides by n−1). Returns None
+/// when fewer than two points.
+fn covariance(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    let n = xs.len();
+    if n < 2 {
+        return None;
+    }
+    let mx = xs.iter().sum::<f64>() / n as f64;
+    let my = ys.iter().sum::<f64>() / n as f64;
+    let cov = xs
+        .iter()
+        .zip(ys)
+        .map(|(x, y)| (x - mx) * (y - my))
+        .sum::<f64>();
+    Some(cov / (n - 1) as f64)
+}
+
+/// Sample covariance matrix over the numeric columns of a sheet (pairwise
+/// complete observations). The diagonal is each column's sample variance.
+/// Mirrors sheet_corr but reports unnormalized covariance. opts: path, sheet,
+/// header. Returns `{ sheet, columns, matrix }`.
+fn op_sheet_cov(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    // Per-column aligned numeric values (None where the cell is non-numeric).
+    let mut cols: Vec<(String, Vec<Option<f64>>)> = Vec::new();
+    for c in 0..ncols {
+        let vals: Vec<Option<f64>> = data
+            .iter()
+            .map(|row| {
+                row.as_array()
+                    .and_then(|a| a.get(c))
+                    .and_then(sheet_cell_num)
+            })
+            .collect();
+        if !vals.iter().any(Option::is_some) {
+            continue;
+        }
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        cols.push((cname, vals));
+    }
+
+    let names: Vec<Value> = cols.iter().map(|(n, _)| json!(n)).collect();
+    let mut matrix = Vec::with_capacity(cols.len());
+    for (_, xi) in cols.iter() {
+        let mut rowv = Vec::with_capacity(cols.len());
+        for (_, xj) in cols.iter() {
+            let (mut xs, mut ys) = (Vec::new(), Vec::new());
+            for (a, b) in xi.iter().zip(xj) {
+                if let (Some(a), Some(b)) = (a, b) {
+                    xs.push(*a);
+                    ys.push(*b);
+                }
+            }
+            rowv.push(covariance(&xs, &ys).map_or(Value::Null, |c| json!(c)));
+        }
+        matrix.push(Value::Array(rowv));
+    }
+    Ok(json!({ "sheet": name, "columns": names, "matrix": matrix }))
+}
+
 /// Escape a cell for a GitHub-flavored Markdown table: literal `|` is escaped
 /// and newlines collapse to spaces (a table cell cannot span lines).
 fn md_cell_escape(s: &str) -> String {
@@ -8372,6 +8466,7 @@ export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);
 export!(office__sheet_outliers, op_sheet_outliers);
+export!(office__sheet_cov, op_sheet_cov);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
