@@ -858,6 +858,75 @@ fn sheet_sample_deterministic() {
 }
 
 #[test]
+fn sheet_transform_column_ops() {
+    let path = tmp("xform.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","price"],
+                ["  apple ",1.234],
+                ["BANANA",2.567]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // trim "name" in place
+    let o1 = tmp("xform1.xlsx");
+    let r = call(
+        office__sheet_transform,
+        &serde_json::json!({ "path": path, "column": "name", "op": "trim", "output": o1 })
+            .to_string(),
+    );
+    assert_eq!(r["transformed"], 2, "two data rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{o1}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "apple", "trimmed in place: {rd}");
+
+    // round "price" to 1 decimal into a new column
+    let o2 = tmp("xform2.xlsx");
+    call(
+        office__sheet_transform,
+        &serde_json::json!({
+            "path": path, "column": "price", "op": "round", "digits": 1,
+            "into": "rounded", "output": o2
+        })
+        .to_string(),
+    );
+    let rd2 = call(office__sheet_read, &format!(r#"{{"path":"{o2}"}}"#));
+    let rows2 = rd2["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows2[0][2], "rounded", "new column header: {rd2}");
+    assert!(
+        (rows2[1][2].as_f64().unwrap() - 1.2).abs() < 1e-9,
+        "1.234->1.2: {rd2}"
+    );
+    assert!(
+        (rows2[2][2].as_f64().unwrap() - 2.6).abs() < 1e-9,
+        "2.567->2.6: {rd2}"
+    );
+    // original price column untouched
+    assert!(
+        (rows2[1][1].as_f64().unwrap() - 1.234).abs() < 1e-9,
+        "original kept: {rd2}"
+    );
+
+    // upper op
+    let o3 = tmp("xform3.xlsx");
+    call(
+        office__sheet_transform,
+        &serde_json::json!({ "path": path, "column": "name", "op": "upper", "output": o3 })
+            .to_string(),
+    );
+    let rd3 = call(office__sheet_read, &format!(r#"{{"path":"{o3}"}}"#));
+    assert_eq!(rd3["sheets"][0]["rows"][2][0], "BANANA", "upper: {rd3}");
+
+    for f in [&path, &o1, &o2, &o3] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(
