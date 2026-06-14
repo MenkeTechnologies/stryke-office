@@ -2175,6 +2175,122 @@ fn op_sheet_drop(opts: Value) -> Result<Value> {
     op_sheet_select(sopts)
 }
 
+/// ASCII case-insensitive substring replace (byte-length preserving, so byte
+/// offsets stay valid). Returns (new string, count).
+fn ascii_ci_replace(hay: &str, find: &str, rep: &str) -> (String, usize) {
+    let (lh, lf) = (hay.to_ascii_lowercase(), find.to_ascii_lowercase());
+    let mut out = String::new();
+    let (mut i, mut n) = (0usize, 0usize);
+    while let Some(pos) = lh[i..].find(&lf) {
+        let start = i + pos;
+        out.push_str(&hay[i..start]);
+        out.push_str(rep);
+        i = start + find.len();
+        n += 1;
+    }
+    out.push_str(&hay[i..]);
+    (out, n)
+}
+
+/// Find/replace text in a sheet's cells (works on any spreadsheet format,
+/// including csv). opts: path, output (default in place), find (required),
+/// replace (default ""), ignore_case, whole (replace whole cell vs substring),
+/// column => restrict to one column, sheet, header (default true), format.
+/// Only string cells are touched. Returns `{ ok, path, replaced }`.
+fn op_sheet_replace(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let find = req_str(&opts, "find")?.to_string();
+    if find.is_empty() {
+        return Err(anyhow!("empty find"));
+    }
+    let replace = opts.get("replace").and_then(Value::as_str).unwrap_or("");
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let whole = opts.get("whole").and_then(Value::as_bool).unwrap_or(false);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col_restrict = match opts.get("column") {
+        Some(v) if !v.is_null() => Some(resolve_col(Some(v), hr)?),
+        _ => None,
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut replaced = 0usize;
+    for row in rows[data_start..].iter_mut() {
+        let Some(arr) = row.as_array_mut() else {
+            continue;
+        };
+        for (ci, cell) in arr.iter_mut().enumerate() {
+            if col_restrict.is_some_and(|c| c != ci) {
+                continue;
+            }
+            if let Value::String(s) = cell {
+                if whole {
+                    let hit = if ignore_case {
+                        s.eq_ignore_ascii_case(&find)
+                    } else {
+                        *s == find
+                    };
+                    if hit {
+                        *s = replace.to_string();
+                        replaced += 1;
+                    }
+                } else if ignore_case {
+                    let (new, n) = ascii_ci_replace(s, &find, replace);
+                    if n > 0 {
+                        *s = new;
+                        replaced += n;
+                    }
+                } else {
+                    let n = s.matches(&find).count();
+                    if n > 0 {
+                        *s = s.replace(&find, replace);
+                        replaced += n;
+                    }
+                }
+            }
+        }
+    }
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "replaced": replaced }))
+}
+
 /// Transpose a sheet — rows become columns and vice versa. opts: path, output,
 /// sheet => name/index (default first), format. Other sheets pass through.
 /// Returns `{ ok, path, rows, columns }` (dimensions of the transposed sheet).
@@ -3669,6 +3785,7 @@ export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_drop, op_sheet_drop);
+export!(office__sheet_replace, op_sheet_replace);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
