@@ -1230,6 +1230,13 @@ fn Office::pdf_split_ranges ($path, $ranges, $dir, %opts) {
         office__pdf_split_ranges(to_json({ path => $path, ranges => $ranges, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Split a PDF at its top-level bookmark boundaries (one file per chapter).
+## opts: prefix. Returns { count, files }.
+fn Office::pdf_split_bookmarks ($path, $dir, %opts) {
+    Office::_decode("pdf_split_bookmarks",
+        office__pdf_split_bookmarks(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
+}
+
 ## Split a PDF into fixed-size page chunks of $size pages, written to $dir as
 ## {prefix}-{n}.pdf (the last chunk may be shorter). opts: prefix => filename
 ## stem (default: the source's stem). Returns { count, files }.

@@ -284,6 +284,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_burst($path, $dir, %opts)` | `{count, files}` | split into one PDF per page (`{prefix}-{n}.pdf`) |
 | `Office::pdf_chunk($path, $size, $dir, %opts)` | `{count, files}` | split into fixed-size page chunks (last may be shorter) |
 | `Office::pdf_split_ranges($path, $ranges, $dir, %opts)` | `{count, files}` | split into one file per `[start,end]` range |
+| `Office::pdf_split_bookmarks($path, $dir, %opts)` | `{count, files}` | split at top-level bookmark boundaries (one file per chapter); `prefix` opt |
 | `Office::pdf_to_text($path, %opts)` | `{pages, chars}` or `{count, files}` | extract text to one file (`output`) or per-page files (`dir`) |
 | `Office::pdf_stats($path)` | `{pages, words, chars, chars_no_spaces, per_page}` | word/character statistics for a PDF (analogue of `doc_stats`) |
 | `Office::pdf_assemble($inputs, $output)` | `{inputs, pages}` | build one PDF from a mix of image files (→ pages) and PDFs (merged) |

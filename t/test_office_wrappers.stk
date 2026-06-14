@@ -252,6 +252,19 @@ val $plr2 = Office::pdf_links($plp)
 assert_eq $plr2->{count}, 0, "pdf_remove_annotations: link stripped"
 unlink $plp
 
+# ── pdf_split_bookmarks ─────────────────────────────────────────────
+val $bmp = "$dir/$tag-bm.pdf"
+Office::pdf_build($bmp, [
+    { type => "paragraph", text => "p1" },
+    { type => "pagebreak" },
+    { type => "paragraph", text => "p2" },
+])
+Office::pdf_set_outline($bmp, [{ title => "A", page => 1 }, { title => "B", page => 2 }])
+val $bmdir = "$dir/$tag-bm-out"
+val $bmr = Office::pdf_split_bookmarks($bmp, $bmdir, prefix => "ch")
+assert_eq $bmr->{count}, 2, "pdf_split_bookmarks: one file per bookmark"
+unlink $bmp
+
 # ── xml entity survival across text extraction (regression) ─────────
 val $ent = "$dir/$tag-ent.pptx"
 Office::slides_write($ent, [{ title => "R&D", body => ["a & b"] }])
