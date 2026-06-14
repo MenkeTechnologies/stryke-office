@@ -529,6 +529,14 @@ fn Office::doc_to_text ($path, $output) {
         office__doc_to_text(to_json({ path => $path, output => $output })))
 }
 
+## Convert a PDF's text into a docx/odt (or md/html/txt) document, one paragraph
+## per non-blank line with page breaks between pages. opts: format. Returns
+## { ok, path, pages, paragraphs }.
+fn Office::pdf_to_doc ($path, $output, %opts) {
+    Office::_decode("pdf_to_doc",
+        office__pdf_to_doc(to_json({ path => $path, output => $output, format => $opts{format} })))
+}
+
 ## Convert a document into a presentation: each heading at $opts{level} (default
 ## 1) becomes a slide title, following content becomes body bullets. $output is
 ## a pptx/odp path. opts: level, format => override. Returns { ok, path, slides }.
