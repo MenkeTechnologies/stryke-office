@@ -324,6 +324,49 @@ fn sheet_to_slides_per_row() {
 }
 
 #[test]
+fn info_identifies_file_types() {
+    // spreadsheet
+    let xlsx = tmp("info.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{xlsx}","sheets":[{{"name":"A","rows":[["x"],[1]]}}]}}"#),
+    );
+    let si = call(office__info, &format!(r#"{{"path":"{xlsx}"}}"#));
+    assert_eq!(si["type"], "spreadsheet", "xlsx type: {si}");
+    assert_eq!(si["sheets"][0]["name"], "A", "sheet listed: {si}");
+
+    // pdf
+    let pdf = tmp("info.pdf");
+    call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{pdf}","elements":[{{"type":"heading","level":1,"text":"H"}}]}}"#),
+    );
+    let pi = call(office__info, &format!(r#"{{"path":"{pdf}"}}"#));
+    assert_eq!(pi["type"], "pdf", "pdf type: {pi}");
+    assert_eq!(pi["pages"], 1, "pdf pages: {pi}");
+
+    // image
+    let png = tmp("info.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":12,"height":7,"color":[0,0,0,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{png}"}}"#),
+    );
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    let ii = call(office__info, &format!(r#"{{"path":"{png}"}}"#));
+    assert_eq!(ii["type"], "image", "image type: {ii}");
+    assert_eq!(ii["width"], 12, "image width: {ii}");
+
+    for f in [&xlsx, &pdf, &png] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_info_dimensions() {
     let path = tmp("wbinfo.xlsx");
     let w = call(

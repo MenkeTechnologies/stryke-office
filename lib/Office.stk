@@ -245,6 +245,14 @@ fn Office::sheet_to_slides ($path, $output, %opts) {
         office__sheet_to_slides(to_json({ path => $path, output => $output, title_field => $opts{title_field}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Universal file inspector: identify any office/image file by extension and
+## return a type-appropriate summary. Returns { type, format, path, ... } —
+## extra fields per type (pdf pages/geometry, spreadsheet sheets, document word
+## counts, presentation slide stats, image width/height).
+fn Office::info ($path) {
+    Office::_decode("info", office__info(to_json({ path => $path })))
+}
+
 ## Workbook overview: name + dimensions of every sheet. Returns { count,
 ## sheets => [{ name, rows, cols }] }.
 fn Office::sheet_info ($path) {
