@@ -1210,6 +1210,14 @@ fn Office::img_data_uri ($path) {
     Office::_decode("img_data_uri", office__img_data_uri(to_json({ path => $path })))
 }
 
+## Open, resize, and save an image file in one call (output format by extension,
+## so it also transcodes). opts: max => fit within max x max (aspect preserved),
+## or width + height => exact. Returns { ok, path, width, height }.
+fn Office::img_resize_file ($input, $output, %opts) {
+    Office::_decode("img_resize_file",
+        office__img_resize_file(to_json({ input => $input, output => $output, max => $opts{max}, width => $opts{width}, height => $opts{height} })))
+}
+
 # ── shapes, fills, masks, color analysis ────────────────────────────
 
 ## Draw a rounded rectangle. opts: radius (8), fill => 1 (default) or 0
