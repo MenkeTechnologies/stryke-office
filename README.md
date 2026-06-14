@@ -144,6 +144,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_read($path, %opts)` | arrayref of `{name, rows}` | numbers stay numbers, empty cells `undef`; `delimiter` for csv/tsv (e.g. `;`) |
 | `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; writes xlsx/ods/csv/tsv + html/md tables; `format` opt |
 | `Office::sheet_merge($inputs, $output, %opts)` | `{sources, sheets}` | combine workbooks into one; `mode => "rows"` stacks; target ext converts |
+| `Office::sheet_union($inputs, $output, %opts)` | `{sources, rows, fields}` | concatenate sheets aligned by column name (SQL UNION) |
 | `Office::sheet_stats($path, %opts)` | `{sheet, rows, columns:[{name,count,numeric,blanks,sum?,min?,max?,mean?}]}` | per-column descriptive stats; `sheet`/`header` opts |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |

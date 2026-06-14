@@ -53,6 +53,42 @@ fn xlsx_write_then_read_round_trips() {
 }
 
 #[test]
+fn sheet_union_aligns_by_name() {
+    // two files with the SAME logical columns in DIFFERENT order
+    let a = tmp("ua.xlsx");
+    let b = tmp("ub.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{a}","sheets":[{{"name":"S","rows":[["name","age"],["x",1]]}}]}}"#),
+    );
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{b}","sheets":[{{"name":"S","rows":[["age","name"],[2,"y"]]}}]}}"#),
+    );
+
+    let out = tmp("u_out.xlsx");
+    let r = call(
+        office__sheet_union,
+        &format!(r#"{{"inputs":["{a}","{b}"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["rows"], 2, "two data rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(
+        rows[0][0], "name",
+        "union header order from first file: {rd}"
+    );
+    assert_eq!(rows[0][1], "age");
+    // second file's columns were swapped, but values land under the right names
+    assert_eq!(rows[2][0], "y", "row2 name aligned: {rd}");
+    assert_eq!(rows[2][1], 2.0, "row2 age aligned: {rd}");
+
+    for f in [&a, &b, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_merge_workbooks_and_rows() {
     // two xlsx, distinct sheet names
     let a = tmp("wbA.xlsx");
