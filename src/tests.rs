@@ -3215,6 +3215,43 @@ fn sheet_autofilter_applied() {
 }
 
 #[test]
+fn sheet_autosize_sets_column_widths() {
+    use std::io::Read as _;
+    let path = tmp("autosize.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["short","a much longer header cell"],[1,2]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("autosize_out.xlsx");
+    let r = call(
+        office__sheet_autosize,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "autosize: {r}");
+    assert_eq!(r["sheets"], 1, "one sheet autofit: {r}");
+
+    // autofit emits explicit <col ... width="..."> entries in the worksheet XML.
+    let bytes = std::fs::read(&out).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut ws = String::new();
+    zip.by_name("xl/worksheets/sheet1.xml")
+        .unwrap()
+        .read_to_string(&mut ws)
+        .unwrap();
+    assert!(
+        ws.contains("<cols>"),
+        "explicit column widths emitted: {ws}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_round_decimals() {
     let path = tmp("round.xlsx");
     let w = call(

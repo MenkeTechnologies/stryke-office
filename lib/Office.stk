@@ -718,6 +718,13 @@ fn Office::sheet_autofilter ($path, $output, %opts) {
         office__sheet_autofilter(to_json({ path => $path, output => $output, range => $opts{range}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Auto-size columns to their content (xlsx). opts: sheet (default all), output
+## (default in place), format. Returns { ok, path, sheets }.
+fn Office::sheet_autosize ($path, %opts) {
+    Office::_decode("sheet_autosize",
+        office__sheet_autosize(to_json({ path => $path, sheet => $opts{sheet}, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Round every numeric cell (or selected columns) to N decimals. opts: decimals
 ## (default 2), columns, sheet, header, format. Returns { ok, path, rounded }.
 fn Office::sheet_round ($path, $output, %opts) {
