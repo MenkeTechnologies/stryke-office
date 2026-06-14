@@ -3715,7 +3715,43 @@ fn sheet_pivot_matrix() {
     assert_eq!(rows[2][1], 10.0, "west Q1: {rr}");
     assert_eq!(rows[2][2], 20.0, "west Q2: {rr}");
 
-    for f in [&path, &out] {
+    // with margins: a Total column + Total row + grand total
+    let outm = tmp("piv_margins.xlsx");
+    call(
+        office__sheet_pivot,
+        &format!(
+            r#"{{"path":"{path}","rows":"region","cols":"quarter","value":"amt","agg":"sum","margins":true,"output":"{outm}"}}"#
+        ),
+    );
+    let rm = call(office__sheet_read, &format!(r#"{{"path":"{outm}"}}"#));
+    let mrows = rm["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        mrows[0].as_array().unwrap().last().unwrap(),
+        "Total",
+        "Total column header: {rm}"
+    );
+    // east row total = 20 (Q1 20 + Q2 0)
+    assert_eq!(
+        mrows[1]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .as_f64()
+            .unwrap(),
+        20.0,
+        "east row total: {rm}"
+    );
+    // last row is the column-totals row; grand total = 50
+    let last = mrows.last().unwrap().as_array().unwrap();
+    assert_eq!(last[0], "Total", "totals row label: {rm}");
+    assert_eq!(
+        last.last().unwrap().as_f64().unwrap(),
+        50.0,
+        "grand total: {rm}"
+    );
+
+    for f in [&path, &out, &outm] {
         std::fs::remove_file(f).ok();
     }
 }

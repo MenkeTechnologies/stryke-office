@@ -206,7 +206,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_ntile($path, $output, $column, %opts)` | `{ok, path, column, into, buckets}` | append an equal-frequency bucket column (SQL `NTILE` / pandas `qcut`); `n`/`labels`/`into` opts |
 | `Office::sheet_outliers($path, $column, %opts)` | `{column, method, count, lower, upper, outliers}` | detect outlier rows via `iqr` Tukey fence (default, `k` 1.5) or `zscore` (`k` 3); each outlier `{row, value}` |
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
-| `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable |
+| `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable; `margins` adds row/col totals (count/sum) |
 | `Office::sheet_unpivot($path, $output, %opts)` | `{rows}` | melt wide→long; `id_vars`/`value_vars`/`var_name`/`value_name` |
 | `Office::sheet_join($left, $right, $output, %opts)` | `{rows, matched}` | SQL JOIN two sheets on a key; `on`/`left_on`/`right_on`, `how` inner/left/right/outer |
 | `Office::sheet_select($path, $columns, $output, %opts)` | `{columns}` | project/reorder columns by name or index |

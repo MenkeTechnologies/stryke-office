@@ -617,11 +617,11 @@ fn Office::sheet_join ($left, $right, $output, %opts) {
 ## Build a pivot table: group rows by $rows column and columns by $cols column,
 ## aggregating $opts{value} into each cell (Excel PivotTable). opts: value =>
 ## aggregated column (required for sum/mean/min/max), agg => count|sum|mean|min|
-## max (default sum), sheet, header => 0 if first row is data, format. Output is
-## a matrix sheet. Returns { ok, path, rows, cols }.
+## max (default sum), margins => row/column totals + grand total (count/sum only),
+## sheet, header => 0 if first row is data, format. Returns { ok, path, rows, cols }.
 fn Office::sheet_pivot ($path, $rows, $cols, $output, %opts) {
     Office::_decode("sheet_pivot",
-        office__sheet_pivot(to_json({ path => $path, rows => $rows, cols => $cols, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+        office__sheet_pivot(to_json({ path => $path, rows => $rows, cols => $cols, output => $output, value => $opts{value}, agg => $opts{agg}, margins => $opts{margins}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
 ## Unpivot (melt) a sheet from wide to long. opts: id_vars => column(s) to keep

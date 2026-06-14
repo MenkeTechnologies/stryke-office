@@ -747,6 +747,16 @@ assert_eq $stb->[0]{rows}[3][1], 30, "sheet_subtotal: east subtotal sum"
 assert_eq $stb->[0]{rows}[6][1], 60, "sheet_subtotal: grand total sum"
 unlink $stx
 unlink $sto2
+# sheet_pivot with margins: row/col totals + grand total
+val $pvx = "$dir/$tag-pivot.xlsx"
+Office::sheet_write($pvx, [{ name => "D", rows => [["region", "q", "amt"], ["west", "Q1", 10], ["west", "Q2", 20], ["east", "Q1", 5]] }])
+val $pvo = "$dir/$tag-pivot-out.xlsx"
+Office::sheet_pivot($pvx, "region", "q", $pvo, value => "amt", agg => "sum", margins => 1)
+val $pvb = Office::sheet_read($pvo)
+val @pvhdr = @{$pvb->[0]{rows}[0]}
+assert_eq $pvhdr[-1], "Total", "sheet_pivot margins: Total column header"
+unlink $pvx
+unlink $pvo
 # sheet_pct_change: row-over-row percentage change
 val $pcx = "$dir/$tag-pctchg.xlsx"
 Office::sheet_write($pcx, [{ name => "D", rows => [["v"], [100], [150], [75]] }])

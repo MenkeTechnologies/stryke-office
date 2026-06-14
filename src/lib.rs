@@ -7143,9 +7143,10 @@ fn op_sheet_concat_columns(opts: Value) -> Result<Value> {
 /// value aggregated into each cell (Excel PivotTable). opts: path, output,
 /// rows => row-group column, cols => column-group column, value => aggregated
 /// column (required for sum/mean/min/max), agg => count|sum|mean|min|max
-/// (default sum), sheet, header (default true), format. Output is a matrix sheet
-/// sorted by row and column keys; missing combos are 0 (count/sum) or blank.
-/// Returns `{ ok, path, rows, cols }`.
+/// (default sum), margins => append row/column totals + a grand total (count/sum
+/// only), sheet, header (default true), format. Output is a matrix sheet sorted
+/// by row and column keys; missing combos are 0 (count/sum) or blank. Returns
+/// `{ ok, path, rows, cols }`.
 fn op_sheet_pivot(opts: Value) -> Result<Value> {
     use std::collections::{BTreeSet, HashMap};
     let path = req_str(&opts, "path")?;
@@ -7153,6 +7154,12 @@ fn op_sheet_pivot(opts: Value) -> Result<Value> {
     let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("sum");
     if !matches!(agg, "count" | "sum" | "mean" | "min" | "max") {
         return Err(anyhow!("unknown agg: {agg}"));
+    }
+    // Margins (row/column totals + grand total) are only well-defined for the
+    // additive aggregates.
+    let margins = opts.get("margins").and_then(flag_of).unwrap_or(false);
+    if margins && !matches!(agg, "count" | "sum") {
+        return Err(anyhow!("margins requires agg count or sum"));
     }
 
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -7221,12 +7228,30 @@ fn op_sheet_pivot(opts: Value) -> Result<Value> {
     let mut out_rows: Vec<Value> = Vec::with_capacity(row_keys.len() + 1);
     let mut head = vec![json!(row_name)];
     head.extend(cols.iter().map(|c| json!(c)));
+    if margins {
+        head.push(json!("Total"));
+    }
     out_rows.push(Value::Array(head));
 
     let (n_rows, n_cols) = (row_keys.len(), cols.len());
-    for rk in row_keys {
+    // Running per-column and grand totals for the margin row (count/sum only).
+    let mut col_totals = vec![0f64; cols.len()];
+    let mut grand = 0f64;
+    for rk in &row_keys {
         let mut out_row = vec![json!(rk)];
-        for ck in &cols {
+        let mut row_total = 0f64;
+        for (ci, ck) in cols.iter().enumerate() {
+            // numeric grid value (count/sum), used both for the cell and margins
+            let numv = match acc.get(&(rk.clone(), ck.clone())) {
+                Some(&(count, sum, _, _, _)) => {
+                    if agg == "count" {
+                        count as f64
+                    } else {
+                        sum
+                    }
+                }
+                None => 0.0,
+            };
             let cell = match acc.get(&(rk.clone(), ck.clone())) {
                 Some(&(count, sum, min, max, numc)) => match agg {
                     "count" => json!(count),
@@ -7245,8 +7270,22 @@ fn op_sheet_pivot(opts: Value) -> Result<Value> {
                 }
             };
             out_row.push(cell);
+            if margins {
+                row_total += numv;
+                col_totals[ci] += numv;
+                grand += numv;
+            }
+        }
+        if margins {
+            out_row.push(json!(row_total));
         }
         out_rows.push(Value::Array(out_row));
+    }
+    if margins {
+        let mut total_row = vec![json!("Total")];
+        total_row.extend(col_totals.iter().map(|&t| json!(t)));
+        total_row.push(json!(grand));
+        out_rows.push(Value::Array(total_row));
     }
 
     let mut wopts = json!({ "path": output, "sheets": [{ "name": "Pivot", "rows": out_rows }] });
