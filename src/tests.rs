@@ -1735,6 +1735,46 @@ fn doc_table_to_sheet_extracts_grid() {
 }
 
 #[test]
+fn sheet_to_doc_renders_table() {
+    let xl = tmp("s2d_in.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{xl}","sheets":[{{"name":"S","rows":[
+                ["Item","Count"],
+                ["apples",5],
+                ["pears",12]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("s2d_out.docx");
+    let r = call(
+        office__sheet_to_doc,
+        &format!(r#"{{"path":"{xl}","output":"{out}","title":"Inventory"}}"#),
+    );
+    assert_eq!(r["ok"], true, "render: {r}");
+    assert_eq!(r["rows"], 3, "three rows: {r}");
+    assert_eq!(r["cols"], 2, "two cols: {r}");
+
+    // heading carried + table grid recoverable with integers (no ".0")
+    let ol = call(office__doc_outline, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(ol["outline"][0]["text"], "Inventory", "title heading: {ol}");
+    let t = call(office__doc_tables, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(t["count"], 1, "one table: {t}");
+    assert_eq!(t["tables"][0]["rows"][0][0], "Item", "header: {t}");
+    assert_eq!(
+        t["tables"][0]["rows"][1][1], "5",
+        "integer cell, no .0: {t}"
+    );
+    assert_eq!(t["tables"][0]["rows"][2][0], "pears", "last row: {t}");
+
+    std::fs::remove_file(&xl).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_stats_word_count_across_formats() {
     // docx: heading "Title" (1 word) + paragraph "one two three four" (4 words)
     let dx = tmp("stats.docx");

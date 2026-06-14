@@ -404,6 +404,13 @@ fn Office::doc_table_to_sheet ($path, $output, %opts) {
         office__doc_table_to_sheet(to_json({ path => $path, output => $output, index => $opts{index}, name => $opts{name}, format => $opts{format} })))
 }
 
+## Render a spreadsheet as a table inside a docx/odt (inverse of
+## doc_table_to_sheet). opts: sheet, title, format. Returns { ok, path, rows, cols }.
+fn Office::sheet_to_doc ($path, $output, %opts) {
+    Office::_decode("sheet_to_doc",
+        office__sheet_to_doc(to_json({ path => $path, output => $output, sheet => $opts{sheet}, title => $opts{title}, format => $opts{format} })))
+}
+
 ## Heading outline of a docx/odt: returns { outline => [{ level, text }], count }
 ## in document order — the document analogue of pdf_outline.
 fn Office::doc_outline ($path) {

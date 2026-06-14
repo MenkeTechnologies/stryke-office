@@ -184,6 +184,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_table_to_sheet($path, $output, %opts)` | `{ok, path, rows, cols}` | extract one doc table into a spreadsheet file (xlsx/ods/csv); `index`/`name` opts |
+| `Office::sheet_to_doc($path, $output, %opts)` | `{ok, path, rows, cols}` | render a spreadsheet as a table inside a docx/odt; `sheet`/`title` opts |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_outline($path)` | `{outline:[{level,text}], count}` | heading outline of a docx/odt (document analogue of pdf_outline) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |

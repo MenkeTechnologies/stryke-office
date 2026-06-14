@@ -102,6 +102,7 @@ exports = [
     "office__text_replace",
     "office__doc_tables",
     "office__doc_table_to_sheet",
+    "office__sheet_to_doc",
     "office__doc_blocks",
     "office__doc_outline",
     "office__doc_links",

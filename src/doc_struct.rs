@@ -157,6 +157,68 @@ fn op_doc_table_to_sheet(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": nrows, "cols": cols }))
 }
 
+/// Render a spreadsheet as a table inside a word-processor document (docx/odt).
+/// The inverse of `doc_table_to_sheet`. opts: path, output (required), sheet =>
+/// which sheet (name or 0-based index), title => optional level-1 heading before
+/// the table, format => output override. Cells are stringified (integers without
+/// a trailing `.0`). Returns `{ ok, path, rows, cols }`.
+fn op_sheet_to_doc(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let src_rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let cols = src_rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    // Stringify every cell so the docx/odt table writer gets plain text;
+    // whole-number floats render without a trailing `.0` (Excel-style display).
+    let cell_text = |c: &Value| -> String {
+        match c.as_f64() {
+            Some(x) if c.is_number() && x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+            _ => cell_to_string(c),
+        }
+    };
+    let grid: Vec<Value> = src_rows
+        .iter()
+        .map(|row| {
+            let cells: Vec<Value> = row
+                .as_array()
+                .map(|a| a.iter().map(|c| json!(cell_text(c))).collect())
+                .unwrap_or_default();
+            Value::Array(cells)
+        })
+        .collect();
+
+    let mut blocks: Vec<Value> = Vec::new();
+    if let Some(title) = opts.get("title").and_then(Value::as_str) {
+        blocks.push(json!({ "kind": "heading", "level": 1, "text": title }));
+    }
+    let nrows = grid.len();
+    blocks.push(json!({ "kind": "table", "rows": grid }));
+
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": nrows, "cols": cols }))
+}
+
 // ── ordered structural read (headings + paragraphs + tables in document order) ─
 
 /// Map a paragraph style name to a heading level. `Heading1`..`Heading9` →
