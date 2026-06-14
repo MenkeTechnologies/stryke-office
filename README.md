@@ -673,7 +673,9 @@ from `data => [[lo,hi],…]`), `percent_stacked` (100%-stacked), `streamgraph`
 `marimekko`/`mosaic` (variable-width stacked), `radial_bar` (concentric arcs),
 `calendar` (GitHub-style heatmap from `values`, no series), `parallel`
 (parallel coordinates — each series a row across dimension axes), `hexbin`
-(scatter density in hexagonal cells).
+(scatter density in hexagonal cells), `density` (ggplot2 `geom_density` — one
+Gaussian-KDE curve per series of raw `data`, Silverman bandwidth, opt `points`
+grid resolution).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,
