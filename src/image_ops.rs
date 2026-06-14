@@ -1534,6 +1534,28 @@ fn op_img_from_base64(opts: Value) -> Result<Value> {
     with_image(handle, |img| Ok(info_json(handle, img)))
 }
 
+/// Encode an image file as a `data:` URI for inline HTML/CSS embedding. The MIME
+/// type is inferred from the extension. opts: path. Returns `{ data_uri, mime,
+/// bytes }`.
+fn op_img_data_uri(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let bytes = std::fs::read(path)?;
+    let mime = match ext_of(path).as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "tif" | "tiff" => "image/tiff",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
+        _ => "application/octet-stream",
+    };
+    let uri = format!("data:{mime};base64,{}", base64_encode(&bytes));
+    Ok(json!({ "data_uri": uri, "mime": mime, "bytes": bytes.len() }))
+}
+
 // ── shapes, fills, masks, color analysis ─────────────────────────────────────
 
 /// Is point (px,py) inside the rounded rect [x,x+w)×[y,y+h) with corner `r`?

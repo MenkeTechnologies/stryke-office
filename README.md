@@ -595,6 +595,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_draw_text_multiline($h, $x, $y, $text, $color, %opts)` | splits on `\n`; `size`/`line_height`/`font` |
 | `img_warp($h, $matrix)` | 3×3 projective (affine/perspective); 9 numbers |
 | `img_to_base64($h, %opts)` / `img_from_base64($b64)` | encode/decode (`format` opt); embed images as strings |
+| `img_data_uri($path)` | encode an image file as a `data:` URI for inline HTML/CSS → `{data_uri, mime, bytes}` |
 
 #### Shapes, fills, masks, color analysis
 

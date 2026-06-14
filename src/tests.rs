@@ -3728,6 +3728,35 @@ fn image_animation_drawing_transform_base64() {
 }
 
 #[test]
+fn img_data_uri_encodes() {
+    let png = tmp("uri.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":8,"height":8,"color":[1,2,3,255]}"#,
+    );
+    call(
+        office__img_save,
+        &format!(
+            r#"{{"handle":{},"path":"{png}"}}"#,
+            n["handle"].as_u64().unwrap()
+        ),
+    );
+    let r = call(office__img_data_uri, &format!(r#"{{"path":"{png}"}}"#));
+    assert_eq!(r["mime"], "image/png", "mime: {r}");
+    let uri = r["data_uri"].as_str().unwrap();
+    assert!(
+        uri.starts_with("data:image/png;base64,"),
+        "prefix: {uri:.40}"
+    );
+    // the base64 payload decodes back to a valid image
+    let b64 = uri.strip_prefix("data:image/png;base64,").unwrap();
+    let back = call(office__img_from_base64, &format!(r#"{{"base64":"{b64}"}}"#));
+    assert_eq!(back["width"], 8, "round-trips to 8px image: {back}");
+
+    std::fs::remove_file(&png).ok();
+}
+
+#[test]
 fn image_shapes_fills_masks_analysis() {
     let n = call(
         office__img_new,

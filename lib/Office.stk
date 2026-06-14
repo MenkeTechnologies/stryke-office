@@ -1193,6 +1193,12 @@ fn Office::img_from_base64 ($base64) {
     Office::_decode("img_from_base64", office__img_from_base64(to_json({ base64 => $base64 })))
 }
 
+## Encode an image file as a data: URI for inline HTML/CSS embedding (MIME from
+## extension). Returns { data_uri, mime, bytes }.
+fn Office::img_data_uri ($path) {
+    Office::_decode("img_data_uri", office__img_data_uri(to_json({ path => $path })))
+}
+
 # ── shapes, fills, masks, color analysis ────────────────────────────
 
 ## Draw a rounded rectangle. opts: radius (8), fill => 1 (default) or 0
