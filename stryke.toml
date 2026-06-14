@@ -104,6 +104,7 @@ exports = [
     "office__sheet_cast",
     "office__sheet_strip",
     "office__sheet_coalesce",
+    "office__sheet_recode",
     "office__sheet_top",
     "office__sheet_rename",
     "office__sheet_add",

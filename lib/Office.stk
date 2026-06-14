@@ -698,6 +698,14 @@ fn Office::sheet_coalesce ($path, $output, $columns, %opts) {
         office__sheet_coalesce(to_json({ path => $path, output => $output, columns => $columns, into => $opts{into}, default => $opts{default}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Recode a column's values via a $map of { old => new } (pandas Series.map).
+## opts: default (for unmapped; omit to keep original), into (new column; default
+## in place), sheet, header, format. Returns { ok, path, recoded }.
+fn Office::sheet_recode ($path, $output, $column, $map, %opts) {
+    Office::_decode("sheet_recode",
+        office__sheet_recode(to_json({ path => $path, output => $output, column => $column, map => $map, default => $opts{default}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.
