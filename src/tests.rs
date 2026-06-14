@@ -6828,6 +6828,16 @@ fn doc_find_and_slides_find() {
         .collect();
     assert_eq!(paras, vec![1, 2], "paragraphs 1 and 2: {f}");
 
+    // regex mode: paragraphs starting with "the" or "good"
+    let fr = call(
+        office__doc_find,
+        &format!(r#"{{"path":"{dx}","query":"^(the|good)","regex":true}}"#),
+    );
+    assert_eq!(
+        fr["count"], 2,
+        "regex matches 'the world' and 'goodbye': {fr}"
+    );
+
     // slides_find over a written pptx deck
     let px = tmp("find.pptx");
     let sw = call(
