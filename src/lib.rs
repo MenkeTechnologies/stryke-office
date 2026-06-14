@@ -1712,6 +1712,65 @@ fn op_sheet_count(opts: Value) -> Result<Value> {
 /// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
 /// header (default true). Linear interpolation (pandas default). Returns
 /// `{ column, q, value, count }` (value is null when the column has no numbers).
+/// Sum of element-wise products across two or more columns (Excel `SUMPRODUCT`)
+/// — e.g. `Σ value·weight` for a weighted total. opts: path, columns => array of
+/// column names/indices (required, ≥2), sheet, header (default true), decimals =>
+/// round. Per Excel, a non-numeric cell in a row contributes 0 to that row's
+/// product. Returns `{ ok, sumproduct, n }` (`n` is the row count multiplied).
+fn op_sheet_sumproduct(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let cols: Vec<usize> = match opts.get("columns") {
+        Some(Value::Array(arr)) if arr.len() >= 2 => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        _ => return Err(anyhow!("columns must list at least two columns")),
+    };
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut total = 0.0;
+    for row in &rows[data_start..] {
+        let a = row.as_array();
+        // Excel treats non-numeric cells as 0 within the product.
+        let product: f64 = cols
+            .iter()
+            .map(|&c| {
+                a.and_then(|r| r.get(c))
+                    .and_then(sheet_cell_num)
+                    .unwrap_or(0.0)
+            })
+            .product();
+        total += product;
+    }
+    let total = match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (total * f).round() / f
+        }
+        None => total,
+    };
+    Ok(json!({ "ok": true, "sumproduct": total, "n": rows.len().saturating_sub(data_start) }))
+}
+
 /// Net present value of a cashflow column at a periodic discount `rate` (Excel
 /// `NPV`). opts: path, column => cashflow column name/index (required), rate =>
 /// per-period discount rate (required, e.g. 0.1 for 10%), start => first period
@@ -14945,6 +15004,7 @@ export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
 export!(office__sheet_npv, op_sheet_npv);
+export!(office__sheet_sumproduct, op_sheet_sumproduct);
 export!(office__sheet_irr, op_sheet_irr);
 export!(office__sheet_amortize, op_sheet_amortize);
 export!(office__sheet_autocorr, op_sheet_autocorr);

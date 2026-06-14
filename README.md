@@ -153,6 +153,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_argmax($path, $column, %opts)` | `{column, row, value, label?}` | locate the row of a column's max/min (pandas `idxmax`/`idxmin`); `min`/`label` opts |
 | `Office::sheet_moments($path, $column, %opts)` | `{ok, n, mean, variance, std, skewness, kurtosis}` | distribution moments of a column (skewness g1, excess kurtosis g2); complements `sheet_describe` |
 | `Office::sheet_npv($path, $column, $rate, %opts)` | `{ok, npv, n, rate}` | net present value of a cashflow column at periodic `rate` (Excel `NPV`); `start` exponent opt |
+| `Office::sheet_sumproduct($path, $columns, %opts)` | `{ok, sumproduct, n}` | sum of element-wise products across columns (Excel `SUMPRODUCT`); non-numeric cells count as 0 |
 | `Office::sheet_irr($path, $column, %opts)` | `{ok, irr, n}` | internal rate of return of a cashflow column (Excel `IRR`), found by bisection; requires a sign change |
 | `Office::sheet_amortize($rate, $nper, $pv, $output, %opts)` | `{ok, path, payment, periods}` | generate a loan amortization schedule `[period, payment, principal, interest, balance]`; `decimals` opt |
 | `Office::sheet_autocorr($path, $column, %opts)` | `{ok, column, n, acf}` | autocorrelation function (ACF) of a column as an ordered series; `lags` (default 10) |
