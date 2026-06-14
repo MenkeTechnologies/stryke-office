@@ -384,6 +384,17 @@ assert_eq $pcb->[0]{rows}[2][1], 50, "sheet_pct_change: +50%"
 assert_eq $pcb->[0]{rows}[3][1], -50, "sheet_pct_change: -50%"
 unlink $pcx
 unlink $pco
+# sheet_shift: lag a column by one row
+val $shx = "$dir/$tag-shift.xlsx"
+Office::sheet_write($shx, [{ name => "D", rows => [["v"], [10], [20], [30]] }])
+val $sho = "$dir/$tag-shift-out.xlsx"
+val $shr = Office::sheet_shift($shx, "v", $sho)
+assert_eq $shr->{column}, "v_shift1", "sheet_shift: default column name"
+val $shb = Office::sheet_read($sho)
+assert_eq $shb->[0]{rows}[2][1], 10, "sheet_shift: row2 holds previous value"
+assert_eq $shb->[0]{rows}[3][1], 20, "sheet_shift: row3 holds previous value"
+unlink $shx
+unlink $sho
 # sheet_copy: duplicate a worksheet within a workbook
 val $scx = "$dir/$tag-scopy.xlsx"
 Office::sheet_write($scx, [{ name => "Tmpl", rows => [["x"], [1], [2]] }, { name => "Other", rows => [["y"], [9]] }])

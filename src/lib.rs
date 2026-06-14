@@ -3533,6 +3533,88 @@ fn op_sheet_pct_change(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append a shifted (lagged/lead) copy of a column (pandas `Series.shift`).
+/// Useful for time-series feature engineering — pulling the previous or next
+/// row's value alongside the current one. opts: path, output, column =>
+/// name/index (required), periods => shift amount (default 1; positive = lag /
+/// move values down, negative = lead / move up), into => header (default
+/// "{column}_shift{periods}"), fill => value for vacated cells (default blank),
+/// sheet, header, format. Returns `{ ok, path, column }`.
+fn op_sheet_shift(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let periods = opts.get("periods").and_then(Value::as_i64).unwrap_or(1);
+    let fill = opts.get("fill").cloned().unwrap_or_else(|| json!(""));
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_shift{periods}"));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Source column values for the data region, by data-row index.
+    let src: Vec<Value> = rows[data_start..]
+        .iter()
+        .map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .cloned()
+                .unwrap_or(Value::Null)
+        })
+        .collect();
+    let n = src.len() as i64;
+
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        let mut hr = rows[0].as_array().cloned().unwrap_or_default();
+        hr.push(json!(into));
+        new_rows.push(Value::Array(hr));
+    }
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        let mut cells = row.as_array().cloned().unwrap_or_default();
+        // The shifted value at data-row i comes from source row i - periods.
+        let from = i as i64 - periods;
+        let cell = if from >= 0 && from < n {
+            src[from as usize].clone()
+        } else {
+            fill.clone()
+        };
+        cells.push(cell);
+        new_rows.push(Value::Array(cells));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Clamp a numeric column's values to a range (winsorize / cap outliers). opts:
 /// path, output, column => name or 0-based index (required), min and/or max =>
 /// bounds (at least one required), into => write to a new column with this header
@@ -9131,6 +9213,7 @@ export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_rolling, op_sheet_rolling);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_pct_change, op_sheet_pct_change);
+export!(office__sheet_shift, op_sheet_shift);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_explode, op_sheet_explode);

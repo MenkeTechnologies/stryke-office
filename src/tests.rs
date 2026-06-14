@@ -1031,6 +1031,49 @@ fn sheet_pct_change_row_over_row() {
 }
 
 #[test]
+fn sheet_shift_lag_and_lead() {
+    let path = tmp("shift.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // lag 1 (default): [blank, 10, 20]
+    let out = tmp("shift_lag.xlsx");
+    let r = call(
+        office__sheet_shift,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_shift1", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        rows[1][1].as_str().unwrap_or(""),
+        "",
+        "first row vacated: {rd}"
+    );
+    assert_eq!(rows[2][1].as_f64().unwrap(), 10.0, "row2 = prev 10: {rd}");
+    assert_eq!(rows[3][1].as_f64().unwrap(), 20.0, "row3 = prev 20: {rd}");
+
+    // lead 1 (periods = -1): [20, 30, blank], with explicit fill
+    let outl = tmp("shift_lead.xlsx");
+    let rl = call(
+        office__sheet_shift,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{outl}","periods":-1,"fill":"NA"}}"#),
+    );
+    assert_eq!(rl["ok"], true, "lead shift: {rl}");
+    let rdl = call(office__sheet_read, &format!(r#"{{"path":"{outl}"}}"#));
+    let rowsl = rdl["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rowsl[1][1].as_f64().unwrap(), 20.0, "row1 = next 20: {rdl}");
+    assert_eq!(rowsl[3][1], "NA", "last row filled with NA: {rdl}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outl).ok();
+}
+
+#[test]
 fn sheet_clamp_caps_values() {
     let path = tmp("clamp.xlsx");
     let w = call(
