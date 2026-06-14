@@ -2204,6 +2204,13 @@ fn Office::text_base64 ($path, %opts) {
         office__text_base64(to_json({ path => $path, decode => $opts{decode}, output => $opts{output} })))
 }
 
+## Non-cryptographic checksums of a file (CRC-32 + FNV-1a 64-bit) for integrity
+## checks and dedup. Returns { ok, bytes, crc32, fnv1a64 } (hex strings).
+fn Office::text_hash ($path) {
+    Office::_decode("text_hash",
+        office__text_hash(to_json({ path => $path })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {
