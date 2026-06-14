@@ -769,6 +769,45 @@ fn sheet_delta_row_over_row() {
 }
 
 #[test]
+fn sheet_clamp_caps_values() {
+    let path = tmp("clamp.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[5],[15],[25],["x"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // clamp to [10, 20] in place
+    let out = tmp("clamp_out.xlsx");
+    let r = call(
+        office__sheet_clamp,
+        &format!(r#"{{"path":"{path}","column":"v","min":10,"max":20,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["clamped"], 2, "two values capped (5 and 25): {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // single-column sheet: clamp-in-place rewrites column 0
+    assert!(
+        (rows[1][0].as_f64().unwrap() - 10.0).abs() < 1e-9,
+        "5 -> 10: {rd}"
+    );
+    assert!(
+        (rows[2][0].as_f64().unwrap() - 15.0).abs() < 1e-9,
+        "15 unchanged: {rd}"
+    );
+    assert!(
+        (rows[3][0].as_f64().unwrap() - 20.0).abs() < 1e-9,
+        "25 -> 20: {rd}"
+    );
+    assert_eq!(rows[4][0], "x", "non-numeric passes through: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

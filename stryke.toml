@@ -35,6 +35,7 @@ exports = [
     "office__sheet_normalize",
     "office__sheet_movavg",
     "office__sheet_delta",
+    "office__sheet_clamp",
     "office__sheet_find",
     "office__sheet_records",
     "office__records_write",

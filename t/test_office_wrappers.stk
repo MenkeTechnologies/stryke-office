@@ -118,6 +118,11 @@ val $dlo = "$dir/$tag-delta-out.xlsx"
 Office::sheet_delta($csx, "amt", $dlo)
 val $dlr = Office::sheet_get_cell($dlo, "B3")
 assert_eq $dlr->{value}, 10, "sheet_delta: row-over-row difference"
+# clamp amt to max 15 (20 and 30 -> 15)
+val $clo = "$dir/$tag-clamp-out.xlsx"
+Office::sheet_clamp($csx, "amt", $clo, max => 15)
+val $clr = Office::sheet_get_cell($clo, "A3")
+assert_eq $clr->{value}, 15, "sheet_clamp: value capped to max"
 unlink $csx
 unlink $cso
 unlink $pco
