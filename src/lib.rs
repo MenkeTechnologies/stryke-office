@@ -14451,6 +14451,7 @@ export!(office__text_uniq, op_text_uniq);
 export!(office__text_cut, op_text_cut);
 export!(office__text_tr, op_text_tr);
 export!(office__text_paste, op_text_paste);
+export!(office__text_comm, op_text_comm);
 export!(office__text_wrap, op_text_wrap);
 export!(office__text_head, op_text_head);
 
