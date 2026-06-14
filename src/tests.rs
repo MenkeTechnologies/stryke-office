@@ -844,6 +844,60 @@ fn sheet_movavg_rolling_mean() {
 }
 
 #[test]
+fn sheet_rolling_aggregates() {
+    let path = tmp("rolling.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30],[40]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // rolling sum, window 3 → row3 = 60, row4 = 90
+    let out = tmp("rolling_sum.xlsx");
+    let r = call(
+        office__sheet_rolling,
+        &format!(r#"{{"path":"{path}","column":"v","window":3,"agg":"sum","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_roll3", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1].as_str().unwrap_or(""), "", "row1 blank: {rd}");
+    assert_eq!(rows[2][1].as_str().unwrap_or(""), "", "row2 blank: {rd}");
+    assert!(
+        (rows[3][1].as_f64().unwrap() - 60.0).abs() < 1e-9,
+        "sum 60: {rd}"
+    );
+    assert!(
+        (rows[4][1].as_f64().unwrap() - 90.0).abs() < 1e-9,
+        "sum 90: {rd}"
+    );
+
+    // rolling max, window 2 → 20, 30, 40
+    let outm = tmp("rolling_max.xlsx");
+    let rm = call(
+        office__sheet_rolling,
+        &format!(r#"{{"path":"{path}","column":"v","window":2,"agg":"max","output":"{outm}"}}"#),
+    );
+    assert_eq!(rm["ok"], true, "rolling max: {rm}");
+    let rdm = call(office__sheet_read, &format!(r#"{{"path":"{outm}"}}"#));
+    let rowsm = rdm["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rowsm[2][1].as_f64().unwrap() - 20.0).abs() < 1e-9,
+        "max 20: {rdm}"
+    );
+    assert!(
+        (rowsm[4][1].as_f64().unwrap() - 40.0).abs() < 1e-9,
+        "max 40: {rdm}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outm).ok();
+}
+
+#[test]
 fn sheet_delta_row_over_row() {
     let path = tmp("delta.xlsx");
     let w = call(

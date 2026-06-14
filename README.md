@@ -233,6 +233,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_pct($path, $column, $output, %opts)` | `{ok, path, column}` | append a percent-of-total column (value ÷ column sum × 100); `into`/`decimals` opts |
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |
 | `Office::sheet_movavg($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a moving-average (rolling mean) column over a window; `into`/`decimals` opts |
+| `Office::sheet_rolling($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a rolling-window aggregate column; `agg` sum/mean/min/max/median/std (superset of `sheet_movavg`) |
 | `Office::sheet_delta($path, $column, $output, %opts)` | `{ok, path, column}` | append a row-over-row difference (current − previous) column; `into`/`decimals` opts |
 | `Office::sheet_clamp($path, $column, $output, %opts)` | `{ok, path, clamped}` | clamp a numeric column to a range (cap outliers); `min`/`max`/`into` opts |
 | `Office::sheet_rename_column($path, $column, $to, $output, %opts)` | `{ok, path, column}` | rename a column's header (not the sheet tab); `sheet`/`format` opts |
