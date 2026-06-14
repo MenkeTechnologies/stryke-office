@@ -203,6 +203,15 @@ fn Office::sheet_replace ($path, $find, %opts) {
         office__sheet_replace(to_json({ path => $path, find => $find, replace => $opts{replace}, ignore_case => $opts{ignore_case}, whole => $opts{whole}, column => $opts{column}, sheet => $opts{sheet}, output => $opts{output}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Add a derived column to a sheet. $name is the new header. opts: value => a
+## constant for every data row, or concat => [columns] joined by sep (default
+## " "); sheet, output (default in place), header => 0 if first row is data,
+## format. Returns { ok, path, column }.
+fn Office::sheet_add_column ($path, $name, %opts) {
+    Office::_decode("sheet_add_column",
+        office__sheet_add_column(to_json({ path => $path, name => $name, value => $opts{value}, concat => $opts{concat}, sep => $opts{sep}, sheet => $opts{sheet}, output => $opts{output}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Drop columns from a sheet (complement of sheet_select). $columns is an
 ## arrayref of column names/indices to remove. opts: sheet, header => 0 if first
 ## row is data, format => override. Returns { ok, path, columns } (kept count).

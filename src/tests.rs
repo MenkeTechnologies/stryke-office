@@ -844,6 +844,43 @@ fn sheet_replace_values() {
 }
 
 #[test]
+fn sheet_add_column_derived() {
+    let path = tmp("addcol.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["first","last"],["John","Doe"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // concat first + last -> full
+    let c = tmp("addcol_c.xlsx");
+    let rc = call(
+        office__sheet_add_column,
+        &format!(r#"{{"path":"{path}","name":"full","concat":["first","last"],"output":"{c}"}}"#),
+    );
+    assert_eq!(rc["column"], "full", "added full: {rc}");
+    let rdc = call(office__sheet_read, &format!(r#"{{"path":"{c}"}}"#));
+    let rows = &rdc["sheets"][0]["rows"];
+    assert_eq!(rows[0][2], "full", "header: {rdc}");
+    assert_eq!(rows[1][2], "John Doe", "concatenated: {rdc}");
+
+    // constant column
+    let k = tmp("addcol_k.xlsx");
+    call(
+        office__sheet_add_column,
+        &format!(r#"{{"path":"{path}","name":"src","value":"import","output":"{k}"}}"#),
+    );
+    let rdk = call(office__sheet_read, &format!(r#"{{"path":"{k}"}}"#));
+    assert_eq!(rdk["sheets"][0]["rows"][1][2], "import", "constant: {rdk}");
+
+    for f in [&path, &c, &k] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_drop_columns() {
     let path = tmp("drop.xlsx");
     let w = call(
