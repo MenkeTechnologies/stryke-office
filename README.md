@@ -160,6 +160,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_select($path, $columns, $output, %opts)` | `{columns}` | project/reorder columns by name or index |
 | `Office::sheet_drop($path, $columns, $output, %opts)` | `{columns}` | remove columns (complement of sheet_select) |
 | `Office::sheet_add_column($path, $name, %opts)` | `{column}` | add a derived column: `value` constant or `concat` of columns |
+| `Office::sheet_totals($path, %opts)` | `{totals}` | append a totals row summing each numeric column; `label` opt |
 | `Office::sheet_replace($path, $find, %opts)` | `{replaced}` | find/replace cell text (any format incl. csv); `ignore_case`/`whole`/`column` |
 | `Office::sheet_transpose($path, $output, %opts)` | `{rows, columns}` | swap rows and columns |
 | `Office::sheet_dedupe($path, $output, %opts)` | `{kept, removed}` | drop duplicate rows; `by` key columns, `keep` first/last |

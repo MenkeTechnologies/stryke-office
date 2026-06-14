@@ -844,6 +844,35 @@ fn sheet_replace_values() {
 }
 
 #[test]
+fn sheet_totals_row() {
+    let path = tmp("tot.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["item","qty","price"],["a",2,10],["b",3,20]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("tot_out.xlsx");
+    let r = call(
+        office__sheet_totals,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["totals"], 2, "two numeric columns summed: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    let last = rows.last().unwrap();
+    assert_eq!(last[0], "Total", "label: {rd}");
+    assert_eq!(last[1], 5.0, "qty total: {rd}");
+    assert_eq!(last[2], 30.0, "price total: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_add_column_derived() {
     let path = tmp("addcol.xlsx");
     let w = call(

@@ -2288,6 +2288,80 @@ fn op_sheet_add_column(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": name }))
 }
 
+/// Append a totals row summing each numeric column. opts: path, output,
+/// label => text for the first cell (default "Total"), sheet, header (skips the
+/// header row from sums; default true), format. Non-numeric columns get a blank
+/// total. Returns `{ ok, path, totals }` (number of summed columns).
+fn op_sheet_totals(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let label = opts.get("label").and_then(Value::as_str).unwrap_or("Total");
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(n)) => sheets.iter().position(|s| s["name"] == *n),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    let mut sums = vec![0f64; ncols];
+    let mut has_num = vec![false; ncols];
+    for row in &rows[data_start..] {
+        if let Some(a) = row.as_array() {
+            for c in 0..ncols {
+                if let Some(x) = a.get(c).and_then(sheet_cell_num) {
+                    sums[c] += x;
+                    has_num[c] = true;
+                }
+            }
+        }
+    }
+    let total_row: Vec<Value> = (0..ncols)
+        .map(|c| {
+            if c == 0 {
+                json!(label)
+            } else if has_num[c] {
+                json!(sums[c])
+            } else {
+                json!("")
+            }
+        })
+        .collect();
+    let summed = has_num.iter().filter(|&&b| b).count();
+    rows.push(Value::Array(total_row));
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "totals": summed }))
+}
+
 /// ASCII case-insensitive substring replace (byte-length preserving, so byte
 /// offsets stay valid). Returns (new string, count).
 fn ascii_ci_replace(hay: &str, find: &str, rep: &str) -> (String, usize) {
@@ -4071,6 +4145,7 @@ export!(office__sheet_join, op_sheet_join);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_drop, op_sheet_drop);
 export!(office__sheet_add_column, op_sheet_add_column);
+export!(office__sheet_totals, op_sheet_totals);
 export!(office__sheet_replace, op_sheet_replace);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);

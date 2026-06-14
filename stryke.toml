@@ -31,6 +31,7 @@ exports = [
     "office__sheet_select",
     "office__sheet_drop",
     "office__sheet_add_column",
+    "office__sheet_totals",
     "office__sheet_replace",
     "office__sheet_transpose",
     "office__sheet_dedupe",
