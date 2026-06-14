@@ -131,6 +131,15 @@ fn Office::sheet_quantile ($path, $column, $q, %opts) {
         office__sheet_quantile(to_json({ path => $path, column => $column, q => $q, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Distribution moments of a numeric $column: mean, sample variance/std,
+## skewness (g1), excess kurtosis (g2). Complements sheet_describe. opts:
+## decimals, sheet, header. Returns { ok, n, mean, variance, std, skewness,
+## kurtosis }.
+fn Office::sheet_moments ($path, $column, %opts) {
+    Office::_decode("sheet_moments",
+        office__sheet_moments(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Single-column scalar aggregate. opts: agg (sum/mean/min/max/count/median),
 ## sheet, header. Returns { column, agg, value, count }.
 fn Office::sheet_agg ($path, $column, %opts) {
