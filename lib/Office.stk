@@ -1390,6 +1390,13 @@ fn Office::slides_insert ($path, %opts) {
         office__slides_insert(to_json({ path => $path, title => $opts{title}, body => $opts{body}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Set (replace) the title of slide $slide (1-based); body preserved. opts:
+## output (default in place), format. Returns { ok, path, slide }.
+fn Office::slides_set_title ($path, $slide, $title, %opts) {
+    Office::_decode("slides_set_title",
+        office__slides_set_title(to_json({ path => $path, slide => $slide, title => $title, output => $opts{output}, format => $opts{format} })))
+}
+
 # ── pdf ─────────────────────────────────────────────────────────────
 
 ## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.

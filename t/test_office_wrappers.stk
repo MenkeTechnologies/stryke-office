@@ -282,6 +282,17 @@ val $siread = Office::slides_read($sio)
 assert_eq $siread->[1]{text}[0], "B", "slides_insert: B placed in the middle"
 unlink $six
 unlink $sio
+# slides_set_title: replace a slide's title
+val $stitx = "$dir/$tag-settitle.pptx"
+Office::slides_write($stitx, [{ title => "Old", body => ["keep"] }, { title => "Two", body => ["b"] }])
+val $stito = "$dir/$tag-settitle-out.pptx"
+val $stitr = Office::slides_set_title($stitx, 1, "New Title", output => $stito)
+assert_eq $stitr->{slide}, 1, "slides_set_title: slide number"
+val $stitread = Office::slides_read($stito)
+assert_eq $stitread->[0]{text}[0], "New Title", "slides_set_title: title replaced"
+assert_eq $stitread->[0]{text}[1], "keep", "slides_set_title: body preserved"
+unlink $stitx
+unlink $stito
 val $s2sh = "$dir/$tag-s2sheet.xlsx"
 Office::slides_to_sheet($pptx, $s2sh)
 val $s2shr = Office::sheet_get_cell($s2sh, "B2")
