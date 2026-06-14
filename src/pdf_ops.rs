@@ -9,6 +9,67 @@
 use lopdf::{Document, Object, ObjectId};
 use std::collections::BTreeMap;
 
+/// Generate a blank PDF with N empty pages of a given size — a building block
+/// for templates, spacers, or a base to stamp onto. opts: output (required),
+/// pages => page count (default 1), size => named paper size a4|letter|legal|a3|a5
+/// (default a4), or explicit width / height in points (override the named size).
+/// Returns `{ ok, path, pages, width, height }`.
+fn op_pdf_blank(opts: Value) -> Result<Value> {
+    use lopdf::Dictionary;
+    let out = req_str(&opts, "output")?.to_string();
+    let pages_n = opts
+        .get("pages")
+        .and_then(Value::as_u64)
+        .filter(|&n| n >= 1)
+        .unwrap_or(1);
+    // Named paper sizes in points (1/72").
+    let (mut w, mut h) = match opts.get("size").and_then(Value::as_str) {
+        Some("letter") => (612.0, 792.0),
+        Some("legal") => (612.0, 1008.0),
+        Some("a3") => (842.0, 1191.0),
+        Some("a5") => (420.0, 595.0),
+        _ => (595.0, 842.0), // a4
+    };
+    if let Some(x) = opts.get("width").and_then(Value::as_f64) {
+        w = x;
+    }
+    if let Some(y) = opts.get("height").and_then(Value::as_f64) {
+        h = y;
+    }
+
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let media_box = || {
+        Object::Array(vec![
+            0.into(),
+            0.into(),
+            Object::Real(w as f32),
+            Object::Real(h as f32),
+        ])
+    };
+    let mut kids: Vec<Object> = Vec::with_capacity(pages_n as usize);
+    for _ in 0..pages_n {
+        let mut page = Dictionary::new();
+        page.set("Type", Object::Name(b"Page".to_vec()));
+        page.set("Parent", pages_id);
+        page.set("MediaBox", media_box());
+        kids.push(Object::Reference(doc.add_object(Object::Dictionary(page))));
+    }
+    let mut pages = Dictionary::new();
+    pages.set("Type", Object::Name(b"Pages".to_vec()));
+    pages.set("Count", Object::Integer(pages_n as i64));
+    pages.set("Kids", Object::Array(kids));
+    doc.objects.insert(pages_id, Object::Dictionary(pages));
+
+    let mut catalog = Dictionary::new();
+    catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+    catalog.set("Pages", pages_id);
+    let catalog_id = doc.add_object(Object::Dictionary(catalog));
+    doc.trailer.set("Root", catalog_id);
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "pages": pages_n, "width": w, "height": h }))
+}
+
 /// Concatenate several PDFs into one. opts: inputs => [paths], path => output.
 fn op_pdf_merge(opts: Value) -> Result<Value> {
     let inputs: Vec<String> = opts

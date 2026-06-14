@@ -10787,6 +10787,7 @@ export!(office__sheet_to_pdf, op_sheet_to_pdf);
 // PDF manipulation (merge/split/rotate/info) via lopdf
 include!("pdf_ops.rs");
 export!(office__pdf_merge, op_pdf_merge);
+export!(office__pdf_blank, op_pdf_blank);
 export!(office__pdf_split, op_pdf_split);
 export!(office__pdf_rotate, op_pdf_rotate);
 export!(office__pdf_info, op_pdf_info);
