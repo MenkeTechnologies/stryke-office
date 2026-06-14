@@ -458,6 +458,11 @@ record — `data =>` a spreadsheet (read as records) or `records =>` a list of
 hashes — emitting one document per row into `$dir`, named by `name_field` (or a
 1-based index). Returns `{count, files}`.
 
+For find/replace outside the binary office formats: `Office::sheet_replace`
+edits spreadsheet **cells** (any format, incl. csv), and
+`Office::text_replace($path, {find => repl}, %opts)` edits **plain-text** files
+(md/html/txt/csv/json/rtf); both take `ignore_case`.
+
 ### Charting (data → image handle → any format)
 
 `Office::chart_render` rasterizes a chart and returns an **image handle**, so

@@ -786,6 +786,17 @@ fn Office::replace_text ($path, $replace, %opts) {
     Office::_decode("replace_text", office__replace_text(to_json(\%r)))
 }
 
+## Find/replace in a plain-text file (md/html/txt/csv/json/rtf/...). $replace is
+## a hashref { find => replacement } (or pass replacements => [{find, replace}]).
+## opts: output (default in place), ignore_case => 1 (ASCII). Returns
+## { ok, path, replaced }.
+fn Office::text_replace ($path, $replace, %opts) {
+    var %r = { path => $path, replace => $replace }
+    if exists $opts{output} { $r{output} = $opts{output} }
+    if exists $opts{ignore_case} { $r{ignore_case} = $opts{ignore_case} }
+    Office::_decode("text_replace", office__text_replace(to_json(\%r)))
+}
+
 ## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
 ## per data record, writing one file per record into $dir. opts: data =>
 ## spreadsheet path (read as records) or records => arrayref of hashes, sheet =>

@@ -299,3 +299,40 @@ fn op_mail_merge(opts: Value) -> Result<Value> {
     }
     Ok(json!({ "count": files.len(), "files": files }))
 }
+
+/// Find/replace in a plain-text file (md/html/txt/csv/json/rtf/…) — the text
+/// counterpart to `replace_text` (binary office) and `sheet_replace` (cells).
+/// opts: path, output (default in place), `replace` => {find: repl} map or
+/// `replacements` => [{find, replace}] list, ignore_case (ASCII). Returns
+/// `{ ok, path, replaced }`.
+fn op_text_replace(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let repls = parse_replacements(&opts);
+    if repls.is_empty() {
+        return Err(anyhow!("no replacements supplied (use `replace` or `replacements`)"));
+    }
+    let ignore_case = opts.get("ignore_case").and_then(Value::as_bool).unwrap_or(false);
+
+    let mut text = std::fs::read_to_string(path)?;
+    let mut total = 0usize;
+    for (find, rep) in &repls {
+        if find.is_empty() {
+            continue;
+        }
+        if ignore_case {
+            let (new, n) = ascii_ci_replace(&text, find, rep);
+            total += n;
+            text = new;
+        } else {
+            total += text.matches(find.as_str()).count();
+            text = text.replace(find.as_str(), rep);
+        }
+    }
+    std::fs::write(&output, &text)?;
+    Ok(json!({ "ok": true, "path": output, "replaced": total }))
+}

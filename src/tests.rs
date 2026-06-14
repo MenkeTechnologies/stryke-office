@@ -5209,6 +5209,26 @@ fn mail_merge_per_record() {
 }
 
 #[test]
+fn text_replace_plain_file() {
+    let path = tmp("tr.md");
+    std::fs::write(&path, "Hello world hello").unwrap();
+
+    let out = tmp("tr_out.md");
+    let r = call(
+        office__text_replace,
+        &format!(
+            r#"{{"path":"{path}","replace":{{"hello":"hi"}},"ignore_case":true,"output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["replaced"], 2, "two replacements: {r}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(text, "hi world hi", "ci replaced both: {text:?}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn replace_text_xlsx_strings() {
     let path = tmp("tmpl.xlsx");
     call(
