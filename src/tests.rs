@@ -685,6 +685,46 @@ fn sheet_normalize_minmax_and_zscore() {
 }
 
 #[test]
+fn sheet_movavg_rolling_mean() {
+    let path = tmp("movavg.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30],[40]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // window 2: row0 blank, then 15, 25, 35
+    let out = tmp("movavg_out.xlsx");
+    let r = call(
+        office__sheet_movavg,
+        &format!(r#"{{"path":"{path}","column":"v","window":2,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_ma2", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "v_ma2", "header appended: {rd}");
+    // first data row: window not filled -> blank (empty/null round-trips)
+    assert_eq!(rows[1][1].as_str().unwrap_or(""), "", "row1 blank: {rd}");
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 15.0).abs() < 1e-9,
+        "ma 15: {rd}"
+    );
+    assert!(
+        (rows[3][1].as_f64().unwrap() - 25.0).abs() < 1e-9,
+        "ma 25: {rd}"
+    );
+    assert!(
+        (rows[4][1].as_f64().unwrap() - 35.0).abs() < 1e-9,
+        "ma 35: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

@@ -204,6 +204,13 @@ fn Office::sheet_normalize ($path, $column, $output, %opts) {
         office__sheet_normalize(to_json({ path => $path, column => $column, output => $output, method => $opts{method}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a moving-average (rolling mean) column over a $window of rows. opts:
+## into, decimals, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_movavg ($path, $column, $window, $output, %opts) {
+    Office::_decode("sheet_movavg",
+        office__sheet_movavg(to_json({ path => $path, column => $column, window => $window, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
