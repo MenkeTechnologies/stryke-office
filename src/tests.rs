@@ -1230,6 +1230,36 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn slides_to_pdf_one_per_page() {
+    let px = tmp("s2pdf.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[{{"title":"A","body":["a1"]}},{{"title":"B","body":["b1"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("s2pdf.pdf");
+    let r = call(
+        office__slides_to_pdf,
+        &format!(r#"{{"path":"{px}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 2, "one page per slide: {info}");
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let txt = rd["text"].as_str().unwrap_or("");
+    assert!(
+        txt.contains("A") && txt.contains("a1") && txt.contains("B") && txt.contains("b1"),
+        "content: {txt:?}"
+    );
+
+    std::fs::remove_file(&px).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn slides_to_doc_round() {
     let px = tmp("s2d.pptx");
     let w = call(

@@ -315,6 +315,14 @@ fn Office::slides_to_doc ($path, $output, %opts) {
         office__slides_to_doc(to_json({ path => $path, output => $output, notes => $opts{notes}, format => $opts{format} })))
 }
 
+## Render a presentation to a PDF handout — one slide per page (title heading +
+## body paragraphs). $output is a pdf path. opts: notes => 1 to append speaker
+## notes. Returns { ok, path, slides }.
+fn Office::slides_to_pdf ($path, $output, %opts) {
+    Office::_decode("slides_to_pdf",
+        office__slides_to_pdf(to_json({ path => $path, output => $output, notes => $opts{notes} })))
+}
+
 ## Split a document into multiple files at headings of a given level, written to
 ## $dir as {prefix}-{n}.{ext}. opts: level => heading level to split at (default
 ## 1), format => output extension (default: the source's), prefix => filename
