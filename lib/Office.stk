@@ -148,6 +148,14 @@ fn Office::sheet_npv ($path, $column, $rate, %opts) {
         office__sheet_npv(to_json({ path => $path, column => $column, rate => $rate, start => $opts{start}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Internal rate of return of a cashflow $column (Excel IRR; cashflows at
+## periods 0,1,2,...). Must contain a sign change. opts: decimals (default 6),
+## sheet, header. Returns { ok, irr, n }.
+fn Office::sheet_irr ($path, $column, %opts) {
+    Office::_decode("sheet_irr",
+        office__sheet_irr(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Autocorrelation function (ACF) of a $column treated as an ordered series.
 ## opts: lags (max lag, default 10), decimals, sheet, header. Returns { ok,
 ## column, n, acf } with acf = [{ lag, value }] for lags 0..=lags (r0 = 1).

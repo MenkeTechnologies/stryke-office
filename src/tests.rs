@@ -479,6 +479,50 @@ fn sheet_npv_discount() {
 }
 
 #[test]
+fn sheet_irr_internal_rate() {
+    let path = tmp("irr.xlsx");
+    // -1000 then 600, 600: IRR is ~13.07%
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"C","rows":[["cf"],[-1000],[600],[600]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_irr,
+        &format!(r#"{{"path":"{path}","column":"cf"}}"#),
+    );
+    let irr = s["irr"].as_f64().unwrap();
+    assert!((irr - 0.130662).abs() < 1e-4, "irr ~ 0.1307: {s}");
+
+    // cross-check: NPV at the found IRR is ~0
+    let chk = call(
+        office__sheet_npv,
+        &format!(r#"{{"path":"{path}","column":"cf","rate":{irr},"start":0}}"#),
+    );
+    assert!(
+        chk["npv"].as_f64().unwrap().abs() < 1e-2,
+        "NPV at IRR ~ 0: {chk}"
+    );
+
+    // no sign change -> error
+    let path2 = tmp("irr_bad.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path2}","sheets":[{{"name":"C","rows":[["cf"],[100],[200]]}}]}}"#),
+    );
+    let bad = call(
+        office__sheet_irr,
+        &format!(r#"{{"path":"{path2}","column":"cf"}}"#),
+    );
+    assert!(bad.get("error").is_some(), "no sign change errors: {bad}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_autocorr_acf() {
     // a perfectly periodic series: ACF at lag 0 is 1; an alternating series is
     // anti-correlated at lag 1.

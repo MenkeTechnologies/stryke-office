@@ -1777,6 +1777,102 @@ fn op_sheet_npv(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "npv": npv, "n": cf.len(), "rate": rate }))
 }
 
+/// Internal rate of return of a cashflow column (Excel `IRR`) — the discount
+/// rate at which NPV (cashflows at periods 0,1,2,…) is zero, found by bisection.
+/// opts: path, column => cashflow column name/index (required), sheet, header
+/// (default true), decimals => round (default 6). The cashflows must contain at
+/// least one sign change. Returns `{ ok, irr, n }`.
+fn op_sheet_irr(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let cf: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if cf.len() < 2 {
+        return Err(anyhow!("need at least two cashflows"));
+    }
+    let has_pos = cf.iter().any(|&c| c > 0.0);
+    let has_neg = cf.iter().any(|&c| c < 0.0);
+    if !(has_pos && has_neg) {
+        return Err(anyhow!("cashflows must contain at least one sign change"));
+    }
+
+    let npv_at = |r: f64| -> f64 {
+        cf.iter()
+            .enumerate()
+            .map(|(i, &c)| c / (1.0 + r).powi(i as i32))
+            .sum()
+    };
+    // Bracket a sign change starting just above -100%, expanding the upper bound.
+    let lo = -0.999_999;
+    let flo = npv_at(lo);
+    let mut hi = 1.0;
+    let mut fhi = npv_at(hi);
+    let mut tries = 0;
+    while flo * fhi > 0.0 && hi < 1e7 {
+        hi *= 2.0;
+        fhi = npv_at(hi);
+        tries += 1;
+        if tries > 64 {
+            break;
+        }
+    }
+    if flo * fhi > 0.0 {
+        return Err(anyhow!("no IRR found (NPV does not cross zero in range)"));
+    }
+    let (mut a, mut b) = (lo, hi);
+    let mut fa = flo;
+    for _ in 0..200 {
+        let mid = (a + b) / 2.0;
+        let fm = npv_at(mid);
+        if fm.abs() < 1e-12 || (b - a).abs() < 1e-12 {
+            a = mid;
+            break;
+        }
+        if fa * fm < 0.0 {
+            b = mid;
+        } else {
+            a = mid;
+            fa = fm;
+        }
+    }
+    let irr = (a + b) / 2.0;
+    let irr = match opts.get("decimals").and_then(Value::as_i64).or(Some(6)) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (irr * f).round() / f
+        }
+        None => irr,
+    };
+    Ok(json!({ "ok": true, "irr": irr, "n": cf.len() }))
+}
+
 /// Distribution shape moments of one numeric column — mean, sample variance and
 /// std, plus skewness (Fisher–Pearson g1) and excess kurtosis (g2). Complements
 /// `sheet_describe` (which gives the quartile five-number summary). opts: path,
@@ -14761,6 +14857,7 @@ export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
 export!(office__sheet_npv, op_sheet_npv);
+export!(office__sheet_irr, op_sheet_irr);
 export!(office__sheet_autocorr, op_sheet_autocorr);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);
