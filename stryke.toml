@@ -29,6 +29,7 @@ exports = [
     "office__sheet_set_range",
     "office__sheet_insert_rows",
     "office__sheet_delete_rows",
+    "office__sheet_insert_column",
     "office__sheet_find",
     "office__sheet_records",
     "office__records_write",

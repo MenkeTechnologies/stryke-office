@@ -175,6 +175,14 @@ fn Office::sheet_delete_rows ($path, $at, %opts) {
         office__sheet_delete_rows(to_json({ path => $path, at => $at, count => $opts{count}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Insert a column at a 1-based position (shifts later columns right). opts: at
+## (default 1), name (header), value (data fill), output, sheet, header, format.
+## Returns { ok, path, at }.
+fn Office::sheet_insert_column ($path, %opts) {
+    Office::_decode("sheet_insert_column",
+        office__sheet_insert_column(to_json({ path => $path, at => $opts{at}, name => $opts{name}, value => $opts{value}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

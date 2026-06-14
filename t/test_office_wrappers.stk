@@ -85,6 +85,10 @@ assert_eq $gr->{rows}[1][1], "s", "sheet_set_range/get_range: block round-trips"
 # delete a row range
 val $dr = Office::sheet_delete_rows($cellx, 5, count => 2)
 assert_eq $dr->{deleted}, 2, "sheet_delete_rows: rows removed"
+# insert a column at position 1
+Office::sheet_insert_column($cellx, at => 1, name => "id", value => 0)
+val $gci = Office::sheet_get_cell($cellx, "A1")
+assert_eq $gci->{value}, "id", "sheet_insert_column: new header at A1"
 unlink $cellx
 
 # ── deck -> markdown + html ─────────────────────────────────────────

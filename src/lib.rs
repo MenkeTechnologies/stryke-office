@@ -2175,6 +2175,63 @@ fn op_sheet_delete_rows(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "deleted": deleted }))
 }
 
+/// Insert a column at a 1-based position, shifting later columns right (the
+/// column analogue of `sheet_insert_rows`; `sheet_add_column` only appends).
+/// opts: path, at => 1-based column to insert before (default 1; clamped to each
+/// row's width), name => header for the new column (header row only), value =>
+/// fill for data rows (default blank), output (default in place), sheet, header
+/// (default true), format. Returns `{ ok, path, at }`.
+fn op_sheet_insert_column(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let at = opts.get("at").and_then(Value::as_u64).unwrap_or(1).max(1) as usize - 1;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let name = opts.get("name").and_then(Value::as_str).unwrap_or("");
+    let fill = opts.get("value").cloned().unwrap_or(Value::Null);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let pos = at.min(cells.len());
+            let inserted = if header && i == 0 {
+                json!(name)
+            } else {
+                fill.clone()
+            };
+            let mut out: Vec<Value> = cells[..pos].to_vec();
+            out.push(inserted);
+            out.extend_from_slice(&cells[pos..]);
+            Value::Array(out)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "at": at + 1 }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -6159,6 +6216,7 @@ export!(office__sheet_get_range, op_sheet_get_range);
 export!(office__sheet_set_range, op_sheet_set_range);
 export!(office__sheet_insert_rows, op_sheet_insert_rows);
 export!(office__sheet_delete_rows, op_sheet_delete_rows);
+export!(office__sheet_insert_column, op_sheet_insert_column);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
