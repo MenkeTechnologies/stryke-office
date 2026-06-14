@@ -77,6 +77,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "parallel" => svg_parallel(&mut s, series, &cats, l, t, r, b),
         "hexbin" => svg_hexbin(&mut s, opts, series, l, t, r, b),
         "density" => svg_density(&mut s, series, opts, l, t, r, b),
+        "violin" => svg_violin(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1260,6 +1261,73 @@ fn svg_density(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r
         let _ = write!(area, "L {:.1},{b:.1} Z", xp(cur[cur.len() - 1].0));
         let _ = write!(s, r##"<path d="{area}" fill="{col}" fill-opacity="0.35"/>"##);
         let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="2"/>"##);
+    }
+}
+
+/// Violin plot (vector; ggplot2 `geom_violin`). One width-normalized mirrored
+/// Gaussian-KDE shape per series at evenly spaced slots over a shared value
+/// axis, plus a white median tick. opts: `points` => KDE grid (default 64).
+fn svg_violin(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            ymin = ymin.min(v);
+            ymax = ymax.max(v);
+        }
+    }
+    if !ymin.is_finite() || !ymax.is_finite() {
+        return;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let pad = (ymax - ymin) * 0.05;
+    let (ymin, ymax) = (ymin - pad, ymax + pad);
+    let points = opts.get("points").and_then(Value::as_u64).unwrap_or(64).clamp(16, 512) as usize;
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let yp = |v: f64| b - (v - ymin) / (ymax - ymin) * ph;
+    for i in 0..=5 {
+        let v = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(v);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(v)));
+    }
+
+    let nser = series.len().max(1);
+    let slot = pw / nser as f64;
+    let half = slot * 0.4;
+    for (si, ser) in series.iter().enumerate() {
+        let data = series_nums(ser);
+        if data.is_empty() {
+            continue;
+        }
+        let (dlo, dhi) = data.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, c), &v| {
+            (a.min(v), c.max(v))
+        });
+        let cur = kde_curve(&data, dlo, dhi, points);
+        let maxd = cur.iter().map(|&(_, d)| d).fold(f64::EPSILON, f64::max);
+        let cx = l + (si as f64 + 0.5) * slot;
+        let col = svg_palette(si);
+
+        let mut path = String::new();
+        for (k, &(v, d)) in cur.iter().enumerate() {
+            let off = d / maxd * half;
+            let _ = write!(path, "{} {:.1},{:.1} ", if k == 0 { "M" } else { "L" }, cx + off, yp(v));
+        }
+        for &(v, d) in cur.iter().rev() {
+            let off = d / maxd * half;
+            let _ = write!(path, "L {:.1},{:.1} ", cx - off, yp(v));
+        }
+        path.push('Z');
+        let _ = write!(s, r##"<path d="{path}" fill="{col}" fill-opacity="0.45" stroke="{col}" stroke-width="1.5"/>"##);
+        if let Some(fv) = five_number(&data) {
+            let y = yp(fv[2]);
+            let _ = write!(s, r##"<line x1="{:.1}" y1="{y:.1}" x2="{:.1}" y2="{y:.1}" stroke="#ffffff" stroke-width="2"/>"##, cx - half * 0.5, cx + half * 0.5);
+        }
+        let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&name));
     }
 }
 

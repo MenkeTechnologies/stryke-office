@@ -1287,4 +1287,10 @@ assert_ok ($densvg =~ /^<svg/), "chart density: svg document"
 assert_ok ($densvg =~ /polyline/), "chart density: KDE outline polyline"
 assert_ok ($densvg =~ /fill-opacity/), "chart density: filled area"
 
+# ── chart violin (ggplot2 geom_violin): mirrored KDE to SVG ─────────
+val $vlnsvg = Office::chart_svg("violin", [{ name => "ctrl", data => [2, 3, 3, 4, 4, 4, 5, 5, 6] }, { name => "treat", data => [5, 6, 6, 7, 7, 7, 8, 8, 9] }])
+assert_ok ($vlnsvg =~ /^<svg/), "chart violin: svg document"
+assert_ok ($vlnsvg =~ /ctrl/), "chart violin: category label"
+assert_ok ($vlnsvg =~ /stroke="#ffffff"/), "chart violin: median tick"
+
 test_run
