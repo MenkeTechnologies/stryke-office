@@ -327,6 +327,17 @@ val $flgr = Office::sheet_flag($gcx, "g", $flgo, op => "eq", value => "x", into 
 assert_eq $flgr->{flagged}, 2, "sheet_flag: two rows flagged"
 assert_eq $flgr->{column}, "isx", "sheet_flag: flag column name"
 unlink $flgo
+# onehot: encode a categorical column
+val $ohx = "$dir/$tag-onehot.xlsx"
+Office::sheet_write($ohx, [{ name => "D", rows => [["color"], ["red"], ["blue"], ["red"]] }])
+val $oho = "$dir/$tag-onehot-out.xlsx"
+val $ohr = Office::sheet_onehot($ohx, $oho, "color")
+assert_eq scalar(@{$ohr->{categories}}), 2, "sheet_onehot: two categories"
+val $ohb = Office::sheet_read($oho)
+assert_eq $ohb->[0]{rows}[0][1], "color_red", "sheet_onehot: indicator header"
+assert_eq $ohb->[0]{rows}[1][1], 1, "sheet_onehot: row1 red=1"
+unlink $ohx
+unlink $oho
 # freeze the header row
 val $fzo = "$dir/$tag-freeze-out.xlsx"
 val $fzr = Office::sheet_freeze($gcx, $fzo, row => 1)

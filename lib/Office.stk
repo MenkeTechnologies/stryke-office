@@ -412,6 +412,14 @@ fn Office::sheet_flag ($path, $by, $output, %opts) {
         office__sheet_flag(to_json({ path => $path, by => $by, output => $output, op => $opts{op}, value => $opts{value}, true_value => $opts{true_value}, false_value => $opts{false_value}, into => $opts{into}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## One-hot encode a categorical column into 0/1 indicator columns (pandas
+## get_dummies). opts: prefix (default column name), drop (remove original),
+## sheet, header, format. Returns { ok, path, categories }.
+fn Office::sheet_onehot ($path, $output, $column, %opts) {
+    Office::_decode("sheet_onehot",
+        office__sheet_onehot(to_json({ path => $path, output => $output, column => $column, prefix => $opts{prefix}, drop => $opts{drop}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Group rows by $group_by and aggregate (SQL GROUP BY). opts: value => column
 ## to aggregate (required for sum/mean/min/max), agg => count|sum|mean|min|max
 ## (default count), sheet, header => 0 if first row is data, format => override.
