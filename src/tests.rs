@@ -8417,6 +8417,51 @@ fn pdf_burst_one_file_per_page() {
 }
 
 #[test]
+fn pdf_remove_blank_pages() {
+    // page1=A, page2=blank (two consecutive pagebreaks), page3=C
+    let src = tmp("rmblank.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Alpha"}},
+                {{"type":"pagebreak"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Charlie"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+    let before = call(office__pdf_info, &format!(r#"{{"path":"{src}"}}"#));
+    let n_before = before["pages"].as_u64().unwrap();
+
+    let out = tmp("rmblank_out.pdf");
+    let r = call(
+        office__pdf_remove_blank,
+        &format!(r#"{{"path":"{src}","output":"{out}"}}"#),
+    );
+    assert!(
+        r["removed"].as_u64().unwrap() >= 1,
+        "at least one blank removed: {r}"
+    );
+    assert_eq!(
+        r["pages"].as_u64().unwrap(),
+        n_before - r["removed"].as_u64().unwrap(),
+        "page count drops by removed: {r}"
+    );
+    // text pages survive
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let txt = rd["text"].as_str().unwrap_or("");
+    assert!(
+        txt.contains("Alpha") && txt.contains("Charlie"),
+        "content kept: {rd}"
+    );
+
+    std::fs::remove_file(&src).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn pdf_crop_sets_cropbox() {
     let src = tmp("crop.pdf");
     let b = call(

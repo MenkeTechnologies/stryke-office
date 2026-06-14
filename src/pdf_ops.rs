@@ -656,6 +656,34 @@ fn op_pdf_delete(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": out, "pages": doc.get_pages().len()}))
 }
 
+/// Remove pages whose extracted text is empty (clean scanned spacers / blank
+/// leaves). opts: path => input, output => path. NOTE: a page is "blank" only by
+/// its *text* layer — an image-only page has no text and will be dropped, so use
+/// on text PDFs. Never removes every page (a fully-blank document is left
+/// intact). Returns `{ ok, path, removed, pages }`.
+fn op_pdf_remove_blank(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let bytes = std::fs::read(path)?;
+    let pages = lo_core::extract_pages_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
+    // 1-based page numbers whose text layer is all-whitespace.
+    let blank: Vec<u32> = pages
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.trim().is_empty())
+        .map(|(i, _)| (i + 1) as u32)
+        .collect();
+    if blank.is_empty() || blank.len() == pages.len() {
+        // Nothing to do, or every page is blank — copy through unchanged.
+        std::fs::write(&out, &bytes)?;
+        return Ok(json!({ "ok": true, "path": out, "removed": 0, "pages": pages.len() }));
+    }
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    doc.delete_pages(&blank);
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "removed": blank.len(), "pages": doc.get_pages().len() }))
+}
+
 /// Reorder (and/or subset) a PDF's pages. opts: path => input, output => path,
 /// order => [1-based page numbers in the desired output order]. Pages omitted
 /// from `order` are dropped; a page may be repeated. The effective MediaBox is

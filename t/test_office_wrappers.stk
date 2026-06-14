@@ -880,6 +880,20 @@ val $bli = Office::pdf_info($blp)
 assert_eq $bli->{pages}, 2, "pdf_blank: info confirms page count"
 unlink $blp
 
+# ── pdf_remove_blank ────────────────────────────────────────────────
+val $rbp = "$dir/$tag-rmblank.pdf"
+Office::pdf_build($rbp, [
+    { type => "heading", level => 1, text => "Alpha" },
+    { type => "pagebreak" },
+    { type => "pagebreak" },
+    { type => "heading", level => 1, text => "Charlie" },
+])
+val $rbo = "$dir/$tag-rmblank-out.pdf"
+val $rbr = Office::pdf_remove_blank($rbp, $rbo)
+assert_ok ($rbr->{removed} >= 1), "pdf_remove_blank: at least one blank page removed"
+unlink $rbp
+unlink $rbo
+
 # ── pdf_split_bookmarks ─────────────────────────────────────────────
 val $bmp = "$dir/$tag-bm.pdf"
 Office::pdf_build($bmp, [
