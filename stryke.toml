@@ -302,6 +302,7 @@ exports = [
     "office__img_blend_mode",
     "office__img_composite",
     "office__img_border",
+    "office__img_canvas",
     "office__img_trim",
     "office__img_transpose",
     "office__img_transverse",

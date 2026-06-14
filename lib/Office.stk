@@ -2208,6 +2208,14 @@ fn Office::img_border ($handle, %opts) {
     Office::_decode("img_border", office__img_border(to_json({ handle => $handle, size => $opts{size}, color => $opts{color} })))
 }
 
+## Resize the canvas to an exact $width x $height, placing the unscaled image at
+## an anchor (preserves native pixels; unlike img_fit which scales). opts: anchor
+## (center|topleft|top|topright|left|right|bottomleft|bottom|bottomright), color.
+fn Office::img_canvas ($handle, $width, $height, %opts) {
+    Office::_decode("img_canvas",
+        office__img_canvas(to_json({ handle => $handle, width => $width, height => $height, anchor => $opts{anchor}, color => $opts{color} })))
+}
+
 ## Autocrop a uniform border matching the top-left pixel. opts: tolerance
 ## (default 0).
 fn Office::img_trim ($handle, %opts) {

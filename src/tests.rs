@@ -7451,6 +7451,45 @@ fn image_concat_edge_to_edge() {
 }
 
 #[test]
+fn image_canvas_resize_anchor() {
+    // 20x10 image onto a 40x40 canvas, top-left anchor
+    let n = call(
+        office__img_new,
+        r#"{"width":20,"height":10,"color":[200,50,50,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    let r = call(
+        office__img_canvas,
+        &format!(
+            r#"{{"handle":{h},"width":40,"height":40,"anchor":"topleft","color":[0,0,0,255]}}"#
+        ),
+    );
+    assert_eq!(r["width"], 40, "canvas width: {r}");
+    assert_eq!(r["height"], 40, "canvas height: {r}");
+    // top-left pixel is the image (200,50,50); bottom-right is background (0,0,0)
+    let tl = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{h},"x":0,"y":0}}"#),
+    );
+    assert_eq!(
+        tl["r"].as_u64().unwrap(),
+        200,
+        "top-left is the image: {tl}"
+    );
+    let br = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{h},"x":39,"y":39}}"#),
+    );
+    assert_eq!(
+        br["r"].as_u64().unwrap(),
+        0,
+        "bottom-right is background: {br}"
+    );
+
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn image_cross_format_png_to_jpeg() {
     let png = tmp("x.png");
     let jpg = tmp("x.jpg");

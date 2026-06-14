@@ -12414,6 +12414,7 @@ export!(office__img_blend, op_img_blend);
 export!(office__img_blend_mode, op_img_blend_mode);
 export!(office__img_composite, op_img_composite);
 export!(office__img_border, op_img_border);
+export!(office__img_canvas, op_img_canvas);
 export!(office__img_trim, op_img_trim);
 export!(office__img_transpose, op_img_transpose);
 export!(office__img_transverse, op_img_transverse);
