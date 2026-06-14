@@ -1533,6 +1533,94 @@ fn op_sheet_to_md(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Split one Markdown table row into trimmed cells, honoring `\|` escapes.
+fn split_md_row(line: &str) -> Vec<String> {
+    let t = line.trim();
+    let t = t.strip_prefix('|').unwrap_or(t);
+    let t = t.strip_suffix('|').unwrap_or(t);
+    let mut cells = Vec::new();
+    let mut cur = String::new();
+    let mut chars = t.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'|') => {
+                cur.push('|');
+                chars.next();
+            }
+            '|' => {
+                cells.push(cur.trim().to_string());
+                cur.clear();
+            }
+            _ => cur.push(c),
+        }
+    }
+    cells.push(cur.trim().to_string());
+    cells
+}
+
+/// True if a row is a GFM header/body delimiter (every cell is `:?-+:?`).
+fn is_md_separator(cells: &[String]) -> bool {
+    !cells.is_empty()
+        && cells.iter().all(|c| {
+            let t = c.trim();
+            !t.is_empty() && t.contains('-') && t.chars().all(|ch| ch == '-' || ch == ':')
+        })
+}
+
+/// Parse a GitHub-flavored Markdown table into a spreadsheet file (the inverse of
+/// `sheet_to_md`). opts: markdown => table text, or path => a `.md` file to read;
+/// output (required) => xlsx/ods/csv; name => sheet name (default "Sheet1");
+/// format => output override. The first contiguous run of `|`-delimited lines is
+/// taken as the table and its delimiter row dropped. Returns `{ ok, path, rows,
+/// cols }`.
+fn op_md_to_sheet(opts: Value) -> Result<Value> {
+    let text = match opts.get("markdown").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            let path = req_str(&opts, "path")?;
+            String::from_utf8_lossy(&std::fs::read(path)?).into_owned()
+        }
+    };
+    let output = req_str(&opts, "output")?.to_string();
+    let name = opts
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("Sheet1")
+        .to_string();
+
+    // Take the first contiguous block of pipe-delimited lines as the table.
+    let mut block: Vec<&str> = Vec::new();
+    for line in text.lines() {
+        if line.trim().starts_with('|') {
+            block.push(line);
+        } else if !block.is_empty() {
+            break;
+        }
+    }
+    if block.is_empty() {
+        return Err(anyhow!("no Markdown table found (no leading-pipe rows)"));
+    }
+
+    let rows: Vec<Value> = block
+        .iter()
+        .map(|l| split_md_row(l))
+        .filter(|cells| !is_md_separator(cells))
+        .map(|cells| Value::Array(cells.into_iter().map(Value::String).collect()))
+        .collect();
+    let cols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": name, "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": rows.len(), "cols": cols }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -4510,6 +4598,7 @@ export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
+export!(office__md_to_sheet, op_md_to_sheet);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

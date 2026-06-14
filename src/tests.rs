@@ -285,6 +285,32 @@ fn sheet_to_md_github_table() {
 }
 
 #[test]
+fn md_to_sheet_parses_table() {
+    // Leading prose then a GFM table with an escaped pipe; prose must be ignored.
+    let md =
+        "intro text\n\n| Item | Count |\n| :--- | ---: |\n| apples | 5 |\n| a\\|b | x |\n\nafter";
+    let out = tmp("mdsheet.xlsx");
+    let r = call(
+        office__md_to_sheet,
+        &serde_json::json!({ "markdown": md, "output": out, "name": "T" }).to_string(),
+    );
+    assert_eq!(r["ok"], true, "parse: {r}");
+    // 2 header+body data rows kept (separator dropped): header + 2 body = 3
+    assert_eq!(r["rows"], 3, "separator dropped: {r}");
+    assert_eq!(r["cols"], 2, "two cols: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let sheet = &rd["sheets"][0];
+    assert_eq!(sheet["name"], "T", "sheet name: {rd}");
+    let rows = sheet["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "Item", "header cell: {rd}");
+    assert_eq!(rows[1][0], "apples", "body cell: {rd}");
+    assert_eq!(rows[2][0], "a|b", "pipe unescaped: {rd}");
+
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
