@@ -1311,4 +1311,9 @@ assert_ok ($rbnsvg =~ /^<svg/), "chart ribbon: svg document"
 assert_ok ($rbnsvg =~ /path/), "chart ribbon: band polygon"
 assert_ok ($rbnsvg =~ /fill-opacity/), "chart ribbon: translucent fill"
 
+# ── chart jitter (ggplot2 geom_jitter): seeded strip to SVG ─────────
+val $jitsvg = Office::chart_svg("jitter", [{ name => "grp", data => [3, 3, 3, 4, 4, 5, 5, 5, 6] }], seed => 7)
+assert_ok ($jitsvg =~ /^<svg/), "chart jitter: svg document"
+assert_ok ($jitsvg =~ /circle/), "chart jitter: point per value"
+
 test_run

@@ -10938,6 +10938,59 @@ fn chart_ribbon_raster_and_svg() {
 }
 
 #[test]
+fn chart_jitter_strip_raster_and_svg() {
+    let series = r#"[{"name":"grp","data":[3,3,3,4,4,5,5,5,6]}]"#;
+    // jitter: points spread; reproducible for a fixed seed
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"jitter","width":420,"height":320,"seed":7,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("jitter raster: {c}"));
+    assert_eq!(c["type"], "jitter", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v1 = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"jitter","seed":7,"series":{series}}}"#),
+    );
+    let v2 = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"jitter","seed":7,"series":{series}}}"#),
+    );
+    let svg = v1["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "jitter svg malformed"
+    );
+    assert!(svg.contains("<circle"), "jitter svg points");
+    // nine data points -> nine circles
+    assert_eq!(svg.matches("<circle").count(), 9, "one circle per value");
+    // same seed -> identical output (reproducible jitter)
+    assert_eq!(
+        svg,
+        v2["svg"].as_str().unwrap_or(""),
+        "seeded jitter reproducible"
+    );
+
+    // strip: no jitter -> all points share the slot center x
+    let strip = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"strip","series":{series}}}"#),
+    );
+    let ssvg = strip["svg"].as_str().unwrap_or("");
+    let xs: std::collections::HashSet<&str> = ssvg
+        .match_indices("<circle cx=\"")
+        .map(|(i, _)| {
+            let rest = &ssvg[i + 12..];
+            &rest[..rest.find('"').unwrap_or(0)]
+        })
+        .collect();
+    assert_eq!(xs.len(), 1, "strip points aligned on one x: {xs:?}");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

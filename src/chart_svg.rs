@@ -80,6 +80,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "violin" => svg_violin(&mut s, series, opts, l, t, r, b),
         "ecdf" => svg_ecdf(&mut s, series, l, t, r, b),
         "qq" | "qqplot" => svg_qq(&mut s, series, l, t, r, b),
+        "jitter" | "strip" => svg_jitter(&mut s, series, opts, l, t, r, b, kind == "jitter"),
         _ => special = false,
     }
 
@@ -1470,6 +1471,56 @@ fn svg_qq(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
                 let _ = write!(s, r##"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{col}" stroke-width="1.5"/>"##, xp(xmin), yp(line_y(xmin)), xp(xmax), yp(line_y(xmax)));
             }
         }
+    }
+}
+
+/// Strip / jitter plot (vector; ggplot2 `geom_jitter`). Points per series at its
+/// category slot over a shared value axis, x spread by a seeded PRNG when
+/// `jitter`. opts: `seed`, `jitter_width` (fraction of slot, default 0.35).
+fn svg_jitter(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64, jitter: bool) {
+    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            ymin = ymin.min(v);
+            ymax = ymax.max(v);
+        }
+    }
+    if !ymin.is_finite() || !ymax.is_finite() {
+        return;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let pad = (ymax - ymin) * 0.05;
+    let (ymin, ymax) = (ymin - pad, ymax + pad);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let yp = |v: f64| b - (v - ymin) / (ymax - ymin) * ph;
+    for i in 0..=5 {
+        let v = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(v);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(v)));
+    }
+
+    let nser = series.len().max(1);
+    let slot = pw / nser as f64;
+    let jw = slot * opts.get("jitter_width").and_then(Value::as_f64).unwrap_or(0.35);
+    let mut state = opts.get("seed").and_then(Value::as_u64).filter(|&s| s != 0).unwrap_or(0x9E37_79B9_7F4A_7C15);
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let cx = l + (si as f64 + 0.5) * slot;
+        for v in series_nums(ser) {
+            let off = if jitter {
+                (xorshift64(&mut state) as f64 / u64::MAX as f64 * 2.0 - 1.0) * jw
+            } else {
+                0.0
+            };
+            let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="3" fill="{col}"/>"##, cx + off, yp(v));
+        }
+        let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&name));
     }
 }
 

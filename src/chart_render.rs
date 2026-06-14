@@ -296,6 +296,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_qq(&mut img, &fnt, series, l, t, r, b, black, grid)
         }
+        "jitter" | "strip" => {
+            require_series(&opts)?;
+            render_jitter(&mut img, &fnt, series, &opts, l, t, r, b, black, grid, kind == "jitter")
+        }
         _ => special = false,
     }
 
@@ -1222,6 +1226,74 @@ fn render_qq(
                 draw_line_segment_mut(img, (xp(xmin) as f32, yp(line_y(xmin))), (xp(xmax) as f32, yp(line_y(xmax))), color);
             }
         }
+    }
+}
+
+/// Strip / jitter plot (ggplot2 `geom_jitter`) — every raw value drawn as a
+/// point at its series' category slot over a shared value (y) axis. With
+/// `jitter` the x within each slot is spread by a seeded PRNG (reproducible via
+/// `seed`) so overlapping points separate; without it points sit on the slot
+/// center (a classic strip chart). opts: `seed`, `jitter_width` (fraction of the
+/// slot, default 0.35).
+#[allow(clippy::too_many_arguments)]
+fn render_jitter(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+    jitter: bool,
+) {
+    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            ymin = ymin.min(v);
+            ymax = ymax.max(v);
+        }
+    }
+    if !ymin.is_finite() || !ymax.is_finite() {
+        return;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let pad = (ymax - ymin) * 0.05;
+    let (ymin, ymax) = (ymin - pad, ymax + pad);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let yp = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * ph) as f32;
+    for i in 0..=5 {
+        let v = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(v);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &fmt_num(v));
+    }
+
+    let nser = series.len().max(1);
+    let slot = pw / nser as f64;
+    let jw = slot * opts.get("jitter_width").and_then(Value::as_f64).unwrap_or(0.35);
+    let mut state = opts.get("seed").and_then(Value::as_u64).filter(|&s| s != 0).unwrap_or(0x9E37_79B9_7F4A_7C15);
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        let cx = l as f64 + (si as f64 + 0.5) * slot;
+        for v in series_nums(s) {
+            let off = if jitter {
+                (xorshift64(&mut state) as f64 / u64::MAX as f64 * 2.0 - 1.0) * jw
+            } else {
+                0.0
+            };
+            draw_filled_circle_mut(img, ((cx + off) as i32, yp(v) as i32), 3, color);
+        }
+        let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        draw_text_mut(img, black, (cx - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(12.0), fnt, &name);
     }
 }
 
