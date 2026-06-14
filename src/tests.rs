@@ -805,6 +805,59 @@ fn sheet_head_and_tail() {
 }
 
 #[test]
+fn sheet_sample_deterministic() {
+    let path = tmp("sample.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["h"],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // sample 3 of 10 with a fixed seed -> header kept, count exact
+    let o1 = tmp("sample1.xlsx");
+    let r = call(
+        office__sheet_sample,
+        &format!(r#"{{"path":"{path}","n":3,"seed":42,"output":"{o1}"}}"#),
+    );
+    assert_eq!(r["rows"], 3, "sampled 3: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{o1}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 4, "header + 3 sampled: {rd}");
+    assert_eq!(rows[0][0], "h", "header preserved: {rd}");
+    // sampled rows are emitted in ascending original order
+    let v1 = rows[1][0].as_f64().unwrap();
+    let v2 = rows[2][0].as_f64().unwrap();
+    let v3 = rows[3][0].as_f64().unwrap();
+    assert!(v1 < v2 && v2 < v3, "original order preserved: {rd}");
+
+    // same seed -> identical sample (reproducible)
+    let o2 = tmp("sample2.xlsx");
+    call(
+        office__sheet_sample,
+        &format!(r#"{{"path":"{path}","n":3,"seed":42,"output":"{o2}"}}"#),
+    );
+    let rd2 = call(office__sheet_read, &format!(r#"{{"path":"{o2}"}}"#));
+    assert_eq!(
+        rd2["sheets"][0]["rows"], rd["sheets"][0]["rows"],
+        "seed reproducible: {rd2}"
+    );
+
+    // n >= row count keeps all data rows
+    let o3 = tmp("sample3.xlsx");
+    let r3 = call(
+        office__sheet_sample,
+        &format!(r#"{{"path":"{path}","n":100,"output":"{o3}"}}"#),
+    );
+    assert_eq!(r3["rows"], 10, "n>=rows keeps all: {r3}");
+
+    for f in [&path, &o1, &o2, &o3] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(

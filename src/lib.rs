@@ -3864,6 +3864,68 @@ fn op_sheet_head(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": kept }))
 }
 
+/// xorshift64 step — a tiny deterministic PRNG so sampling is reproducible
+/// without pulling in a `rand` dependency. State must be non-zero.
+fn xorshift64(state: &mut u64) -> u64 {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    *state = x;
+    x
+}
+
+/// Randomly sample N data rows (the header is always kept). opts: path, output,
+/// n => sample size (default 10), seed => u64 PRNG seed for reproducibility
+/// (default fixed), header => first row is a header to preserve (default true),
+/// sheet, format. Sampling is without replacement; if `n` ≥ the row count every
+/// row is kept. Sampled rows are emitted in their original order. Returns
+/// `{ ok, path, rows }`.
+fn op_sheet_sample(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let n = opts.get("n").and_then(Value::as_u64).unwrap_or(10) as usize;
+    let keep_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .filter(|&s| s != 0)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+
+    let rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let (header, data) = if keep_header && !rows.is_empty() {
+        (Some(rows[0].clone()), &rows[1..])
+    } else {
+        (None, &rows[..])
+    };
+
+    // Assign each data row a pseudo-random key, take the n smallest keys, then
+    // restore original order for a stable, reproducible sample.
+    let mut state = seed;
+    let mut keyed: Vec<(u64, usize)> = (0..data.len())
+        .map(|i| (xorshift64(&mut state), i))
+        .collect();
+    keyed.sort_unstable();
+    let mut picked: Vec<usize> = keyed.iter().take(n).map(|&(_, i)| i).collect();
+    picked.sort_unstable();
+
+    let mut out_rows: Vec<Value> = Vec::with_capacity(picked.len() + 1);
+    if let Some(h) = header {
+        out_rows.push(h);
+    }
+    for i in &picked {
+        out_rows.push(data[*i].clone());
+    }
+
+    let kept = picked.len();
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Sheet1", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": kept }))
+}
+
 /// Top-N rows by a column (sort then take N). opts: path, output, by => column
 /// (required), n => row count (default 10), ascending => bool (default false =
 /// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
@@ -5189,6 +5251,7 @@ export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
+export!(office__sheet_sample, op_sheet_sample);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
