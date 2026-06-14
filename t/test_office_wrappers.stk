@@ -86,6 +86,16 @@ assert_eq $stats->{pages}, 1, "pdf_stats: page count"
 assert_ok ($stats->{words} >= 3), "pdf_stats: word count"
 unlink $ps
 
+# ── sheet_transform: per-column op ──────────────────────────────────
+val $tx = "$dir/$tag-xform.xlsx"
+Office::sheet_write($tx, [{ name => "D", rows => [["name"], ["  hi "], ["YO"]] }])
+val $txo = "$dir/$tag-xform-out.xlsx"
+Office::sheet_transform($tx, "name", "trim", $txo)
+val $txr = Office::sheet_read($txo)
+assert_eq $txr->[0]{rows}[1][0], "hi", "sheet_transform: trim in place"
+unlink $tx
+unlink $txo
+
 # ── sheet_sample: reproducible row sampling ─────────────────────────
 val $sx = "$dir/$tag-samp.xlsx"
 Office::sheet_write($sx, [{ name => "D", rows => [["h"], [1], [2], [3], [4], [5]] }])

@@ -406,6 +406,14 @@ fn Office::sheet_sample ($path, $output, %opts) {
         office__sheet_sample(to_json({ path => $path, output => $output, n => $opts{n}, seed => $opts{seed}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Apply a named transform to one column: upper/lower/trim/title or
+## round/floor/ceil/abs/int. opts: digits (for round), into (new column; default
+## replace), sheet, header, format. Returns { ok, path, transformed }.
+fn Office::sheet_transform ($path, $column, $op, $output, %opts) {
+    Office::_decode("sheet_transform",
+        office__sheet_transform(to_json({ path => $path, column => $column, op => $op, output => $output, digits => $opts{digits}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.

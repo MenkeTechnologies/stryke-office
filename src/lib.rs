@@ -3926,6 +3926,133 @@ fn op_sheet_sample(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": kept }))
 }
 
+/// Title-case a string: capitalize the first letter of each whitespace-separated
+/// word, lowercasing the rest.
+fn title_case(s: &str) -> String {
+    s.split_whitespace()
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Apply a named transform to every cell of one column (pandas `.str`/`.apply`
+/// for common ops). opts: path, output, column => name or 0-based index
+/// (required), op => one of upper|lower|trim|title (string) or
+/// round|floor|ceil|abs|int (numeric; non-numeric cells pass through unchanged),
+/// digits => decimals for `round` (default 0), into => append result as a new
+/// column with this header (default: replace the column in place), sheet, header,
+/// format. Returns `{ ok, path, transformed }` (count of data rows processed).
+fn op_sheet_transform(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let op = req_str(&opts, "op")?.to_string();
+    if !matches!(
+        op.as_str(),
+        "upper" | "lower" | "trim" | "title" | "round" | "floor" | "ceil" | "abs" | "int"
+    ) {
+        return Err(anyhow!("unknown op: {op}"));
+    }
+    let digits = opts.get("digits").and_then(Value::as_i64).unwrap_or(0) as i32;
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let apply = |cell: &Value| -> Value {
+        match op.as_str() {
+            "upper" => json!(cell_to_string(cell).to_uppercase()),
+            "lower" => json!(cell_to_string(cell).to_lowercase()),
+            "trim" => json!(cell_to_string(cell).trim().to_string()),
+            "title" => json!(title_case(&cell_to_string(cell))),
+            _ => match sheet_cell_num(cell) {
+                Some(x) => {
+                    let y = match op.as_str() {
+                        "round" => {
+                            let f = 10f64.powi(digits);
+                            (x * f).round() / f
+                        }
+                        "floor" => x.floor(),
+                        "ceil" => x.ceil(),
+                        "abs" => x.abs(),
+                        "int" => x.trunc(),
+                        _ => x,
+                    };
+                    json!(y)
+                }
+                None => cell.clone(),
+            },
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut transformed = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).cloned().unwrap_or(Value::Null);
+            let result = apply(&src);
+            transformed += 1;
+            match &into {
+                Some(_) => cells.push(result),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = result;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = result;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "transformed": transformed }))
+}
+
 /// Top-N rows by a column (sort then take N). opts: path, output, by => column
 /// (required), n => row count (default 10), ascending => bool (default false =
 /// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
@@ -5252,6 +5379,7 @@ export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_sample, op_sheet_sample);
+export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
