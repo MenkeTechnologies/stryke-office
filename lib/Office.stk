@@ -1687,6 +1687,14 @@ fn Office::text_uniq ($path, %opts) {
         office__text_uniq(to_json({ path => $path, output => $opts{output}, count => $opts{count}, global => $opts{global}, ignore_case => $opts{ignore_case} })))
 }
 
+## Extract delimited fields per line (cut -d -f). $fields is an arrayref of
+## 1-based field numbers. opts: delim (default tab), output_delim (default delim),
+## output. Returns { count, lines, path? }.
+fn Office::text_cut ($path, $fields, %opts) {
+    Office::_decode("text_cut",
+        office__text_cut(to_json({ path => $path, fields => $fields, delim => $opts{delim}, output_delim => $opts{output_delim}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

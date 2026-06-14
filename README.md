@@ -295,6 +295,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::text_stats($path)` | `{lines, words, chars, bytes}` | `wc`-style stats for a raw text file |
 | `Office::text_sort($path, %opts)` | `{ok, path, lines}` | sort a text file's lines (`sort`/`uniq`); `descending`/`numeric`/`unique`/`ignore_case` opts |
 | `Office::text_uniq($path, %opts)` | `{ok, path, lines}` | collapse duplicate lines (`uniq`); `count`/`global`/`ignore_case` opts |
+| `Office::text_cut($path, $fields, %opts)` | `{count, lines, path?}` | extract delimited fields per line (`cut -d -f`); `delim`/`output_delim`/`output` opts |
 | `Office::text_head($path, %opts)` | `{count, lines, path?}` | first (or last) N lines of a text file (`head`/`tail`); `n`/`tail`/`output` opts |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}`; opts `header`/`footer`/`page_numbers`/`page_size` |

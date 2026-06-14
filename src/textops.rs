@@ -528,3 +528,58 @@ fn op_text_head(opts: Value) -> Result<Value> {
     }
     Ok(out)
 }
+
+/// Extract delimited fields from each line (the `cut -d -f` analogue). opts:
+/// path, fields => array of 1-based field numbers in output order (required),
+/// delim => input delimiter (default tab), output_delim => joiner for the picked
+/// fields (default: same as `delim`), output => also write the result to a file
+/// (omit to just return it). Out-of-range field numbers contribute an empty
+/// string (so column counts stay stable). Returns `{ count, lines: [...], path? }`.
+fn op_text_cut(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let delim = opts.get("delim").and_then(Value::as_str).unwrap_or("\t");
+    if delim.is_empty() {
+        return Err(anyhow!("delim must be non-empty"));
+    }
+    let out_delim = opts
+        .get("output_delim")
+        .and_then(Value::as_str)
+        .unwrap_or(delim);
+    let fields: Vec<usize> = opts
+        .get("fields")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing fields (array of 1-based field numbers)"))?
+        .iter()
+        .filter_map(|v| v.as_u64().filter(|&n| n >= 1).map(|n| n as usize))
+        .collect();
+    if fields.is_empty() {
+        return Err(anyhow!("fields must list at least one 1-based field number"));
+    }
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let lines: Vec<String> = text
+        .lines()
+        .map(|line| {
+            let parts: Vec<&str> = line.split(delim).collect();
+            fields
+                .iter()
+                .map(|&f| *parts.get(f - 1).unwrap_or(&""))
+                .collect::<Vec<_>>()
+                .join(out_delim)
+        })
+        .collect();
+
+    let mut out = json!({ "count": lines.len(), "lines": lines });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        let joined = out["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(output, format!("{joined}\n"))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}

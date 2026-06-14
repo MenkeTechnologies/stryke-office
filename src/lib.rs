@@ -10448,6 +10448,7 @@ export!(office__text_grep, op_text_grep);
 export!(office__text_stats, op_text_stats);
 export!(office__text_sort, op_text_sort);
 export!(office__text_uniq, op_text_uniq);
+export!(office__text_cut, op_text_cut);
 export!(office__text_head, op_text_head);
 
 // structured document reads (tables) — read-side mirror of doc_write blocks

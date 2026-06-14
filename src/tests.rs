@@ -9982,6 +9982,30 @@ fn text_uniq_adjacent_and_global() {
 }
 
 #[test]
+fn text_cut_fields() {
+    let path = tmp("cut.csv");
+    std::fs::write(&path, "a,b,c\n1,2,3\n4,5,6\n").unwrap();
+
+    // pick fields 3 and 1 (reordered), comma delimiter
+    let r = call(
+        office__text_cut,
+        &format!(r#"{{"path":"{path}","delim":",","fields":[3,1]}}"#),
+    );
+    assert_eq!(r["count"], 3, "three lines: {r}");
+    assert_eq!(r["lines"][0], "c,a", "header reordered: {r}");
+    assert_eq!(r["lines"][1], "3,1", "row1 reordered: {r}");
+
+    // out-of-range field -> empty; custom output_delim
+    let r2 = call(
+        office__text_cut,
+        &format!(r#"{{"path":"{path}","delim":",","fields":[1,9],"output_delim":"|"}}"#),
+    );
+    assert_eq!(r2["lines"][1], "1|", "missing field is empty: {r2}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
