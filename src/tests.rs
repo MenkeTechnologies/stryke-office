@@ -5855,6 +5855,51 @@ fn pdf_annotations_lists_all() {
 }
 
 #[test]
+fn pdf_split_bookmarks_by_chapter() {
+    // build a 4-page pdf
+    let src = tmp("pbm.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"paragraph","text":"p1"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"p2"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"p3"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"p4"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+    // bookmark Ch1 at page 1, Ch2 at page 3
+    let so = call(
+        office__pdf_set_outline,
+        &format!(
+            r#"{{"path":"{src}","outline":[{{"title":"Ch1","page":1}},{{"title":"Ch2","page":3}}]}}"#
+        ),
+    );
+    assert_eq!(so["ok"], true, "set_outline: {so}");
+
+    let dir = tmp("pbm_out");
+    let r = call(
+        office__pdf_split_bookmarks,
+        &format!(r#"{{"path":"{src}","dir":"{dir}","prefix":"ch"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two chapters: {r}");
+    let files = r["files"].as_array().unwrap();
+    // each chapter spans 2 pages (1-2 and 3-4)
+    let i1 = call(office__pdf_info, &format!(r#"{{"path":{}}}"#, files[0]));
+    assert_eq!(i1["pages"], 2, "chapter 1 has 2 pages: {i1}");
+    let i2 = call(office__pdf_info, &format!(r#"{{"path":{}}}"#, files[1]));
+    assert_eq!(i2["pages"], 2, "chapter 2 has 2 pages: {i2}");
+
+    std::fs::remove_file(&src).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");

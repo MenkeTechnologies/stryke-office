@@ -824,6 +824,56 @@ fn op_pdf_split_ranges(opts: Value) -> Result<Value> {
     Ok(json!({ "count": files.len(), "files": files }))
 }
 
+/// Split a PDF at its top-level bookmark (outline) boundaries — one file per
+/// chapter. Each top-level outline entry that has a page starts a section that
+/// runs until the next entry's page (the last runs to the end). opts: path, dir
+/// => output directory (created if absent), prefix => filename stem. Returns
+/// `{ count, files }`. Errors if the PDF has no bookmarks with page numbers.
+fn op_pdf_split_bookmarks(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    std::fs::create_dir_all(dir)?;
+
+    let outline = op_pdf_outline(json!({ "path": path }))?;
+    let entries = outline
+        .get("outline")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut marks: Vec<u64> = entries
+        .iter()
+        .filter_map(|e| e.get("page").and_then(Value::as_u64))
+        .collect();
+    marks.sort_unstable();
+    marks.dedup();
+    if marks.is_empty() {
+        return Err(anyhow!("no bookmarks with page numbers to split on"));
+    }
+
+    let total = op_pdf_info(json!({ "path": path }))?
+        .get("pages")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let ranges: Vec<Value> = marks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &start)| {
+            let end = if i + 1 < marks.len() {
+                marks[i + 1].saturating_sub(1)
+            } else {
+                total
+            };
+            (start >= 1 && end >= start).then(|| json!([start, end]))
+        })
+        .collect();
+
+    let mut sopts = json!({ "path": path, "dir": dir, "ranges": ranges });
+    if let Some(p) = opts.get("prefix") {
+        sopts["prefix"] = p.clone();
+    }
+    op_pdf_split_ranges(sopts)
+}
+
 /// Extract a PDF's text. opts: path; then either `dir` => write one
 /// `page-{n}.txt` per page (returns `{ count, files }`), or `output` => write
 /// the whole text joined by `separator` (default "\n\n") to one file (returns

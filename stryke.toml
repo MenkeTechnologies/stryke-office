@@ -118,6 +118,7 @@ exports = [
     "office__pdf_burst",
     "office__pdf_chunk",
     "office__pdf_split_ranges",
+    "office__pdf_split_bookmarks",
     "office__pdf_to_text",
     "office__pdf_stats",
     "office__pdf_assemble",
