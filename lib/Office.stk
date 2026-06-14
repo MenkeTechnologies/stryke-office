@@ -226,6 +226,14 @@ fn Office::sheet_pct ($path, $column, $output, %opts) {
         office__sheet_pct(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a "percent of group total" column: $value as a % of its $group's sum
+## (group-aware counterpart to sheet_pct). opts: into, decimals, sheet, header,
+## format. Returns { ok, path, column }.
+fn Office::sheet_group_pct ($path, $output, $group, $value, %opts) {
+    Office::_decode("sheet_group_pct",
+        office__sheet_group_pct(to_json({ path => $path, output => $output, group => $group, value => $value, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a normalized column (method => "minmax" 0..1 or "zscore"). opts: into,
 ## method, decimals, sheet, header, format. Returns { ok, path, column }.
 fn Office::sheet_normalize ($path, $column, $output, %opts) {

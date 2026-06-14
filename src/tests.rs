@@ -717,6 +717,48 @@ fn sheet_insert_column_shifts_right() {
 }
 
 #[test]
+fn sheet_group_pct_share_within_group() {
+    let path = tmp("grouppct.xlsx");
+    // west: 10+30=40 → 25%/75%; east: 5 alone → 100%
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["east",5],
+                ["west",30]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("grouppct_out.xlsx");
+    let r = call(
+        office__sheet_group_pct,
+        &format!(r#"{{"path":"{path}","output":"{out}","group":"region","value":"amt"}}"#),
+    );
+    assert_eq!(r["column"], "amt_grouppct", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows[1][2].as_f64().unwrap() - 25.0).abs() < 1e-9,
+        "west 10/40=25%: {rd}"
+    );
+    assert!(
+        (rows[2][2].as_f64().unwrap() - 100.0).abs() < 1e-9,
+        "east 5/5=100%: {rd}"
+    );
+    assert!(
+        (rows[3][2].as_f64().unwrap() - 75.0).abs() < 1e-9,
+        "west 30/40=75%: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_cumsum_running_total() {
     let path = tmp("cumsum.xlsx");
     let w = call(
