@@ -189,6 +189,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_cast($path, $output, %opts)` | `{ok, path, cast}` | type-coerce column(s) (`number`/`int`/`string`/`bool`); `number` parses currency/commas/percent/accounting negatives; `by` opt |
 | `Office::sheet_strip($path, %opts)` | `{ok, path, trimmed}` | trim whitespace from every string cell (whole-sheet); `collapse` squeezes internal runs |
 | `Office::sheet_pad($path, $output, $column, $width, %opts)` | `{ok, path, padded}` | pad a column's values to a fixed width (e.g. zero-pad IDs); `fill`/`side`/`into` opts |
+| `Office::sheet_substr($path, $output, $column, %opts)` | `{ok, path, column}` | extract a fixed-position substring from a column (SQL `SUBSTRING`); `start`/`len`/`into` opts |
 | `Office::sheet_reverse($path, %opts)` | `{ok, path, rows}` | reverse data-row order (header kept on top) |
 | `Office::sheet_coalesce($path, $output, $columns, %opts)` | `{ok, path, column, filled}` | append a column with the first non-blank value across columns (SQL `COALESCE`); `into`/`default` opts |
 | `Office::sheet_recode($path, $output, $column, $map, %opts)` | `{ok, path, recoded}` | remap a column's values via a `{old=>new}` dict (pandas `Series.map`); `default`/`into` opts |

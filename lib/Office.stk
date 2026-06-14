@@ -800,6 +800,14 @@ fn Office::sheet_pad ($path, $output, $column, $width, %opts) {
         office__sheet_pad(to_json({ path => $path, output => $output, column => $column, width => $width, fill => $opts{fill}, side => $opts{side}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Extract a fixed-position substring from a column (SQL SUBSTRING). opts: start
+## (0-based, negative from end; default 0), len (default to end), into (new column;
+## default in place), sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_substr ($path, $output, $column, %opts) {
+    Office::_decode("sheet_substr",
+        office__sheet_substr(to_json({ path => $path, output => $output, column => $column, start => $opts{start}, len => $opts{len}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Reverse the order of a sheet's data rows (header kept on top). opts: output
 ## (default in place), sheet, header, format. Returns { ok, path, rows }.
 fn Office::sheet_reverse ($path, %opts) {

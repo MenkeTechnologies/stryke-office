@@ -2509,6 +2509,46 @@ fn sheet_pad_fixed_width() {
 }
 
 #[test]
+fn sheet_substr_extract() {
+    let path = tmp("substr.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["code"],["ABC123"],["XYZ999"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // first 3 chars into a new column
+    let out = tmp("substr_out.xlsx");
+    let r = call(
+        office__sheet_substr,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","column":"code","start":0,"len":3,"into":"prefix"}}"#
+        ),
+    );
+    assert_eq!(r["column"], "prefix", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "prefix", "header appended: {rd}");
+    assert_eq!(rows[1][1], "ABC", "ABC123 -> ABC: {rd}");
+    assert_eq!(rows[2][1], "XYZ", "XYZ999 -> XYZ: {rd}");
+
+    // negative start: last 3 chars, in place
+    let outn = tmp("substr_neg.xlsx");
+    call(
+        office__sheet_substr,
+        &format!(r#"{{"path":"{path}","output":"{outn}","column":"code","start":-3}}"#),
+    );
+    let rdn = call(office__sheet_read, &format!(r#"{{"path":"{outn}"}}"#));
+    assert_eq!(rdn["sheets"][0]["rows"][1][0], "123", "last 3 chars: {rdn}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outn).ok();
+}
+
+#[test]
 fn sheet_reverse_data_rows() {
     let path = tmp("reverse.xlsx");
     let w = call(
