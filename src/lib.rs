@@ -348,10 +348,14 @@ fn attr(e: &quick_xml::events::BytesStart, key: &[u8]) -> Option<String> {
 fn op_sheet_read(opts: Value) -> Result<Value> {
     use calamine::{open_workbook_auto, Data, Reader};
     let path = req_str(&opts, "path")?;
+    let delim = opts
+        .get("delimiter")
+        .and_then(Value::as_str)
+        .and_then(|s| s.chars().next());
     match ext_of(path).as_str() {
         "ods" => return read_ods(path),
-        "csv" => return read_csv(path, ','),
-        "tsv" => return read_csv(path, '\t'),
+        "csv" => return read_csv(path, delim.unwrap_or(',')),
+        "tsv" => return read_csv(path, delim.unwrap_or('\t')),
         _ => {}
     }
     let want_formulas = opts
@@ -1025,11 +1029,15 @@ fn op_sheet_write(opts: Value) -> Result<Value> {
         }
         "csv" | "tsv" => {
             let sheets = json_sheets(&opts)?;
-            let delim = if target_ext(&opts, &path) == "tsv" {
-                '\t'
-            } else {
-                ','
-            };
+            let delim = opts
+                .get("delimiter")
+                .and_then(Value::as_str)
+                .and_then(|s| s.chars().next())
+                .unwrap_or(if target_ext(&opts, &path) == "tsv" {
+                    '\t'
+                } else {
+                    ','
+                });
             write_csv(&path, &sheets, delim)?;
             sheets.len()
         }

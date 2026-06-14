@@ -141,7 +141,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | Function | Returns | Notes |
 |---|---|---|
 | `Office::version()` | string | package version |
-| `Office::sheet_read($path)` | arrayref of `{name, rows}` | numbers stay numbers, empty cells `undef` |
+| `Office::sheet_read($path, %opts)` | arrayref of `{name, rows}` | numbers stay numbers, empty cells `undef`; `delimiter` for csv/tsv (e.g. `;`) |
 | `Office::sheet_write($path, $sheets, %opts)` | hashref | `$sheets`: `[{name, rows => [[...]]}]`; writes xlsx/ods/csv/tsv + html/md tables; `format` opt |
 | `Office::sheet_merge($inputs, $output, %opts)` | `{sources, sheets}` | combine workbooks into one; `mode => "rows"` stacks; target ext converts |
 | `Office::sheet_stats($path, %opts)` | `{sheet, rows, columns:[{name,count,numeric,blanks,sum?,min?,max?,mean?}]}` | per-column descriptive stats; `sheet`/`header` opts |

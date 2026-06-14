@@ -36,7 +36,7 @@ fn Office::version {
 ## back as numbers, empty cells as undef. opts: formulas => 1 to also attach
 ## a { formulas => [[str, ...]] } grid (aligned to rows; "" where none).
 fn Office::sheet_read ($path, %opts) {
-    Office::_decode("sheet_read", office__sheet_read(to_json({ path => $path, formulas => $opts{formulas} })))->{sheets}
+    Office::_decode("sheet_read", office__sheet_read(to_json({ path => $path, formulas => $opts{formulas}, delimiter => $opts{delimiter} })))->{sheets}
 }
 
 ## Write a spreadsheet. $sheets is an arrayref of { name, rows => [[...]] }.
@@ -55,7 +55,7 @@ fn Office::sheet_read ($path, %opts) {
 ## opts: format => "xlsx"|"ods"|"csv"|"tsv" (default: from extension),
 ## defined_names => [{ name, formula }] (workbook-level named ranges).
 fn Office::sheet_write ($path, $sheets, %opts) {
-    val $r = { path => $path, sheets => $sheets, format => $opts{format}, defined_names => $opts{defined_names} }
+    val $r = { path => $path, sheets => $sheets, format => $opts{format}, defined_names => $opts{defined_names}, delimiter => $opts{delimiter} }
     Office::_decode("sheet_write", office__sheet_write(to_json($r)))
 }
 
