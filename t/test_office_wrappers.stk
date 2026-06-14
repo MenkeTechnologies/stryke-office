@@ -221,9 +221,19 @@ val $h2pout = "$dir/$tag-h2p.pdf"
 Office::html_to_pdf($h2pin, $h2pout)
 val $h2pr = Office::pdf_read($h2pout)
 assert_ok ($h2pr->{text} =~ /Widget/), "html_to_pdf: text renders into pdf"
-unlink $h2sx
 unlink $h2pin
 unlink $h2pout
+
+# ── md -> pdf (build the .md via sheet_to_md) ───────────────────────
+val $m2pin = "$dir/$tag-m2p.md"
+Office::sheet_to_md($h2sx, output => $m2pin)
+val $m2pout = "$dir/$tag-m2p.pdf"
+Office::md_to_pdf($m2pin, $m2pout)
+val $m2pr = Office::pdf_read($m2pout)
+assert_ok ($m2pr->{text} =~ /Widget/), "md_to_pdf: text renders into pdf"
+unlink $h2sx
+unlink $m2pin
+unlink $m2pout
 
 # ── document -> pdf ─────────────────────────────────────────────────
 val $d2p = "$dir/$tag-d2p.docx"
