@@ -1344,4 +1344,9 @@ assert_ok ($smsvg =~ /^<svg/), "chart smooth: svg document"
 assert_ok ($smsvg =~ /stroke-width="2.5"/), "chart smooth: loess curve"
 assert_ok ($smsvg =~ /circle/), "chart smooth: underlying points"
 
+# ── chart bin2d (ggplot2 geom_bin2d): rectangular count heatmap ─────
+val $b2dsvg = Office::chart_svg("bin2d", [{ name => "d", data => [[1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [5, 5], [1, 5], [5, 1]] }], bins => 5)
+assert_ok ($b2dsvg =~ /^<svg/), "chart bin2d: svg document"
+assert_ok ($b2dsvg =~ /<rect x=/), "chart bin2d: count cells"
+
 test_run
