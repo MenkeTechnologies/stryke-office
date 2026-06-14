@@ -9038,6 +9038,50 @@ fn op_sheet_autofilter(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "range": range }))
 }
 
+/// Merge cell ranges in a sheet (xlsx) — e.g. a spanning title or grouped header
+/// — via a dedicated call (the one-shot equivalent of the per-sheet `merges`
+/// write key). opts: path, output (default in place), ranges => array of
+/// `[r1, c1, r2, c2]` 0-based inclusive rectangles (required), sheet, format. The
+/// top-left cell's value fills each merged region. Returns `{ ok, path, merged }`
+/// (count of ranges applied).
+fn op_sheet_merge_cells(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let ranges = opts
+        .get("ranges")
+        .and_then(Value::as_array)
+        .filter(|a| !a.is_empty())
+        .ok_or_else(|| anyhow!("missing ranges (expected non-empty array of [r1,c1,r2,c2])"))?
+        .clone();
+    // Validate each range is a 4-tuple.
+    for r in &ranges {
+        if r.as_array().is_none_or(|a| a.len() != 4) {
+            return Err(anyhow!("each range must be [r1, c1, r2, c2]"));
+        }
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let n = ranges.len();
+    sheets[target]["merges"] = Value::Array(ranges);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "merged": n }))
+}
+
 /// Round every numeric cell in a sheet (or selected columns) to a fixed number
 /// of decimals — clean up float noise from exports. opts: path, output,
 /// decimals => places (default 2), columns => name(s)/index(es) to restrict to
@@ -12279,6 +12323,7 @@ export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
+export!(office__sheet_merge_cells, op_sheet_merge_cells);
 export!(office__sheet_autosize, op_sheet_autosize);
 export!(office__sheet_protect, op_sheet_protect);
 export!(office__sheet_comments, op_sheet_comments);
