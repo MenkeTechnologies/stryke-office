@@ -3338,6 +3338,36 @@ fn slides_to_text_extracts() {
 }
 
 #[test]
+fn slides_to_sheet_one_row_per_slide() {
+    let px = tmp("s2sheet.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[{{"title":"Intro","body":["a","b"]}},{{"title":"End","body":[]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("s2sheet.xlsx");
+    let r = call(
+        office__slides_to_sheet,
+        &format!(r#"{{"path":"{px}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "slide", "header slide: {rd}");
+    assert_eq!(rows[0][1], "title", "header title: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.0, "slide 1 number: {rd}");
+    assert_eq!(rows[1][1], "Intro", "slide 1 title: {rd}");
+    assert_eq!(rows[1][2], "a b", "slide 1 body joined: {rd}");
+    assert_eq!(rows[2][1], "End", "slide 2 title: {rd}");
+
+    std::fs::remove_file(&px).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn xml_entities_survive_text_extraction() {
     // Regression: quick-xml emits `&amp;` etc. as standalone GeneralRef events,
     // not inside Text, so the readers must resolve them or `&`/`<`/`>` vanish.
