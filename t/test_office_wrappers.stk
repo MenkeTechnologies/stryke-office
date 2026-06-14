@@ -277,6 +277,18 @@ val $afo = "$dir/$tag-af-out.xlsx"
 val $afr = Office::sheet_autofilter($gcx, $afo)
 assert_ok $afr->{ok}, "sheet_autofilter: ok"
 unlink $afo
+# sheet_round: clean float noise to N decimals
+val $rnx = "$dir/$tag-round.xlsx"
+Office::sheet_write($rnx, [{ name => "D", rows => [["a", "b"], [1.234, 5.678]] }])
+val $rno = "$dir/$tag-round-out.xlsx"
+val $rnr = Office::sheet_round($rnx, $rno, decimals => 1)
+assert_ok $rnr->{ok}, "sheet_round: ok"
+val $rnb = Office::sheet_read($rno)
+assert_eq $rnb->[0]{rows}[1][0], 1.2, "sheet_round: 1.234 -> 1.2"
+assert_eq $rnb->[0]{rows}[1][1], 5.7, "sheet_round: 5.678 -> 5.7"
+assert_eq $rnb->[0]{rows}[0][0], "a", "sheet_round: header untouched"
+unlink $rnx
+unlink $rno
 unlink $gcx
 unlink $gco2
 

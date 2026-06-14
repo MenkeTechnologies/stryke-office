@@ -2992,6 +2992,70 @@ fn sheet_autofilter_applied() {
 }
 
 #[test]
+fn sheet_round_decimals() {
+    let path = tmp("round.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b"],[1.234,5.678],[9.871,0.30000000004]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("round_out.xlsx");
+    let r = call(
+        office__sheet_round,
+        &format!(r#"{{"path":"{path}","output":"{out}","decimals":1}}"#),
+    );
+    assert_eq!(r["ok"], true, "round: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // Header untouched.
+    assert_eq!(rows[0][0], "a");
+    // Data rounded to 1 decimal.
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.2, "1.234 -> 1.2: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 5.7, "5.678 -> 5.7: {rd}");
+    assert_eq!(rows[2][0].as_f64().unwrap(), 9.9, "9.871 -> 9.9: {rd}");
+    assert_eq!(
+        rows[2][1].as_f64().unwrap(),
+        0.3,
+        "float noise -> 0.3: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn sheet_round_columns_subset() {
+    let path = tmp("round_cols.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b"],[1.234,5.678]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("round_cols_out.xlsx");
+    let r = call(
+        office__sheet_round,
+        &format!(r#"{{"path":"{path}","output":"{out}","decimals":1,"columns":["a"]}}"#),
+    );
+    assert_eq!(r["ok"], true, "round: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // Only column "a" rounded; "b" left as-is.
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.2, "a rounded: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 5.678, "b untouched: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(
