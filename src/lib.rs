@@ -5173,6 +5173,59 @@ fn op_sheet_records(opts: Value) -> Result<Value> {
     Ok(json!({ "fields": fields, "count": records.len(), "records": records }))
 }
 
+/// Build a `{ key: value }` object from two columns — a one-call lookup/config
+/// map directly usable as a stryke hash (e.g. code → label). opts: path, key =>
+/// key column name/index (required), value => value column name/index (required),
+/// sheet, header (default true). The value cell keeps its native type; on
+/// duplicate keys the last row wins; blank keys are skipped. Returns
+/// `{ map, count }` (`count` = distinct keys).
+fn op_sheet_to_map(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let kcol = resolve_col(opts.get("key"), header_row)?;
+    let vcol = resolve_col(opts.get("value"), header_row)?;
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut map = serde_json::Map::new();
+    for row in &rows[data_start..] {
+        let cells = row.as_array();
+        let k = cells
+            .and_then(|c| c.get(kcol))
+            .cloned()
+            .unwrap_or(Value::Null);
+        if sheet_cell_blank(&k) {
+            continue;
+        }
+        let v = cells
+            .and_then(|c| c.get(vcol))
+            .cloned()
+            .unwrap_or(Value::Null);
+        map.insert(cell_to_string(&k), v);
+    }
+    let n = map.len();
+    Ok(json!({ "map": Value::Object(map), "count": n }))
+}
+
 /// Write records (an array of objects) to a sheet: a header row of field names
 /// followed by one row per record. opts: path, records (required),
 /// fields => explicit column order (default: keys in first-seen order across
@@ -11364,6 +11417,7 @@ export!(office__sheet_split_by, op_sheet_split_by);
 export!(office__sheet_multisort, op_sheet_multisort);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
+export!(office__sheet_to_map, op_sheet_to_map);
 export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
 export!(office__sheet_to_ndjson, op_sheet_to_ndjson);

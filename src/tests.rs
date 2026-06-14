@@ -4652,6 +4652,36 @@ fn sheet_records_round_trip() {
 }
 
 #[test]
+fn sheet_to_map_key_value() {
+    let path = tmp("tomap.xlsx");
+    // duplicate key "a" -> last wins (2); blank key row skipped
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["code","label"],
+                ["a","Apple"],
+                ["b","Banana"],
+                ["a","Avocado"],
+                ["","Skip"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_to_map,
+        &format!(r#"{{"path":"{path}","key":"code","value":"label"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two distinct keys (blank skipped): {r}");
+    assert_eq!(r["map"]["a"], "Avocado", "duplicate key last wins: {r}");
+    assert_eq!(r["map"]["b"], "Banana", "second key: {r}");
+    assert!(r["map"].get("").is_none(), "blank key skipped: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_to_ndjson_lines() {
     let path = tmp("nd.xlsx");
     let w = call(

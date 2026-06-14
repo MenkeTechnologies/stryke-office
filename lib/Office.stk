@@ -394,6 +394,14 @@ fn Office::sheet_records ($path, %opts) {
         office__sheet_records(to_json({ path => $path, sheet => $opts{sheet} })))
 }
 
+## Build a { key => value } hash from a $key column and a $value column (lookup /
+## config map). opts: sheet, header. Last row wins on duplicate keys; blank keys
+## skipped. Returns { map, count }.
+fn Office::sheet_to_map ($path, $key, $value, %opts) {
+    Office::_decode("sheet_to_map",
+        office__sheet_to_map(to_json({ path => $path, key => $key, value => $value, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Write records (an arrayref of hashes) to a spreadsheet: a header row of field
 ## names plus one row per record. opts: fields => explicit column order
 ## (default: keys in first-seen order), sheet_name => "Sheet1", format =>

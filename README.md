@@ -155,6 +155,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_cov($path, %opts)` | `{sheet, columns, matrix}` | sample covariance matrix between numeric columns (diagonal = sample variance; pandas `df.cov()`) |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |
+| `Office::sheet_to_map($path, $key, $value, %opts)` | `{map, count}` | build a `{key=>value}` hash from two columns (lookup/config map); last wins on dup keys |
 | `Office::records_write($path, $records, %opts)` | `{rows, fields}` | write objects to a sheet (header + rows); `fields`/`sheet_name` opts |
 | `Office::sheet_to_json($path, $output, %opts)` | `{count}` | export a sheet to a JSON file (array of objects); `pretty` opt |
 | `Office::sheet_to_ndjson($path, $output, %opts)` | `{ok, path, count}` | export a sheet as JSON Lines/NDJSON (one object per data row); `sheet` opt |
