@@ -580,6 +580,58 @@ fn sheet_corr_spearman_monotonic() {
 }
 
 #[test]
+fn sheet_regress_ols() {
+    // y = 3x + 2 exactly -> slope 3, intercept 2, r2 1
+    let path = tmp("regress.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"R","rows":[
+                ["x","y"],
+                [1,5],
+                [2,8],
+                [3,11],
+                [4,14]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("regress_out.xlsx");
+    let s = call(
+        office__sheet_regress,
+        &format!(r#"{{"path":"{path}","x":"x","y":"y","output":"{out}","decimals":6}}"#),
+    );
+    assert!(
+        (s["slope"].as_f64().unwrap() - 3.0).abs() < 1e-6,
+        "slope 3: {s}"
+    );
+    assert!(
+        (s["intercept"].as_f64().unwrap() - 2.0).abs() < 1e-6,
+        "intercept 2: {s}"
+    );
+    assert!((s["r2"].as_f64().unwrap() - 1.0).abs() < 1e-9, "r2 1: {s}");
+    assert_eq!(s["n"].as_u64().unwrap(), 4, "n=4: {s}");
+
+    // output sheet gains predicted + residual columns; residuals ~0 here
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][2], "predicted", "predicted header: {rd}");
+    assert_eq!(rows[0][3], "residual", "residual header: {rd}");
+    assert!(
+        (rows[1][2].as_f64().unwrap() - 5.0).abs() < 1e-6,
+        "pred(1)=5: {rd}"
+    );
+    assert!(
+        rows[1][3].as_f64().unwrap().abs() < 1e-6,
+        "residual ~0: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_cov_matrix() {
     let path = tmp("cov.xlsx");
     // x = [1,2,3], y = 2x. Sample var(x) = 1; cov(x,y) = 2; var(y) = 4.

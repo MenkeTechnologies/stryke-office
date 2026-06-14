@@ -152,6 +152,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_sparkline($path, $column, %opts)` | `{column, sparkline, count, min, max}` | render a numeric column as a Unicode block sparkline string (▁▂▃▄▅▆▇█) |
 | `Office::sheet_argmax($path, $column, %opts)` | `{column, row, value, label?}` | locate the row of a column's max/min (pandas `idxmax`/`idxmin`); `min`/`label` opts |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | correlation matrix between numeric columns (pandas `df.corr()`); `method` pearson (default), spearman (rank), or kendall (tau-b) |
+| `Office::sheet_regress($path, $x, $y, %opts)` | `{ok, slope, intercept, r2, n, path?}` | simple OLS regression `lm(y ~ x)`; `output` appends predicted/residual columns, `decimals` rounds coefficients |
 | `Office::sheet_dtypes($path, %opts)` | `{sheet, rows, columns:[{name,type,counts}]}` | infer each column's data type (integer/float/bool/string/mixed/empty; pandas `df.dtypes`) |
 | `Office::sheet_mode($path, %opts)` | `{sheet, rows, columns:[{name,mode,count}]}` | most-frequent value (mode) of each column (text or numeric) |
 | `Office::sheet_nunique($path, %opts)` | `{sheet, rows, columns:[{name,nunique}]}` | count distinct values per column (cardinality; pandas `nunique`); `dropna` opt |

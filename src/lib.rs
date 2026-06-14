@@ -2380,6 +2380,120 @@ fn covariance(xs: &[f64], ys: &[f64]) -> Option<f64> {
 /// complete observations). The diagonal is each column's sample variance.
 /// Mirrors sheet_corr but reports unnormalized covariance. opts: path, sheet,
 /// header. Returns `{ sheet, columns, matrix }`.
+/// Simple ordinary-least-squares linear regression of `y` on `x` (one
+/// predictor) — slope, intercept, and R² (`lm(y ~ x)` summary). opts: path, x =>
+/// predictor column name/index (required), y => response column name/index
+/// (required), sheet, header (default true), output => when set, append
+/// `predicted` and `residual` columns and write there, decimals => round the
+/// reported coefficients (output cells stay full precision). Returns
+/// `{ ok, slope, intercept, r2, n, path? }`.
+fn op_sheet_regress(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let xcol = resolve_col(opts.get("x"), header_row)?;
+    let ycol = resolve_col(opts.get("y"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    let (mut xs, mut ys) = (Vec::new(), Vec::new());
+    for row in &rows[data_start..] {
+        let a = row.as_array();
+        if let (Some(x), Some(y)) = (
+            a.and_then(|r| r.get(xcol)).and_then(sheet_cell_num),
+            a.and_then(|r| r.get(ycol)).and_then(sheet_cell_num),
+        ) {
+            xs.push(x);
+            ys.push(y);
+        }
+    }
+    let n = xs.len();
+    if n < 2 {
+        return Err(anyhow!("need at least two paired numeric observations"));
+    }
+    let mx = xs.iter().sum::<f64>() / n as f64;
+    let my = ys.iter().sum::<f64>() / n as f64;
+    let mut sxx = 0.0;
+    let mut sxy = 0.0;
+    for (x, y) in xs.iter().zip(&ys) {
+        sxx += (x - mx) * (x - mx);
+        sxy += (x - mx) * (y - my);
+    }
+    if sxx.abs() < f64::EPSILON {
+        return Err(anyhow!("predictor x has zero variance"));
+    }
+    let slope = sxy / sxx;
+    let intercept = my - slope * mx;
+    let r2 = pearson(&xs, &ys).map_or(0.0, |r| r * r);
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+
+    let mut result = json!({
+        "ok": true,
+        "slope": round(slope),
+        "intercept": round(intercept),
+        "r2": round(r2),
+        "n": n,
+    });
+
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        let new_rows: Vec<Value> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let mut cells = row.as_array().cloned().unwrap_or_default();
+                if i < data_start {
+                    cells.push(json!("predicted"));
+                    cells.push(json!("residual"));
+                    return Value::Array(cells);
+                }
+                match (
+                    cells.get(xcol).and_then(sheet_cell_num),
+                    cells.get(ycol).and_then(sheet_cell_num),
+                ) {
+                    (Some(x), Some(y)) => {
+                        let pred = slope * x + intercept;
+                        cells.push(json!(pred));
+                        cells.push(json!(y - pred));
+                    }
+                    _ => {
+                        cells.push(json!(""));
+                        cells.push(json!(""));
+                    }
+                }
+                Value::Array(cells)
+            })
+            .collect();
+        sheets[target]["rows"] = Value::Array(new_rows);
+        let mut wopts = json!({ "path": output, "sheets": sheets });
+        if let Some(f) = opts.get("format") {
+            wopts["format"] = f.clone();
+        }
+        op_sheet_write(wopts)?;
+        result["path"] = json!(output);
+    }
+    Ok(result)
+}
+
 fn op_sheet_cov(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -13695,6 +13809,7 @@ export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);
 export!(office__sheet_argmax, op_sheet_argmax);
 export!(office__sheet_corr, op_sheet_corr);
+export!(office__sheet_regress, op_sheet_regress);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
 export!(office__sheet_to_latex, op_sheet_to_latex);
