@@ -625,6 +625,66 @@ fn sheet_pct_of_total() {
 }
 
 #[test]
+fn sheet_normalize_minmax_and_zscore() {
+    let path = tmp("norm.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // min-max scaling -> 0, 0.5, 1
+    let mm = tmp("norm_mm.xlsx");
+    let r = call(
+        office__sheet_normalize,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{mm}"}}"#),
+    );
+    assert_eq!(r["column"], "v_norm", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{mm}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "v_norm", "header appended: {rd}");
+    assert!(
+        (rows[1][1].as_f64().unwrap() - 0.0).abs() < 1e-9,
+        "min -> 0: {rd}"
+    );
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 0.5).abs() < 1e-9,
+        "mid -> 0.5: {rd}"
+    );
+    assert!(
+        (rows[3][1].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "max -> 1: {rd}"
+    );
+
+    // z-score: mean 20, population std sqrt(200/3)~8.165 -> -1.2247, 0, 1.2247
+    let zs = tmp("norm_zs.xlsx");
+    call(
+        office__sheet_normalize,
+        &format!(
+            r#"{{"path":"{path}","column":"v","output":"{zs}","method":"zscore","decimals":3}}"#
+        ),
+    );
+    let rz = call(office__sheet_read, &format!(r#"{{"path":"{zs}"}}"#));
+    let rows2 = rz["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows2[2][1].as_f64().unwrap() - 0.0).abs() < 1e-9,
+        "mean -> 0: {rz}"
+    );
+    assert!(
+        (rows2[1][1].as_f64().unwrap() + 1.225).abs() < 0.01,
+        "low z<0: {rz}"
+    );
+    assert!(
+        (rows2[3][1].as_f64().unwrap() - 1.225).abs() < 0.01,
+        "high z>0: {rz}"
+    );
+
+    for f in [&path, &mm, &zs] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

@@ -2382,6 +2382,131 @@ fn op_sheet_pct(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append a normalized copy of a numeric column. opts: path, output, column =>
+/// name or 0-based index (required), method => "minmax" (default; scale to
+/// 0..1 via (x-min)/(max-min)) or "zscore" ((x-mean)/population-std), into =>
+/// new column header (default "{column}_norm"), decimals => round, sheet, header
+/// (default true), format. Degenerate spreads (max==min / std==0) map to 0;
+/// non-numeric cells get a blank. Returns `{ ok, path, column }`.
+fn op_sheet_normalize(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let method = opts
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("minmax");
+    if !matches!(method, "minmax" | "zscore") {
+        return Err(anyhow!("unknown method: {method} (minmax|zscore)"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_norm"));
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let n = vals.len();
+    let (min, max) = vals
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &x| {
+            (lo.min(x), hi.max(x))
+        });
+    let mean = if n > 0 {
+        vals.iter().sum::<f64>() / n as f64
+    } else {
+        0.0
+    };
+    let std = if n > 0 {
+        (vals.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64).sqrt()
+    } else {
+        0.0
+    };
+
+    let scale = |x: f64| -> f64 {
+        let v = match method {
+            "zscore" => {
+                if std == 0.0 {
+                    0.0
+                } else {
+                    (x - mean) / std
+                }
+            }
+            _ => {
+                if max == min {
+                    0.0
+                } else {
+                    (x - min) / (max - min)
+                }
+            }
+        };
+        match decimals {
+            Some(d) => {
+                let f = 10f64.powi(d as i32);
+                (v * f).round() / f
+            }
+            None => v,
+        }
+    };
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = match cells.get(col).and_then(sheet_cell_num) {
+                    Some(x) => json!(scale(x)),
+                    None => json!(""),
+                };
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -6369,6 +6494,7 @@ export!(office__sheet_delete_rows, op_sheet_delete_rows);
 export!(office__sheet_insert_column, op_sheet_insert_column);
 export!(office__sheet_cumsum, op_sheet_cumsum);
 export!(office__sheet_pct, op_sheet_pct);
+export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

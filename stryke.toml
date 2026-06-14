@@ -32,6 +32,7 @@ exports = [
     "office__sheet_insert_column",
     "office__sheet_cumsum",
     "office__sheet_pct",
+    "office__sheet_normalize",
     "office__sheet_find",
     "office__sheet_records",
     "office__records_write",
