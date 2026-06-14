@@ -1327,6 +1327,55 @@ fn sheet_movavg_rolling_mean() {
 }
 
 #[test]
+fn sheet_ewm_exponential() {
+    let path = tmp("ewm.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // alpha 0.5: y0=10, y1=0.5*20+0.5*10=15, y2=0.5*30+0.5*15=22.5
+    let out = tmp("ewm_out.xlsx");
+    let r = call(
+        office__sheet_ewm,
+        &format!(r#"{{"path":"{path}","column":"v","alpha":0.5,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_ewm", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "v_ewm", "header appended: {rd}");
+    assert!(
+        (rows[1][1].as_f64().unwrap() - 10.0).abs() < 1e-9,
+        "y0 = x0 = 10: {rd}"
+    );
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 15.0).abs() < 1e-9,
+        "y1 = 15: {rd}"
+    );
+    assert!(
+        (rows[3][1].as_f64().unwrap() - 22.5).abs() < 1e-9,
+        "y2 = 22.5: {rd}"
+    );
+
+    // span 1 -> alpha = 2/(1+1) = 1.0 -> output equals input
+    let outs = tmp("ewm_span.xlsx");
+    call(
+        office__sheet_ewm,
+        &format!(r#"{{"path":"{path}","column":"v","span":1,"output":"{outs}"}}"#),
+    );
+    let rds = call(office__sheet_read, &format!(r#"{{"path":"{outs}"}}"#));
+    assert!(
+        (rds["sheets"][0]["rows"][3][1].as_f64().unwrap() - 30.0).abs() < 1e-9,
+        "span 1 (alpha 1) tracks input: {rds}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outs).ok();
+}
+
+#[test]
 fn sheet_rolling_aggregates() {
     let path = tmp("rolling.xlsx");
     let w = call(

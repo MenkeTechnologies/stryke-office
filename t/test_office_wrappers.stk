@@ -615,6 +615,17 @@ assert_eq $rlb->[0]{rows}[3][1], 60, "sheet_rolling: window sum 60"
 assert_eq $rlb->[0]{rows}[4][1], 90, "sheet_rolling: window sum 90"
 unlink $rlx
 unlink $rlo
+# sheet_ewm: exponentially-weighted moving average (alpha 0.5)
+val $ewx = "$dir/$tag-ewm.xlsx"
+Office::sheet_write($ewx, [{ name => "D", rows => [["v"], [10], [20], [30]] }])
+val $ewo = "$dir/$tag-ewm-out.xlsx"
+val $ewr = Office::sheet_ewm($ewx, "v", $ewo, alpha => 0.5)
+assert_eq $ewr->{column}, "v_ewm", "sheet_ewm: default column name"
+val $ewb = Office::sheet_read($ewo)
+assert_eq $ewb->[0]{rows}[1][1], 10, "sheet_ewm: y0 = x0"
+assert_eq $ewb->[0]{rows}[2][1], 15, "sheet_ewm: y1 = 15"
+unlink $ewx
+unlink $ewo
 # sheet_cumulative: running max
 val $cmx = "$dir/$tag-cumul.xlsx"
 Office::sheet_write($cmx, [{ name => "D", rows => [["v"], [3], [1], [4], [2]] }])

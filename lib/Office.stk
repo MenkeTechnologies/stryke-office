@@ -325,6 +325,14 @@ fn Office::sheet_movavg ($path, $column, $window, $output, %opts) {
         office__sheet_movavg(to_json({ path => $path, column => $column, window => $window, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append an exponentially-weighted moving-average column (pandas ewm().mean(),
+## adjust=false). opts: alpha (0<a<=1) OR span (a=2/(span+1), default span 5),
+## into, decimals, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_ewm ($path, $column, $output, %opts) {
+    Office::_decode("sheet_ewm",
+        office__sheet_ewm(to_json({ path => $path, column => $column, output => $output, alpha => $opts{alpha}, span => $opts{span}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a generalized rolling-window aggregate column (superset of movavg).
 ## opts: agg (sum|mean|min|max|median|std, default mean), into, decimals, sheet,
 ## header, format. Returns { ok, path, column }.

@@ -4397,6 +4397,107 @@ fn op_sheet_movavg(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append an exponentially-weighted moving-average column (pandas `ewm().mean()`)
+/// — unlike `sheet_movavg`/`sheet_rolling` (equal weight inside a fixed window),
+/// EWMA weights every prior point with geometrically decaying influence and has
+/// no window edge. opts: path, output, column => name/index (required), and ONE
+/// of `alpha` (0<α≤1, smoothing factor) or `span` (α = 2/(span+1), span≥1;
+/// default span 5), into => header (default "{column}_ewm"), decimals, sheet,
+/// header, format. The recurrence is `y₀ = x₀`, `yₜ = α·xₜ + (1-α)·yₜ₋₁`
+/// (adjust=false). Blank/non-numeric cells are skipped (carry the running value
+/// forward) and emit blank. Returns `{ ok, path, column }`.
+fn op_sheet_ewm(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let alpha = match (opts.get("alpha").and_then(Value::as_f64), opts.get("span")) {
+        (Some(a), _) => {
+            if !(a > 0.0 && a <= 1.0) {
+                return Err(anyhow!("alpha must be in (0, 1]"));
+            }
+            a
+        }
+        (None, span) => {
+            let s = span.and_then(Value::as_f64).unwrap_or(5.0);
+            if s < 1.0 {
+                return Err(anyhow!("span must be >= 1"));
+            }
+            2.0 / (s + 1.0)
+        }
+    };
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_ewm"));
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+    let round = |x: f64| -> f64 {
+        match decimals {
+            Some(d) => {
+                let f = 10f64.powi(d as i32);
+                (x * f).round() / f
+            }
+            None => x,
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        let mut hr = rows[0].as_array().cloned().unwrap_or_default();
+        hr.push(json!(into));
+        new_rows.push(Value::Array(hr));
+    }
+    let mut ewma: Option<f64> = None;
+    for row in &rows[data_start..] {
+        let mut cells = row.as_array().cloned().unwrap_or_default();
+        let cell = match cells.get(col).and_then(sheet_cell_num) {
+            Some(x) => {
+                let y = match ewma {
+                    Some(prev) => alpha * x + (1.0 - alpha) * prev,
+                    None => x,
+                };
+                ewma = Some(y);
+                json!(round(y))
+            }
+            // blank/non-numeric: keep the running average unchanged, emit blank
+            None => json!(""),
+        };
+        cells.push(cell);
+        new_rows.push(Value::Array(cells));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Append a generalized rolling-window aggregate column (the multi-statistic
 /// superset of `sheet_movavg`, which only does the mean). opts: path, output,
 /// column => name/index (required), window => rows (required, ≥1), agg =>
@@ -13439,6 +13540,7 @@ export!(office__sheet_running, op_sheet_running);
 export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_standardize, op_sheet_standardize);
 export!(office__sheet_movavg, op_sheet_movavg);
+export!(office__sheet_ewm, op_sheet_ewm);
 export!(office__sheet_rolling, op_sheet_rolling);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_pct_change, op_sheet_pct_change);
