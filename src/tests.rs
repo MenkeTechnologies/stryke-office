@@ -6446,6 +6446,43 @@ fn sheet_to_xml_export() {
 }
 
 #[test]
+fn xml_to_sheet_import() {
+    // round-trip: build XML inline, parse it back into a sheet
+    let xml = r#"<?xml version="1.0"?>
+<people>
+  <person><name>Alice</name><age>30</age></person>
+  <person><name>Bob</name><age>25</age></person>
+</people>"#;
+    let out = tmp("fromxml.xlsx");
+    let r = call(
+        office__xml_to_sheet,
+        &format!(
+            r#"{{"xml":{},"output":"{out}","row":"person"}}"#,
+            serde_json::to_string(xml).unwrap()
+        ),
+    );
+    assert_eq!(r["rows"].as_u64().unwrap(), 2, "two rows imported: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // header from field tags, then data
+    let header: Vec<&str> = rows[0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        header.contains(&"name") && header.contains(&"age"),
+        "headers from tags: {rd}"
+    );
+    let name_col = header.iter().position(|&h| h == "name").unwrap();
+    assert_eq!(rows[1][name_col], "Alice", "first row name: {rd}");
+    assert_eq!(rows[2][name_col], "Bob", "second row name: {rd}");
+
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn ndjson_to_sheet_from_text() {
     // inline ndjson string (blank line skipped)
     let out = tmp("nd_text.xlsx");

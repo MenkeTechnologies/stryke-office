@@ -1056,8 +1056,13 @@ assert_eq $xmr->{count}, 2, "sheet_to_xml: row count"
 val $xmt = slurp $xmo
 assert_ok ($xmt =~ /<person>/), "sheet_to_xml: row element"
 assert_ok ($xmt =~ /<name>a<\/name>/), "sheet_to_xml: child element"
+# xml_to_sheet: parse it back (inverse round-trip)
+val $xmback = "$dir/$tag-fromxml.xlsx"
+val $xmir = Office::xml_to_sheet($xmback, input => $xmo, row => "person")
+assert_eq $xmir->{rows}, 2, "xml_to_sheet: rows imported"
 unlink $nx
 unlink $xmo
+unlink $xmback
 
 # ── sheet_to_map: key=>value hash from two columns ──────────────────
 val $tmx = "$dir/$tag-tomap.xlsx"
