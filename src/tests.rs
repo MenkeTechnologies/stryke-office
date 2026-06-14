@@ -8449,6 +8449,43 @@ fn text_stats_wc() {
 }
 
 #[test]
+fn text_sort_lines() {
+    let path = tmp("sort.txt");
+    std::fs::write(&path, "b\na\nc\na\n").unwrap();
+
+    // ascending + unique -> a, b, c
+    let out = tmp("sort_out.txt");
+    let r = call(
+        office__text_sort,
+        &format!(r#"{{"path":"{path}","output":"{out}","unique":true}}"#),
+    );
+    assert_eq!(r["lines"], 3, "deduped to 3 lines: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(
+        t.lines().collect::<Vec<_>>(),
+        vec!["a", "b", "c"],
+        "sorted unique: {t:?}"
+    );
+
+    // descending (no unique) -> c, b, a, a
+    let outd = tmp("sort_d.txt");
+    call(
+        office__text_sort,
+        &format!(r#"{{"path":"{path}","output":"{outd}","descending":true}}"#),
+    );
+    let td = std::fs::read_to_string(&outd).unwrap();
+    assert_eq!(
+        td.lines().next().unwrap(),
+        "c",
+        "descending first is c: {td:?}"
+    );
+
+    for f in [&path, &out, &outd] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn replace_text_xlsx_strings() {
     let path = tmp("tmpl.xlsx");
     call(

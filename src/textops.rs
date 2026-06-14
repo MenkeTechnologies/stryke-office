@@ -387,3 +387,53 @@ fn op_text_stats(opts: Value) -> Result<Value> {
     let chars = text.chars().count();
     Ok(json!({ "lines": lines, "words": words, "chars": chars, "bytes": bytes }))
 }
+
+/// Sort the lines of a text file (`sort`/`uniq` in one). opts: path, output
+/// (default in place), descending (default false), numeric => compare as numbers
+/// (unparseable lines sort last), unique => drop duplicate lines, ignore_case =>
+/// fold case when comparing/deduping (default false). Returns
+/// `{ ok, path, lines }` (line count after sorting).
+fn op_text_sort(opts: Value) -> Result<Value> {
+    use std::cmp::Ordering;
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let descending = opts.get("descending").and_then(flag_of).unwrap_or(false);
+    let numeric = opts.get("numeric").and_then(flag_of).unwrap_or(false);
+    let unique = opts.get("unique").and_then(flag_of).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    let key = |s: &str| -> String {
+        if ignore_case {
+            s.to_lowercase()
+        } else {
+            s.to_string()
+        }
+    };
+    lines.sort_by(|a, b| {
+        let ord = if numeric {
+            let na = a.trim().parse::<f64>().unwrap_or(f64::INFINITY);
+            let nb = b.trim().parse::<f64>().unwrap_or(f64::INFINITY);
+            na.partial_cmp(&nb).unwrap_or(Ordering::Equal)
+        } else {
+            key(a).cmp(&key(b))
+        };
+        if descending {
+            ord.reverse()
+        } else {
+            ord
+        }
+    });
+    if unique {
+        lines.dedup_by(|a, b| key(a) == key(b));
+    }
+
+    let out = format!("{}\n", lines.join("\n"));
+    std::fs::write(&output, out)?;
+    Ok(json!({ "ok": true, "path": output, "lines": lines.len() }))
+}
