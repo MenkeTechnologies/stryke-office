@@ -7361,6 +7361,69 @@ fn op_slides_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "slides": n }))
 }
 
+/// Reorder (and/or subset) a deck's slides by a 1-based order list — the deck
+/// analogue of `pdf_reorder`. opts: path (pptx/odp), order => array of 1-based
+/// slide numbers in the desired order (slides omitted are dropped; required),
+/// output (default in place), format. Each slide's first text line becomes the
+/// title and the rest the body (speaker notes are not carried). Returns
+/// `{ ok, path, slides }`.
+fn op_slides_reorder(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let order: Vec<usize> = opts
+        .get("order")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing order (array of 1-based slide numbers)"))?
+        .iter()
+        .filter_map(|v| v.as_u64().map(|n| n as usize))
+        .collect();
+    if order.is_empty() {
+        return Err(anyhow!("order must list at least one slide"));
+    }
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let as_spec = |s: &Value| -> Value {
+        let text: Vec<String> = s
+            .get("text")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (title, body) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        json!({ "title": title, "body": body })
+    };
+    let out_slides: Vec<Value> = order
+        .iter()
+        .filter_map(|&n| slides.get(n.checked_sub(1)?).map(as_spec))
+        .collect();
+    if out_slides.is_empty() {
+        return Err(anyhow!("order referenced no existing slides"));
+    }
+
+    let n = out_slides.len();
+    let mut wopts = json!({ "path": output, "slides": out_slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": n }))
+}
+
 /// Split a deck into one file per slide (the presentation analogue of
 /// `doc_split`/`pdf_burst`). opts: path (pptx/odp), dir => output directory,
 /// format => extension override (default = source ext), prefix => file-name stem
@@ -7670,6 +7733,7 @@ export!(office__slides_add_image, op_slides_add_image);
 export!(office__slides_set_notes, op_slides_set_notes);
 export!(office__slides_add_text, op_slides_add_text);
 export!(office__slides_merge, op_slides_merge);
+export!(office__slides_reorder, op_slides_reorder);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);
 export!(office__slides_append, op_slides_append);
