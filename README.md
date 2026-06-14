@@ -169,6 +169,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_split($path, $dir, %opts)` | `{count, files}` | explode a workbook into one file per sheet; `format`/`prefix` opts |
 | `Office::sheet_chunk($path, $size, $dir, %opts)` | `{count, files}` | split rows into fixed-size chunks across files (header repeated) |
 | `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
+| `Office::sheet_top($path, $by, $output, %opts)` | `{rows}` | top-N rows by a column (sort + limit); `n`/`ascending` |
 | `Office::sheet_rename($path, $to, %opts)` | `{renamed}` | rename a sheet in a workbook; `from` selects which |
 | `Office::sheet_add($path, $name, %opts)` | `{sheets}` | add a new sheet to a workbook; `rows`/`position` opts |
 | `Office::sheet_remove($path, $sheet, %opts)` | `{removed, sheets}` | remove a sheet from a workbook (by name/index) |
