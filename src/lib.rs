@@ -9773,6 +9773,19 @@ fn op_sheet_replace(opts: Value) -> Result<Value> {
     let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
     let whole = opts.get("whole").and_then(flag_of).unwrap_or(false);
     let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let use_regex = opts.get("regex").and_then(flag_of).unwrap_or(false);
+    // `find` is a regex pattern when `regex => true`; `replace` then supports
+    // `$1`/`${name}` capture references (regex-crate substitution syntax).
+    let re = if use_regex {
+        Some(
+            regex::RegexBuilder::new(&find)
+                .case_insensitive(ignore_case)
+                .build()
+                .map_err(|e| anyhow!("bad regex: {e}"))?,
+        )
+    } else {
+        None
+    };
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -9813,7 +9826,13 @@ fn op_sheet_replace(opts: Value) -> Result<Value> {
                 continue;
             }
             if let Value::String(s) = cell {
-                if whole {
+                if let Some(re) = &re {
+                    let n = re.find_iter(s).count();
+                    if n > 0 {
+                        *s = re.replace_all(s, replace).into_owned();
+                        replaced += n;
+                    }
+                } else if whole {
                     let hit = if ignore_case {
                         s.eq_ignore_ascii_case(&find)
                     } else {

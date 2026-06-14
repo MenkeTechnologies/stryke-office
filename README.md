@@ -224,7 +224,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_add_column($path, $name, %opts)` | `{column}` | add a derived column: `value` constant or `concat` of columns |
 | `Office::sheet_totals($path, %opts)` | `{totals}` | append a totals row summing each numeric column; `label` opt |
 | `Office::sheet_subtotal($path, %opts)` | `{ok, path, groups}` | insert group-wise subtotal rows (Excel Data▸Subtotal); `group`/`value`/`agg`/`label`/`grand` opts (sort by group first) |
-| `Office::sheet_replace($path, $find, %opts)` | `{replaced}` | find/replace cell text (any format incl. csv); `ignore_case`/`whole`/`column` |
+| `Office::sheet_replace($path, $find, %opts)` | `{replaced}` | find/replace cell text (any format incl. csv); `ignore_case`/`whole`/`column`/`regex` (`$1` captures) |
 | `Office::sheet_transpose($path, $output, %opts)` | `{rows, columns}` | swap rows and columns |
 | `Office::sheet_dedupe($path, $output, %opts)` | `{kept, removed}` | drop duplicate rows; `by` key columns, `keep` first/last |
 | `Office::sheet_append($path, %opts)` | `{added, rows}` | append `rows` or header-mapped `records` to a sheet (in place by default) |

@@ -1375,6 +1375,17 @@ assert_eq $flr->{value}, 3, "tail => 1 honored (lenient bool): last row kept"
 unlink $flx
 unlink $flo
 
+# ── sheet_replace regex: capture-group reformat ─────────────────────
+val $rrx = "$dir/$tag-rxrepl.xlsx"
+Office::sheet_write($rrx, [{ name => "D", rows => [["phone"], ["555-1234"]] }])
+val $rro = "$dir/$tag-rxrepl-out.xlsx"
+val $rrr = Office::sheet_replace($rrx, '(\d{3})-(\d{4})', replace => '($1) $2', regex => 1, output => $rro)
+assert_eq $rrr->{replaced}, 1, "sheet_replace regex: one cell matched"
+val $rrb = Office::sheet_read($rro)
+assert_eq $rrb->[0]{rows}[1][0], "(555) 1234", "sheet_replace regex: capture reformat"
+unlink $rrx
+unlink $rro
+
 # ── sheet_npv: net present value of a cashflow column ───────────────
 val $npx = "$dir/$tag-npv.xlsx"
 Office::sheet_write($npx, [{ name => "C", rows => [["cf"], [100], [200], [300]] }])

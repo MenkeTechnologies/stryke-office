@@ -4128,6 +4128,35 @@ fn sheet_replace_values() {
 }
 
 #[test]
+fn sheet_replace_regex_captures() {
+    let path = tmp("rxrepl.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["phone"],["555-1234"],["867-5309"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // regex with capture-group substitution: reformat NNN-NNNN -> (NNN) NNNN
+    let out = tmp("rxrepl_out.xlsx");
+    let r = call(
+        office__sheet_replace,
+        &format!(
+            r#"{{"path":"{path}","find":"(\\d{{3}})-(\\d{{4}})","replace":"($1) $2","regex":true,"output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["replaced"].as_u64().unwrap(), 2, "two cells matched: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "(555) 1234", "capture reformat: {rd}");
+    assert_eq!(rows[2][0], "(867) 5309", "capture reformat 2: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_totals_row() {
     let path = tmp("tot.xlsx");
     let w = call(
