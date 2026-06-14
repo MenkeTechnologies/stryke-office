@@ -112,6 +112,7 @@ exports = [
     "office__sheet_add_header",
     "office__sheet_add_index",
     "office__sheet_calc",
+    "office__sheet_row_stats",
     "office__sheet_where",
     "office__sheet_freeze",
     "office__sheet_autofilter",

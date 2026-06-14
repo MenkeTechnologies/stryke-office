@@ -9635,6 +9635,116 @@ fn op_sheet_calc(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Row-wise reduction across several numeric columns into a new column
+/// (pandas `df[cols].agg(axis=1)`) — the horizontal counterpart to the
+/// column-wise `sheet_totals`/`sheet_stats`. opts: path, output, columns =>
+/// array of column names/indices (required), agg => `sum` (default) | `mean` |
+/// `min` | `max` | `count` | `product` | `range`, into => new column name
+/// (default `row_{agg}`), decimals => round, sheet, header (default true),
+/// format. Blank/non-numeric cells are skipped; a row with no numeric values
+/// yields blank (or 0 for count). Returns `{ ok, path, column }`.
+fn op_sheet_row_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("sum");
+    if !matches!(
+        agg,
+        "sum" | "mean" | "min" | "max" | "count" | "product" | "range"
+    ) {
+        return Err(anyhow!(
+            "unknown agg: {agg} (sum|mean|min|max|count|product|range)"
+        ));
+    }
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let cols: Vec<usize> = match opts.get("columns") {
+        Some(Value::Array(arr)) if !arr.is_empty() => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        _ => return Err(anyhow!("columns must be a non-empty array")),
+    };
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("row_{agg}"));
+
+    let round = |x: f64| -> f64 {
+        match decimals {
+            Some(d) => {
+                let f = 10f64.powi(d as i32);
+                (x * f).round() / f
+            }
+            None => x,
+        }
+    };
+    let reduce = |vals: &[f64]| -> Value {
+        if vals.is_empty() {
+            return if agg == "count" { json!(0) } else { json!("") };
+        }
+        let v = match agg {
+            "sum" => vals.iter().sum::<f64>(),
+            "mean" => vals.iter().sum::<f64>() / vals.len() as f64,
+            "min" => vals.iter().cloned().fold(f64::INFINITY, f64::min),
+            "max" => vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            "count" => vals.len() as f64,
+            "product" => vals.iter().product::<f64>(),
+            // range = max - min
+            _ => {
+                let mn = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+                let mx = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                mx - mn
+            }
+        };
+        json!(round(v))
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let vals: Vec<f64> = cols
+                .iter()
+                .filter_map(|&c| cells.get(c).and_then(sheet_cell_num))
+                .collect();
+            cells.push(reduce(&vals));
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Filter rows by multiple conditions (generalizes the single-predicate
 /// `sheet_filter`). opts: path, output, conditions => array of
 /// `{ column, op?, value, ignore_case? }` (op defaults to "eq"; see
@@ -13392,6 +13502,7 @@ export!(office__sheet_dropna, op_sheet_dropna);
 export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_add_index, op_sheet_add_index);
 export!(office__sheet_calc, op_sheet_calc);
+export!(office__sheet_row_stats, op_sheet_row_stats);
 export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);

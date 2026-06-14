@@ -229,6 +229,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_add_header($path, $names, $output, %opts)` | `{ok, path, columns}` | prepend a header row of column names (for headerless data) |
 | `Office::sheet_add_index($path, $output, %opts)` | `{ok, path, rows}` | prepend a sequential row-number column (row IDs); `name`/`start`/`step` opts |
 | `Office::sheet_calc($path, $left, $op, $output, %opts)` | `{ok, path, column}` | append a computed column (`+ - * / %`) between two columns or a column and `value`; `into` required |
+| `Office::sheet_row_stats($path, $columns, $output, %opts)` | `{ok, path, column}` | row-wise reduction across `columns` into a new column (pandas `df[cols].agg(axis=1)`); `agg` sum/mean/min/max/count/product/range |
 | `Office::sheet_split($path, $dir, %opts)` | `{count, files}` | explode a workbook into one file per sheet; `format`/`prefix` opts |
 | `Office::sheet_chunk($path, $size, $dir, %opts)` | `{count, files}` | split rows into fixed-size chunks across files (header repeated) |
 | `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
