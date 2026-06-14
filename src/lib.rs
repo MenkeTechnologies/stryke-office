@@ -2094,6 +2094,125 @@ fn op_sheet_to_md(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Emit SQL `INSERT` statements for a sheet's data rows (data migration / DB
+/// seeding). opts: path, table => target table name (required), output => write
+/// to a `.sql` file (omit to just return the text), sheet, header (default true;
+/// the header row supplies column names — otherwise generic `col1..`), columns =>
+/// override the column-name list, batch => rows per multi-row VALUES statement
+/// (default 1). Numeric cells are emitted bare, blanks as NULL, everything else
+/// single-quoted with `'` doubled. Returns `{ ok, statements, rows, sql, path? }`.
+fn op_sheet_to_sql(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let table = req_str(&opts, "table")?.to_string();
+    let batch = opts
+        .get("batch")
+        .and_then(Value::as_u64)
+        .filter(|&b| b >= 1)
+        .unwrap_or(1) as usize;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    if ncols == 0 {
+        return Err(anyhow!("sheet has no columns"));
+    }
+
+    // Column names: explicit override, else the header row, else col1..colN.
+    let columns: Vec<String> = match opts.get("columns").and_then(Value::as_array) {
+        Some(a) => a.iter().map(cell_to_string).collect(),
+        None if header && !rows.is_empty() => rows[0]
+            .as_array()
+            .map(|h| h.iter().map(cell_to_string).collect())
+            .unwrap_or_default(),
+        None => (1..=ncols).map(|i| format!("col{i}")).collect(),
+    };
+    let collist = columns
+        .iter()
+        .map(|c| format!("\"{}\"", c.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    // SQL literal for one cell: bare number, NULL for blank, else quoted string.
+    let sql_lit = |c: &Value| -> String {
+        if sheet_cell_blank(c) {
+            return "NULL".to_string();
+        }
+        match c {
+            Value::Number(n) => match n.as_f64() {
+                // Render whole-number floats without a trailing ".0".
+                Some(x) if x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+                _ => n.to_string(),
+            },
+            Value::Bool(b) => {
+                if *b {
+                    "TRUE".to_string()
+                } else {
+                    "FALSE".to_string()
+                }
+            }
+            _ => format!("'{}'", cell_to_string(c).replace('\'', "''")),
+        }
+    };
+
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+    let tuples: Vec<String> = data
+        .iter()
+        .map(|row| {
+            let vals: Vec<String> = (0..ncols)
+                .map(|c| {
+                    sql_lit(
+                        row.as_array()
+                            .and_then(|a| a.get(c))
+                            .unwrap_or(&Value::Null),
+                    )
+                })
+                .collect();
+            format!("({})", vals.join(", "))
+        })
+        .collect();
+
+    let mut statements: Vec<String> = Vec::new();
+    for chunk in tuples.chunks(batch) {
+        statements.push(format!(
+            "INSERT INTO \"{}\" ({}) VALUES {};",
+            table.replace('"', "\"\""),
+            collist,
+            chunk.join(", ")
+        ));
+    }
+    let sql = format!("{}\n", statements.join("\n"));
+
+    let mut out =
+        json!({ "ok": true, "statements": statements.len(), "rows": data.len(), "sql": sql });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, out["sql"].as_str().unwrap_or(""))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// Split one Markdown table row into trimmed cells, honoring `\|` escapes.
 fn split_md_row(line: &str) -> Vec<String> {
     let t = line.trim();
@@ -10828,6 +10947,7 @@ export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
+export!(office__sheet_to_sql, op_sheet_to_sql);
 export!(office__md_to_sheet, op_md_to_sheet);
 export!(office__sheet_to_html, op_sheet_to_html);
 export!(office__sheet_to_text, op_sheet_to_text);

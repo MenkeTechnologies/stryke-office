@@ -88,6 +88,12 @@ Office::sheet_write($xl, [{ name => "S", rows => [["Item", "Count"], ["apples", 
 val $md = Office::sheet_to_md($xl)
 assert_ok ($md->{markdown} =~ /\| Item \| Count \|/), "sheet_to_md: header row"
 
+# sheet_to_sql: INSERT statements
+val $sqlr = Office::sheet_to_sql($xl, "items")
+assert_eq $sqlr->{statements}, 1, "sheet_to_sql: one INSERT per data row"
+assert_ok ($sqlr->{sql} =~ /INSERT INTO "items"/), "sheet_to_sql: table name"
+assert_ok ($sqlr->{sql} =~ /'apples', 5/), "sheet_to_sql: string quoted, number bare"
+
 val $back = "$dir/$tag-md.xlsx"
 Office::md_to_sheet($back, markdown => "| A | B |\n| --- | --- |\n| 1 | 2 |")
 val $ms = Office::sheet_read($back)
