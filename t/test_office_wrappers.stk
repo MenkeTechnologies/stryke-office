@@ -316,6 +316,14 @@ val $asr = Office::sheet_autosize($gcx, output => $aso)
 assert_ok $asr->{ok}, "sheet_autosize: ok"
 assert_ok ($asr->{sheets} >= 1), "sheet_autosize: at least one sheet autofit"
 unlink $aso
+# sheet_comments: round-trip a cell note
+val $cmtx = "$dir/$tag-cmt.xlsx"
+Office::sheet_write($cmtx, [{ name => "D", rows => [["a"], [1]], notes => [{ row => 0, col => 0, text => "needs review", author => "Jane" }] }])
+val $cmtr = Office::sheet_comments($cmtx)
+assert_eq $cmtr->{count}, 1, "sheet_comments: one comment"
+assert_eq $cmtr->{comments}[0]{cell}, "A1", "sheet_comments: cell ref"
+assert_eq $cmtr->{comments}[0]{author}, "Jane", "sheet_comments: author"
+unlink $cmtx
 # sheet_round: clean float noise to N decimals
 val $rnx = "$dir/$tag-round.xlsx"
 Office::sheet_write($rnx, [{ name => "D", rows => [["a", "b"], [1.234, 5.678]] }])

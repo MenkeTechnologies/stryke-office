@@ -7022,6 +7022,100 @@ fn op_sheet_autosize(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sheets": n }))
 }
 
+/// Parse one `xl/comments*.xml` part: an `<authors>` list followed by a
+/// `<commentList>` of `<comment ref="A1" authorId="0">` whose `<text>` holds
+/// `<t>` runs. Returns `[{ cell, author, text }]`.
+fn extract_comments_xlsx(xml: &[u8]) -> Vec<Value> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    let mut authors: Vec<String> = Vec::new();
+    let mut out: Vec<Value> = Vec::new();
+    let mut in_authors = false;
+    let mut in_author = false;
+    let mut author_buf = String::new();
+    let mut in_comment = false;
+    let mut in_text = false;
+    let mut cell = String::new();
+    let mut author = String::new();
+    let mut text = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => match e.name().as_ref() {
+                b"authors" => in_authors = true,
+                b"author" if in_authors => {
+                    in_author = true;
+                    author_buf.clear();
+                }
+                b"comment" => {
+                    in_comment = true;
+                    text.clear();
+                    cell = attr(&e, b"ref").unwrap_or_default();
+                    author = attr(&e, b"authorId")
+                        .and_then(|i| i.parse::<usize>().ok())
+                        .and_then(|i| authors.get(i).cloned())
+                        .unwrap_or_default();
+                }
+                b"text" if in_comment => in_text = true,
+                _ => {}
+            },
+            Ok(Event::Text(e)) => {
+                if let Ok(t) = e.xml10_content() {
+                    if in_author {
+                        author_buf.push_str(&t);
+                    } else if in_text {
+                        text.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"authors" => in_authors = false,
+                b"author" => {
+                    in_author = false;
+                    authors.push(std::mem::take(&mut author_buf));
+                }
+                b"text" => in_text = false,
+                b"comment" => {
+                    in_comment = false;
+                    out.push(json!({
+                        "cell": std::mem::take(&mut cell),
+                        "author": std::mem::take(&mut author),
+                        "text": text.trim().to_string(),
+                    }));
+                }
+                _ => {}
+            },
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// Extract cell comments / notes from an xlsx (every `xl/comments*.xml` part).
+/// The read-side counterpart to writing the per-sheet `notes` key. opts: path.
+/// Returns `{ comments: [{cell, author, text}], count }` (empty when none).
+fn op_sheet_comments(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    if ext_of(path) != "xlsx" {
+        return Err(anyhow!("sheet_comments supports xlsx only"));
+    }
+    let bytes = std::fs::read(path)?;
+    let mut names: Vec<String> = zip_entry_names(&bytes)?
+        .into_iter()
+        .filter(|n| n.starts_with("xl/comments") && n.ends_with(".xml"))
+        .collect();
+    names.sort();
+    let mut comments: Vec<Value> = Vec::new();
+    for n in names {
+        if let Ok(xml) = read_zip_entry(&bytes, &n) {
+            comments.extend(extract_comments_xlsx(&xml));
+        }
+    }
+    Ok(json!({ "comments": comments, "count": comments.len() }))
+}
+
 /// Apply an autofilter (header dropdown filters) over a sheet's range (xlsx
 /// only). opts: path, output (default in place), range => `[r1,c1,r2,c2]`
 /// 0-based (default: the whole used range), sheet, format. Returns
@@ -9541,6 +9635,7 @@ export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_autosize, op_sheet_autosize);
+export!(office__sheet_comments, op_sheet_comments);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);
 export!(office__sheet_bin, op_sheet_bin);

@@ -3395,6 +3395,44 @@ fn sheet_autosize_sets_column_widths() {
 }
 
 #[test]
+fn sheet_comments_round_trip() {
+    // Write a note via the per-sheet `notes` key, then read it back.
+    let path = tmp("comments.xlsx");
+    let w = call(
+        office__sheet_write,
+        &serde_json::json!({
+            "path": path,
+            "sheets": [{
+                "name": "D",
+                "rows": [["a"], [1]],
+                "notes": [{ "row": 0, "col": 0, "text": "needs review", "author": "Jane" }]
+            }]
+        })
+        .to_string(),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_comments, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 1, "one comment: {r}");
+    let c = &r["comments"][0];
+    assert_eq!(c["cell"], "A1", "cell ref: {r}");
+    assert_eq!(c["author"], "Jane", "author: {r}");
+    assert!(
+        c["text"].as_str().unwrap().contains("needs review"),
+        "comment text: {r}"
+    );
+
+    // non-xlsx is rejected
+    let csv = tmp("c.csv");
+    std::fs::write(&csv, "a\n1\n").unwrap();
+    let err = call(office__sheet_comments, &format!(r#"{{"path":"{csv}"}}"#));
+    assert!(err["error"].is_string(), "csv rejected: {err}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&csv).ok();
+}
+
+#[test]
 fn sheet_round_decimals() {
     let path = tmp("round.xlsx");
     let w = call(
