@@ -2687,6 +2687,100 @@ fn op_sheet_delta(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Clamp a numeric column's values to a range (winsorize / cap outliers). opts:
+/// path, output, column => name or 0-based index (required), min and/or max =>
+/// bounds (at least one required), into => write to a new column with this header
+/// (default: clamp in place), sheet, header (default true), format. Non-numeric
+/// cells pass through unchanged. Returns `{ ok, path, clamped }` (count of values
+/// actually moved to a bound).
+fn op_sheet_clamp(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let min = opts.get("min").and_then(Value::as_f64);
+    let max = opts.get("max").and_then(Value::as_f64);
+    if min.is_none() && max.is_none() {
+        return Err(anyhow!("clamp needs at least one of min/max"));
+    }
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let clamp = |x: f64| -> f64 {
+        let mut y = x;
+        if let Some(lo) = min {
+            y = y.max(lo);
+        }
+        if let Some(hi) = max {
+            y = y.min(hi);
+        }
+        y
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut clamped = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).cloned().unwrap_or(Value::Null);
+            let result = match sheet_cell_num(&src) {
+                Some(x) => {
+                    let y = clamp(x);
+                    if y != x {
+                        clamped += 1;
+                    }
+                    json!(y)
+                }
+                None => src.clone(),
+            };
+            match &into {
+                Some(_) => cells.push(result),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = result;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = result;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "clamped": clamped }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -6976,6 +7070,7 @@ export!(office__sheet_pct, op_sheet_pct);
 export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_delta, op_sheet_delta);
+export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
