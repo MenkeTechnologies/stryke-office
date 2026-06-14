@@ -2742,7 +2742,23 @@ fn sheet_fill_blanks() {
     let rdv = call(office__sheet_read, &format!(r#"{{"path":"{outv}"}}"#));
     assert_eq!(rdv["sheets"][0]["rows"][2][0], "NA", "blank -> NA: {rdv}");
 
-    for f in [&path, &out, &outv] {
+    // bfill the region column: row2 blank (between west and east) -> "east"
+    let outb = tmp("fill_bf.xlsx");
+    let rb = call(
+        office__sheet_fill,
+        &format!(r#"{{"path":"{path}","by":"region","method":"bfill","output":"{outb}"}}"#),
+    );
+    // rows: header, west, "", east, "" -> the "" before east backfills; the
+    // trailing "" has no value below it, so only one blank fills.
+    assert_eq!(rb["filled"], 1, "bfill fills the inner blank: {rb}");
+    let rdb = call(office__sheet_read, &format!(r#"{{"path":"{outb}"}}"#));
+    let rowsb = rdb["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        rowsb[2][0], "east",
+        "inner blank backfilled from east: {rdb}"
+    );
+
+    for f in [&path, &out, &outv, &outb] {
         std::fs::remove_file(f).ok();
     }
 }

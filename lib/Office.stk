@@ -841,9 +841,10 @@ fn Office::sheet_split ($path, $dir, %opts) {
 }
 
 ## Fill blank cells. opts: method => "ffill" (default; carry the last non-blank
-## value down) | "value" (use a constant value => ...), by => column name/index
-## or arrayref (default: all columns), sheet, output (default: in place),
-## header => 0 if first row is data, format. Returns { ok, path, filled }.
+## value down) | "bfill" (carry the next non-blank value up) | "value" (use a
+## constant value => ...), by => column name/index or arrayref (default: all
+## columns), sheet, output (default: in place), header => 0 if first row is data,
+## format. Returns { ok, path, filled }.
 fn Office::sheet_fill ($path, %opts) {
     Office::_decode("sheet_fill",
         office__sheet_fill(to_json({ path => $path, method => $opts{method}, value => $opts{value}, by => $opts{by}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
