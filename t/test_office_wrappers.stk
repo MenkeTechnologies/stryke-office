@@ -1057,6 +1057,24 @@ assert_ok ($rbr->{removed} >= 1), "pdf_remove_blank: at least one blank page rem
 unlink $rbp
 unlink $rbo
 
+# ── pdf_extract: keep a page range into one file ────────────────────
+val $exp = "$dir/$tag-extract.pdf"
+Office::pdf_build($exp, [
+    { type => "heading", level => 1, text => "Alpha" },
+    { type => "pagebreak" },
+    { type => "heading", level => 1, text => "Bravo" },
+    { type => "pagebreak" },
+    { type => "heading", level => 1, text => "Charlie" },
+])
+val $exo = "$dir/$tag-extract-out.pdf"
+val $exr = Office::pdf_extract($exp, "1,3", $exo)
+assert_eq $exr->{pages}, 2, "pdf_extract: two pages from spec"
+val $ext = Office::pdf_read($exo)
+assert_ok ($ext->{text} =~ /Alpha/), "pdf_extract: kept Alpha"
+assert_ok (!($ext->{text} =~ /Bravo/)), "pdf_extract: dropped Bravo"
+unlink $exp
+unlink $exo
+
 # ── pdf_split_bookmarks ─────────────────────────────────────────────
 val $bmp = "$dir/$tag-bm.pdf"
 Office::pdf_build($bmp, [

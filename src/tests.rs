@@ -9073,6 +9073,72 @@ fn pdf_delete_and_reorder_pages() {
 }
 
 #[test]
+fn pdf_extract_page_spec() {
+    let src = tmp("ext.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Alpha"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Bravo"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Charlie"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Delta"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // range-spec string "1,3-4" -> Alpha, Charlie, Delta (3 pages, in order)
+    let out = tmp("ext_str.pdf");
+    let r = call(
+        office__pdf_extract,
+        &format!(r#"{{"path":"{src}","pages":"1,3-4","output":"{out}"}}"#),
+    );
+    assert_eq!(r["pages"], 3, "three pages extracted: {r}");
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let txt = rd["text"].as_str().unwrap_or("");
+    let (ia, ic, id, ib) = (
+        txt.find("Alpha"),
+        txt.find("Charlie"),
+        txt.find("Delta"),
+        txt.find("Bravo"),
+    );
+    assert!(ib.is_none(), "Bravo excluded: {txt:?}");
+    assert!(
+        ia.is_some() && ia < ic && ic < id,
+        "order Alpha<Charlie<Delta: {txt:?}"
+    );
+
+    // descending range "4-3" -> Delta then Charlie via array form equivalence
+    let out2 = tmp("ext_desc.pdf");
+    call(
+        office__pdf_extract,
+        &format!(r#"{{"path":"{src}","pages":"4-3","output":"{out2}"}}"#),
+    );
+    let rd2 = call(office__pdf_read, &format!(r#"{{"path":"{out2}"}}"#));
+    let t2 = rd2["text"].as_str().unwrap_or("");
+    assert!(
+        t2.find("Delta") < t2.find("Charlie"),
+        "descending range Delta<Charlie: {t2:?}"
+    );
+
+    // array form also works
+    let out3 = tmp("ext_arr.pdf");
+    let r3 = call(
+        office__pdf_extract,
+        &format!(r#"{{"path":"{src}","pages":[2],"output":"{out3}"}}"#),
+    );
+    assert_eq!(r3["pages"], 1, "array form single page: {r3}");
+
+    for f in [&src, &out, &out2, &out3] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_search_finds_text_per_page() {
     let src = tmp("search.pdf");
     let b = call(

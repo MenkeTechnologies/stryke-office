@@ -656,6 +656,59 @@ fn op_pdf_delete(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": out, "pages": doc.get_pages().len()}))
 }
 
+/// Parse a page selection — either a JSON array of 1-based numbers or a human
+/// range spec string like "1-3,5,8-10". Ascending and descending ranges are both
+/// honored ("3-1" → 3,2,1); whitespace is ignored. Order and repeats are
+/// preserved (no dedup/sort) so callers can extract pages in any sequence.
+fn pdf_parse_page_spec(v: &Value) -> Result<Vec<u32>> {
+    match v {
+        Value::Array(arr) => Ok(arr.iter().filter_map(|x| x.as_u64().map(|n| n as u32)).collect()),
+        Value::String(s) => {
+            let mut out = Vec::new();
+            for tok in s.split(',') {
+                let tok = tok.trim();
+                if tok.is_empty() {
+                    continue;
+                }
+                if let Some((a, b)) = tok.split_once('-') {
+                    let a: u32 = a.trim().parse().map_err(|_| anyhow!("bad range: {tok}"))?;
+                    let b: u32 = b.trim().parse().map_err(|_| anyhow!("bad range: {tok}"))?;
+                    if a <= b {
+                        out.extend(a..=b);
+                    } else {
+                        out.extend((b..=a).rev());
+                    }
+                } else {
+                    out.push(tok.parse().map_err(|_| anyhow!("bad page: {tok}"))?);
+                }
+            }
+            Ok(out)
+        }
+        _ => Err(anyhow!("pages must be an array or a range-spec string")),
+    }
+}
+
+/// Extract a subset of pages into a single new PDF, in the order requested — the
+/// "keep only these pages" complement to `pdf_delete` (which removes) and the
+/// single-file counterpart to `pdf_split_ranges` (which emits many files). opts:
+/// path => input, output => path, pages => array of 1-based page numbers OR a
+/// range-spec string like "1-3,5,8-10" (ascending/descending ranges and repeats
+/// honored). Page order follows the spec. Returns `{ ok, path, pages }`.
+fn op_pdf_extract(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let order = pdf_parse_page_spec(
+        opts.get("pages")
+            .ok_or_else(|| anyhow!("missing pages (array or range-spec string)"))?,
+    )?;
+    if order.is_empty() {
+        return Err(anyhow!("no pages selected"));
+    }
+    // Delegate to the page-tree reparent logic in pdf_reorder, which already
+    // subsets, reorders, and bakes MediaBoxes for a self-contained output.
+    op_pdf_reorder(json!({ "path": path, "output": out, "order": order }))
+}
+
 /// Remove pages whose extracted text is empty (clean scanned spacers / blank
 /// leaves). opts: path => input, output => path. NOTE: a page is "blank" only by
 /// its *text* layer — an image-only page has no text and will be dropped, so use

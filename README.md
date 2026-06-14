@@ -369,6 +369,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_decrypt($path, $output, %opts)` | `{path}` | strip protection given `password` (owner or user) |
 | `Office::pdf_compress($path, $output)` | `{before, after, saved}` | prune unused objects + deflate streams; reports byte savings |
 | `Office::pdf_delete($path, $pages, $output)` | `{pages}` | remove 1-based pages; returns remaining count |
+| `Office::pdf_extract($path, $pages, $output)` | `{ok, path, pages}` | keep only the selected pages into one PDF; `pages` array or range-spec string `"1-3,5,8-10"` (spec order) |
 | `Office::pdf_remove_blank($path, $output)` | `{ok, path, removed, pages}` | remove pages whose extracted text is empty (text PDFs; never empties the doc) |
 | `Office::pdf_reorder($path, $order, $output)` | `{pages}` | reorder/subset/repeat pages by a 1-based `order` list |
 | `Office::pdf_attach($path, $file, $output, %opts)` | `{name, size, count}` | embed a file (EmbeddedFiles name tree); `name` overrides basename |
