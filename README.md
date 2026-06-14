@@ -258,6 +258,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_split($path, $dir, %opts)` | `{count, files}` | split a deck into one file per slide; `prefix`/`format` opts |
 | `Office::slides_reorder($path, $order, %opts)` | `{ok, path, slides}` | reorder/subset slides by a 1-based order list (deck analogue of `pdf_reorder`) |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |
+| `Office::text_grep($path, $query, %opts)` | `{count, matches:[{line, text}]}` | grep matching lines from a text file; `ignore_case`/`invert`/`max` opts |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}`; opts `header`/`footer`/`page_numbers`/`page_size` |
 | `Office::slides_read($path)` | arrayref of `{text => [...], notes => [...]}` | pptx/odp; `notes` = speaker notes |

@@ -8404,6 +8404,37 @@ fn text_replace_plain_file() {
 }
 
 #[test]
+fn text_grep_matches_lines() {
+    let path = tmp("grep.txt");
+    std::fs::write(&path, "alpha\nbeta FOO\ngamma\nfoo bar\n").unwrap();
+
+    // literal, case-sensitive: only "foo bar"
+    let r = call(
+        office__text_grep,
+        &format!(r#"{{"path":"{path}","query":"foo"}}"#),
+    );
+    assert_eq!(r["count"], 1, "one case-sensitive match: {r}");
+    assert_eq!(r["matches"][0]["line"], 4, "1-based line: {r}");
+    assert_eq!(r["matches"][0]["text"], "foo bar", "matched text: {r}");
+
+    // ignore_case: "beta FOO" and "foo bar"
+    let ci = call(
+        office__text_grep,
+        &format!(r#"{{"path":"{path}","query":"foo","ignore_case":true}}"#),
+    );
+    assert_eq!(ci["count"], 2, "two case-insensitive matches: {ci}");
+
+    // invert: lines NOT containing "a" -> none? "foo bar" has no 'a'? it has 'a' in bar. all have a except...
+    let inv = call(
+        office__text_grep,
+        &format!(r#"{{"path":"{path}","query":"foo","invert":true}}"#),
+    );
+    assert_eq!(inv["count"], 3, "three non-matching lines: {inv}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn replace_text_xlsx_strings() {
     let path = tmp("tmpl.xlsx");
     call(

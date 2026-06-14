@@ -12,6 +12,16 @@ use Office
 val $dir = $ENV{TMPDIR} // "/tmp"
 val $tag = "stryke-office-wrap-$$"
 
+# ── text_grep: line search over a text file (built via sheet_to_text) ─
+val $grx = "$dir/$tag-grep.xlsx"
+Office::sheet_write($grx, [{ name => "D", rows => [["name"], ["apple"], ["banana"]] }])
+val $grt = "$dir/$tag-grep.txt"
+Office::sheet_to_text($grx, output => $grt)
+val $grr = Office::text_grep($grt, "banana")
+assert_eq $grr->{count}, 1, "text_grep: one matching line"
+unlink $grx
+unlink $grt
+
 # ── replace_text: hashref { find => replacement } across a docx ──────
 val $docx = "$dir/$tag.docx"
 Office::doc_write($docx, [{ kind => "para", text => "Hello NAME" }])

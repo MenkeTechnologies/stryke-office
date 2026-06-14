@@ -151,6 +151,7 @@ exports = [
     "office__replace_text",
     "office__mail_merge",
     "office__text_replace",
+    "office__text_grep",
     "office__doc_tables",
     "office__doc_table_to_sheet",
     "office__sheet_to_doc",
