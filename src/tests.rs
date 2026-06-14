@@ -1447,6 +1447,74 @@ fn sheet_freq_value_counts() {
 }
 
 #[test]
+fn sheet_split_column_text_to_columns() {
+    let path = tmp("splitcol.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","age"],
+                ["Doe, John",30],
+                ["Smith, Jane",25]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // Split "name" by ", " into last/first, replacing the original column.
+    let out = tmp("splitcol_out.xlsx");
+    let r = call(
+        office__sheet_split_column,
+        &serde_json::json!({
+            "path": path, "column": "name", "delimiter": ", ",
+            "into": ["last", "first"], "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["columns"], 2, "two new columns: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // header: last, first, age (original "name" replaced, trailing "age" kept)
+    assert_eq!(rows[0][0], "last", "first new header: {rd}");
+    assert_eq!(rows[0][1], "first", "second new header: {rd}");
+    assert_eq!(rows[0][2], "age", "trailing column preserved: {rd}");
+    assert_eq!(rows[1][0], "Doe", "row1 last: {rd}");
+    assert_eq!(rows[1][1], "John", "row1 first (trimmed): {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 30.0, "row1 age intact: {rd}");
+    assert_eq!(rows[2][0], "Smith", "row2 last: {rd}");
+
+    // Auto-named, uneven widths padded with blanks.
+    let p2 = tmp("splitcol2.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{p2}","sheets":[{{"name":"D","rows":[["tag"],["a-b-c"],["x-y"]]}}]}}"#
+        ),
+    );
+    let o2 = tmp("splitcol2_out.xlsx");
+    let r2 = call(
+        office__sheet_split_column,
+        &serde_json::json!({ "path": p2, "column": "tag", "delimiter": "-", "output": o2 })
+            .to_string(),
+    );
+    assert_eq!(r2["columns"], 3, "widest split = 3: {r2}");
+    let rd2 = call(office__sheet_read, &format!(r#"{{"path":"{o2}"}}"#));
+    let rows2 = rd2["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows2[0][0], "tag_1", "auto header: {rd2}");
+    assert_eq!(rows2[2][1], "y", "short row part: {rd2}");
+    // padded blank round-trips through xlsx as an empty/null cell
+    assert_eq!(
+        rows2[2][2].as_str().unwrap_or(""),
+        "",
+        "short row padded blank: {rd2}"
+    );
+
+    for f in [&path, &out, &p2, &o2] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(
