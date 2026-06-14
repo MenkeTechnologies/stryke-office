@@ -2051,6 +2051,46 @@ fn op_img_compare(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Perceptual hash (dHash) of an image — a 64-bit fingerprint robust to scaling
+/// and minor edits, for near-duplicate detection and similarity. The image is
+/// reduced to 9×8 grayscale and each pixel compared to its right neighbor (one
+/// bit per comparison). opts: handle (required), other => a second image handle;
+/// when given, also returns the Hamming `distance` (0–64) and `similarity`
+/// (1 − distance/64). Returns `{ hash, bits, other_hash?, distance?, similarity? }`
+/// where hashes are 16-char hex strings.
+fn op_img_phash(opts: Value) -> Result<Value> {
+    let dhash = |img: &image::RgbaImage| -> u64 {
+        let small =
+            image::imageops::resize(img, 9, 8, image::imageops::FilterType::Triangle);
+        let lum = |p: &image::Rgba<u8>| {
+            0.299 * p.0[0] as f64 + 0.587 * p.0[1] as f64 + 0.114 * p.0[2] as f64
+        };
+        let mut bits = 0u64;
+        let mut idx = 0;
+        for y in 0..8u32 {
+            for x in 0..8u32 {
+                if lum(small.get_pixel(x, y)) < lum(small.get_pixel(x + 1, y)) {
+                    bits |= 1 << idx;
+                }
+                idx += 1;
+            }
+        }
+        bits
+    };
+
+    let h = req_u64_img(&opts, "handle")?;
+    let bits = dhash(&rgba_of(h)?);
+    let mut out = json!({ "hash": format!("{bits:016x}"), "bits": 64 });
+    if let Some(other) = opts.get("other").and_then(Value::as_u64) {
+        let ob = dhash(&rgba_of(other)?);
+        let dist = (bits ^ ob).count_ones();
+        out["other_hash"] = json!(format!("{ob:016x}"));
+        out["distance"] = json!(dist);
+        out["similarity"] = json!(1.0 - dist as f64 / 64.0);
+    }
+    Ok(out)
+}
+
 /// Measure rendered text. opts: size (16), font. Returns `{width, height}`.
 fn op_img_text_size(opts: Value) -> Result<Value> {
     use ab_glyph::{FontRef, PxScale};

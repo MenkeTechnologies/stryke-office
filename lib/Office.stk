@@ -2666,6 +2666,13 @@ fn Office::img_compare ($handle, $other, %opts) {
     Office::_decode("img_compare", office__img_compare(to_json({ handle => $handle, other => $other, diff => $opts{diff} })))
 }
 
+## Perceptual hash (dHash) of an image handle for near-duplicate detection.
+## opts: other => second handle to also get { distance, similarity }. Returns
+## { hash, bits, other_hash?, distance?, similarity? } (hash is 16-char hex).
+fn Office::img_phash ($handle, %opts) {
+    Office::_decode("img_phash", office__img_phash(to_json({ handle => $handle, other => $opts{other} })))
+}
+
 ## Measure rendered text. opts: size (16), font. Returns { width, height }.
 fn Office::img_text_size ($text, %opts) {
     Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))

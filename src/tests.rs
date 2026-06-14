@@ -10837,6 +10837,62 @@ fn image_shapes_fills_masks_analysis() {
 }
 
 #[test]
+fn image_phash_dedup() {
+    // a horizontal gradient (textured) vs a flat image -> different hashes
+    let g = call(
+        office__img_new,
+        r#"{"width":64,"height":64,"color":[0,0,0,255]}"#,
+    );
+    let gh = g["handle"].as_u64().unwrap();
+    call(
+        office__img_gradient,
+        &format!(
+            r#"{{"handle":{gh},"kind":"linear","angle":0,"from":[0,0,0,255],"to":[255,255,255,255]}}"#
+        ),
+    );
+    let flat = call(
+        office__img_new,
+        r#"{"width":64,"height":64,"color":[128,128,128,255]}"#,
+    );
+    let fh = flat["handle"].as_u64().unwrap();
+
+    // self-distance is 0, similarity 1
+    let self_h = call(
+        office__img_phash,
+        &format!(r#"{{"handle":{gh},"other":{gh}}}"#),
+    );
+    assert_eq!(
+        self_h["distance"].as_u64().unwrap(),
+        0,
+        "self distance 0: {self_h}"
+    );
+    assert_eq!(
+        self_h["similarity"].as_f64().unwrap(),
+        1.0,
+        "self similarity 1: {self_h}"
+    );
+    // hash is a 16-char hex string
+    assert_eq!(
+        self_h["hash"].as_str().unwrap().len(),
+        16,
+        "16-char hex: {self_h}"
+    );
+
+    // gradient vs flat differ
+    let cross = call(
+        office__img_phash,
+        &format!(r#"{{"handle":{gh},"other":{fh}}}"#),
+    );
+    assert!(
+        cross["distance"].as_u64().unwrap() > 0,
+        "different images differ: {cross}"
+    );
+
+    call(office__img_close, &format!(r#"{{"handle":{gh}}}"#));
+    call(office__img_close, &format!(r#"{{"handle":{fh}}}"#));
+}
+
+#[test]
 fn image_color_science_and_distortions() {
     let n = call(
         office__img_new,
