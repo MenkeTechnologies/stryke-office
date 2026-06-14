@@ -6268,16 +6268,20 @@ fn op_sheet_unpivot(opts: Value) -> Result<Value> {
 
 /// Join two spreadsheets on a key column (SQL JOIN). opts: left, right (paths),
 /// output, on => shared key field name (or left_on + right_on), how =>
-/// "inner" (default) | "left", left_sheet / right_sheet => name/index, format.
-/// Output columns are the left fields then the right fields (the right key is
-/// dropped; colliding right names get a `_right` suffix). Returns
-/// `{ ok, path, rows, matched }`.
+/// "inner" (default) | "left" | "right" | "outer", left_sheet / right_sheet =>
+/// name/index, format. Output columns are the left fields then the right fields
+/// (the right key is dropped; colliding right names get a `_right` suffix). For
+/// right/outer joins, unmatched right rows carry the join key into the left key
+/// column with the other left fields blank. Returns `{ ok, path, rows, matched }`.
 fn op_sheet_join(opts: Value) -> Result<Value> {
     use std::collections::{HashMap, HashSet};
     let left = req_str(&opts, "left")?;
     let right = req_str(&opts, "right")?;
     let output = req_str(&opts, "output")?.to_string();
     let how = opts.get("how").and_then(Value::as_str).unwrap_or("inner");
+    if !matches!(how, "inner" | "left" | "right" | "outer") {
+        return Err(anyhow!("unknown how: {how} (inner|left|right|outer)"));
+    }
     let on = opts.get("on").and_then(Value::as_str);
     let left_on = opts
         .get("left_on")
@@ -6307,12 +6311,13 @@ fn op_sheet_join(opts: Value) -> Result<Value> {
     let lrecs = lr["records"].as_array().unwrap_or(&empty);
     let rrecs = rr["records"].as_array().unwrap_or(&empty);
 
-    // Index right records by key value.
-    let mut idx: HashMap<String, Vec<&Value>> = HashMap::new();
-    for r in rrecs {
+    // Index right records (by position) by key value.
+    let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, r) in rrecs.iter().enumerate() {
         let k = cell_to_string(r.get(right_on).unwrap_or(&Value::Null));
-        idx.entry(k).or_default().push(r);
+        idx.entry(k).or_default().push(i);
     }
+    let mut matched_right: HashSet<usize> = HashSet::new();
     // Right output columns (drop the key; rename collisions).
     let lset: HashSet<&str> = lfields.iter().map(String::as_str).collect();
     let right_extra: Vec<(String, String)> = rfields
@@ -6341,9 +6346,11 @@ fn op_sheet_join(opts: Value) -> Result<Value> {
     for lrec in lrecs {
         let k = cell_to_string(lrec.get(left_on).unwrap_or(&Value::Null));
         match idx.get(&k) {
-            Some(rs) => {
-                for r in rs {
+            Some(ris) => {
+                for &ri in ris {
                     matched += 1;
+                    matched_right.insert(ri);
+                    let r = &rrecs[ri];
                     let mut row = left_vals(lrec);
                     row.extend(
                         right_extra
@@ -6353,12 +6360,33 @@ fn op_sheet_join(opts: Value) -> Result<Value> {
                     out_rows.push(Value::Array(row));
                 }
             }
-            None if how == "left" => {
+            None if how == "left" || how == "outer" => {
                 let mut row = left_vals(lrec);
                 row.extend(right_extra.iter().map(|_| Value::Null));
                 out_rows.push(Value::Array(row));
             }
             None => {}
+        }
+    }
+
+    // right / outer: emit unmatched right records (left columns blank; the join
+    // key is carried into the left key column so it isn't lost).
+    if how == "right" || how == "outer" {
+        let left_key_pos = lfields.iter().position(|f| f == left_on);
+        for (ri, r) in rrecs.iter().enumerate() {
+            if matched_right.contains(&ri) {
+                continue;
+            }
+            let mut row: Vec<Value> = vec![Value::Null; lfields.len()];
+            if let Some(p) = left_key_pos {
+                row[p] = r.get(right_on).cloned().unwrap_or(Value::Null);
+            }
+            row.extend(
+                right_extra
+                    .iter()
+                    .map(|(_, src)| r.get(src).cloned().unwrap_or(Value::Null)),
+            );
+            out_rows.push(Value::Array(row));
         }
     }
 
