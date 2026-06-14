@@ -4953,6 +4953,57 @@ fn doc_to_html_structured() {
 }
 
 #[test]
+fn doc_diff_paragraph_lcs() {
+    // A: P1, P2, P3   B: P1, P2-changed, P3, P4
+    let a = tmp("diff_a.docx");
+    let wa = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{a}","blocks":[
+                {{"kind":"para","text":"alpha"}},
+                {{"kind":"para","text":"beta"}},
+                {{"kind":"para","text":"gamma"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(wa["ok"], true, "write a: {wa}");
+    let b = tmp("diff_b.docx");
+    let wb = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{b}","blocks":[
+                {{"kind":"para","text":"alpha"}},
+                {{"kind":"para","text":"beta-edited"}},
+                {{"kind":"para","text":"gamma"}},
+                {{"kind":"para","text":"delta"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(wb["ok"], true, "write b: {wb}");
+
+    let r = call(office__doc_diff, &format!(r#"{{"a":"{a}","b":"{b}"}}"#));
+    // alpha + gamma are common; beta removed; beta-edited + delta added.
+    assert_eq!(r["same"], 2, "two common paragraphs: {r}");
+    assert_eq!(r["removed"], 1, "one removed: {r}");
+    assert_eq!(r["added"], 2, "two added: {r}");
+    assert_eq!(r["removed_paragraphs"][0], "beta", "removed text: {r}");
+    let added: Vec<String> = r["added_paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        added.contains(&"beta-edited".to_string()),
+        "added beta-edited: {r}"
+    );
+    assert!(added.contains(&"delta".to_string()), "added delta: {r}");
+
+    std::fs::remove_file(&a).ok();
+    std::fs::remove_file(&b).ok();
+}
+
+#[test]
 fn doc_to_md_structured() {
     let dx = tmp("tomd.docx");
     let w = call(

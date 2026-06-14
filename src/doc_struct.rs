@@ -1730,6 +1730,75 @@ fn op_doc_append(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "blocks": total, "added": added }))
 }
 
+/// The non-empty paragraphs of a readable document as a `Vec<String>`.
+fn doc_paragraphs(path: &str) -> Result<Vec<String>> {
+    Ok(op_doc_read(json!({ "path": path }))?
+        .get("paragraphs")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| p.as_str().map(str::to_string))
+                .filter(|s| !s.trim().is_empty())
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Compare two documents paragraph-by-paragraph via a longest-common-subsequence
+/// diff (order-aware, like `diff(1)` on lines). opts: a, b (paths). Returns
+/// `{ same, added, removed, added_paragraphs, removed_paragraphs }` where `added`
+/// counts paragraphs present in B but not A and `removed` the reverse; `same` is
+/// the count of unchanged paragraphs (the LCS length).
+fn op_doc_diff(opts: Value) -> Result<Value> {
+    let a_path = req_str(&opts, "a")?;
+    let b_path = req_str(&opts, "b")?;
+    let a = doc_paragraphs(a_path)?;
+    let b = doc_paragraphs(b_path)?;
+
+    // LCS DP table: dp[i][j] = LCS length of a[i..], b[j..].
+    let (n, m) = (a.len(), b.len());
+    let mut dp = vec![vec![0usize; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[i][j] = if a[i] == b[j] {
+                dp[i + 1][j + 1] + 1
+            } else {
+                dp[i + 1][j].max(dp[i][j + 1])
+            };
+        }
+    }
+
+    // Backtrack to classify each paragraph as same / removed (only in A) /
+    // added (only in B), preserving document order.
+    let (mut i, mut j) = (0, 0);
+    let mut same = 0u64;
+    let mut removed: Vec<String> = Vec::new();
+    let mut added: Vec<String> = Vec::new();
+    while i < n && j < m {
+        if a[i] == b[j] {
+            same += 1;
+            i += 1;
+            j += 1;
+        } else if dp[i + 1][j] >= dp[i][j + 1] {
+            removed.push(a[i].clone());
+            i += 1;
+        } else {
+            added.push(b[j].clone());
+            j += 1;
+        }
+    }
+    removed.extend(a[i..].iter().cloned());
+    added.extend(b[j..].iter().cloned());
+
+    Ok(json!({
+        "same": same,
+        "removed": removed.len(),
+        "added": added.len(),
+        "removed_paragraphs": removed,
+        "added_paragraphs": added,
+    }))
+}
+
 /// Split a document into multiple files at headings of a given level. opts:
 /// path, dir => output directory, level => heading level to split at (default
 /// 1), format => output extension (default: the source's), prefix => filename

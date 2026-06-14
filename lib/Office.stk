@@ -1039,6 +1039,13 @@ fn Office::doc_merge ($inputs, $output, %opts) {
         office__doc_merge(to_json({ inputs => $inputs, output => $output, page_breaks => $opts{page_breaks}, format => $opts{format} })))
 }
 
+## Compare two documents paragraph-by-paragraph (order-aware LCS diff). Returns
+## { same, added, removed, added_paragraphs, removed_paragraphs }.
+fn Office::doc_diff ($a, $b) {
+    Office::_decode("doc_diff",
+        office__doc_diff(to_json({ a => $a, b => $b })))
+}
+
 ## Write a document. $blocks is an arrayref of blocks:
 ##   { kind => "para"|"heading", level, align, text }  (or runs => [{text, bold, ...}])
 ##   { kind => "list", ordered => 1|0, items => [str, ...] }   # numbered/bulleted (docx)
