@@ -1576,6 +1576,14 @@ fn Office::doc_sentences ($path, %opts) {
         office__doc_sentences(to_json({ path => $path, max => $opts{max} })))
 }
 
+## Extractive summary: top-scoring sentences by content-word frequency, in
+## original order. opts: sentences (count, default 3). Returns { ok, summary,
+## count, total_sentences }.
+fn Office::doc_summary ($path, %opts) {
+    Office::_decode("doc_summary",
+        office__doc_summary(to_json({ path => $path, sentences => $opts{sentences} })))
+}
+
 ## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts: regex
 ## (treat query as a regex), ignore_case => 1. Returns { count, matches =>
 ## [{ paragraph, count, snippet }] } with 1-based paragraph indexes.
