@@ -252,6 +252,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_shift($path, $column, $output, %opts)` | `{ok, path, column}` | append a shifted (lag/lead) copy of a column (pandas `Series.shift`); `periods`/`fill`/`into` opts |
 | `Office::sheet_clamp($path, $column, $output, %opts)` | `{ok, path, clamped}` | clamp a numeric column to a range (cap outliers); `min`/`max`/`into` opts |
 | `Office::sheet_rename_column($path, $column, $to, $output, %opts)` | `{ok, path, column}` | rename a column's header (not the sheet tab); `sheet`/`format` opts |
+| `Office::sheet_rename_columns($path, $output, $map, %opts)` | `{ok, path, renamed}` | bulk-rename headers via a `{old=>new}` map |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_outline($path)` | `{outline:[{level,text}], count}` | heading outline of a docx/odt (document analogue of pdf_outline) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |

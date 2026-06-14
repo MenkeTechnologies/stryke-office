@@ -286,6 +286,13 @@ fn Office::sheet_rename_column ($path, $column, $to, $output, %opts) {
         office__sheet_rename_column(to_json({ path => $path, column => $column, to => $to, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Bulk-rename headers via a $map of { old => new } (multi-column rename). opts:
+## sheet, header, format. Returns { ok, path, renamed }.
+fn Office::sheet_rename_columns ($path, $output, $map, %opts) {
+    Office::_decode("sheet_rename_columns",
+        office__sheet_rename_columns(to_json({ path => $path, output => $output, map => $map, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Explode a delimited column into multiple rows (SQL unnest; inverse of
 ## group_concat). opts: sep, trim, sheet, header, format. Returns { ok, path, rows }.
 fn Office::sheet_explode ($path, $column, $output, %opts) {

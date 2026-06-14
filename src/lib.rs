@@ -3969,6 +3969,51 @@ fn op_sheet_rename_column(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": to }))
 }
 
+/// Bulk-rename header columns via a `{ old: new }` map (the multi-column form of
+/// `sheet_rename_column`). opts: path, output, map => object of old-header => new
+/// header (required), sheet, header (default true), format. Header cells whose
+/// text is a key in the map are renamed; others are left as-is. Returns
+/// `{ ok, path, renamed }` (count of headers changed).
+fn op_sheet_rename_columns(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let map = opts
+        .get("map")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("missing map (expected an object of old => new)"))?
+        .clone();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let mut renamed = 0u64;
+    if let Some(hr) = rows.first_mut().and_then(|r| r.as_array_mut()) {
+        for cell in hr.iter_mut() {
+            if let Some(new) = map.get(&cell_to_string(cell)) {
+                *cell = new.clone();
+                renamed += 1;
+            }
+        }
+    }
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "renamed": renamed }))
+}
+
 /// Explode a column of delimited values into multiple rows (SQL `unnest`; the
 /// inverse of `group_concat`). Each data row is repeated once per split value,
 /// with the other columns duplicated. opts: path, output, column => name or
@@ -10239,6 +10284,7 @@ export!(office__sheet_pct_change, op_sheet_pct_change);
 export!(office__sheet_shift, op_sheet_shift);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
+export!(office__sheet_rename_columns, op_sheet_rename_columns);
 export!(office__sheet_explode, op_sheet_explode);
 export!(office__sheet_map, op_sheet_map);
 export!(office__sheet_partition, op_sheet_partition);

@@ -1170,6 +1170,36 @@ fn sheet_rename_column_header() {
 }
 
 #[test]
+fn sheet_rename_columns_bulk() {
+    let path = tmp("rencols.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b","c"],[1,2,3]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("rencols_out.xlsx");
+    let r = call(
+        office__sheet_rename_columns,
+        &serde_json::json!({
+            "path": path, "output": out,
+            "map": { "a": "id", "c": "total", "missing": "x" }
+        })
+        .to_string(),
+    );
+    // only a and c exist -> 2 renamed (missing key ignored)
+    assert_eq!(r["renamed"], 2, "two headers renamed: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "id", "a -> id: {rd}");
+    assert_eq!(rows[0][1], "b", "b unchanged: {rd}");
+    assert_eq!(rows[0][2], "total", "c -> total: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_explode_delimited_column() {
     let path = tmp("explode.xlsx");
     let w = call(
