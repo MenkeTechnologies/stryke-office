@@ -830,6 +830,47 @@ fn sheet_group_pct_share_within_group() {
 }
 
 #[test]
+fn sheet_running_per_group() {
+    let path = tmp("running.xlsx");
+    // west: 10, then +30 = 40 ; east: 5 (independent running total)
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["east",5],
+                ["west",30]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("running_out.xlsx");
+    let r = call(
+        office__sheet_running,
+        &format!(r#"{{"path":"{path}","output":"{out}","group":"region","value":"amt"}}"#),
+    );
+    assert_eq!(r["column"], "amt_running", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][2].as_f64().unwrap(), 10.0, "west first = 10: {rd}");
+    assert_eq!(
+        rows[2][2].as_f64().unwrap(),
+        5.0,
+        "east independent = 5: {rd}"
+    );
+    assert_eq!(
+        rows[3][2].as_f64().unwrap(),
+        40.0,
+        "west accumulates to 40: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_cumsum_running_total() {
     let path = tmp("cumsum.xlsx");
     let w = call(

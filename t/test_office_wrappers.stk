@@ -603,6 +603,17 @@ assert_eq $gpb->[0]{rows}[1][2], 25, "sheet_group_pct: west 10/40 = 25%"
 assert_eq $gpb->[0]{rows}[2][2], 100, "sheet_group_pct: east 5/5 = 100%"
 unlink $gpx
 unlink $gpo
+# sheet_running: group-wise running total
+val $rnx2 = "$dir/$tag-running.xlsx"
+Office::sheet_write($rnx2, [{ name => "D", rows => [["region", "amt"], ["west", 10], ["east", 5], ["west", 30]] }])
+val $rno2 = "$dir/$tag-running-out.xlsx"
+val $rnr2 = Office::sheet_running($rnx2, $rno2, "region", "amt")
+assert_eq $rnr2->{column}, "amt_running", "sheet_running: default column name"
+val $rnb2 = Office::sheet_read($rno2)
+assert_eq $rnb2->[0]{rows}[1][2], 10, "sheet_running: west first = 10"
+assert_eq $rnb2->[0]{rows}[3][2], 40, "sheet_running: west accumulates to 40"
+unlink $rnx2
+unlink $rno2
 # sheet_shift: lag a column by one row
 val $shx = "$dir/$tag-shift.xlsx"
 Office::sheet_write($shx, [{ name => "D", rows => [["v"], [10], [20], [30]] }])
