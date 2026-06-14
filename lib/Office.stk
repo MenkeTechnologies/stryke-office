@@ -572,6 +572,11 @@ fn Office::slides_merge ($inputs, $output, %opts) {
         office__slides_merge(to_json({ inputs => $inputs, output => $output, format => $opts{format} })))
 }
 
+fn Office::slides_split ($path, $dir, %opts) {
+    Office::_decode("slides_split",
+        office__slides_split(to_json({ path => $path, dir => $dir, format => $opts{format}, prefix => $opts{prefix} })))
+}
+
 ## Statistics for a presentation (pptx/odp). Returns { slides, words (in slide
 ## text), notes_words, per_slide => [{ words, notes_words }] }.
 fn Office::slides_stats ($path) {

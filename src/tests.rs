@@ -1793,6 +1793,38 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn slides_split_one_file_per_slide() {
+    let deck = tmp("splitdeck.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{deck}","slides":[{{"title":"One","body":["b1"]}},{{"title":"Two","body":["b2"]}},{{"title":"Three","body":["b3"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let dir = tmp("ssplit_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__slides_split,
+        &format!(r#"{{"path":"{deck}","dir":"{dir}","prefix":"s"}}"#),
+    );
+    assert_eq!(r["count"], 3, "3 slides -> 3 files: {r}");
+    let files = r["files"].as_array().unwrap();
+    assert_eq!(files.len(), 3, "three file paths: {r}");
+
+    // Each split file is a single-slide deck preserving title + body.
+    let rd = call(office__slides_read, &format!(r#"{{"path":{}}}"#, files[1]));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 1, "second file holds one slide: {rd}");
+    assert_eq!(slides[0]["text"][0], "Two", "title carried: {rd}");
+    assert_eq!(slides[0]["text"][1], "b2", "body carried: {rd}");
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn slides_to_pdf_one_per_page() {
     let px = tmp("s2pdf.pptx");
     let w = call(
