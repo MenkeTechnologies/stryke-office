@@ -4133,6 +4133,39 @@ fn pdf_to_text_file_and_pages() {
 }
 
 #[test]
+fn pdf_stats_counts_words_and_pages() {
+    let src = tmp("pstats.pdf");
+    // page 1: "Report alpha beta gamma" (4 words); page 2: "delta" (1 word)
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Report"}},
+                {{"type":"paragraph","text":"alpha beta gamma"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"delta"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let r = call(office__pdf_stats, &format!(r#"{{"path":"{src}"}}"#));
+    assert_eq!(r["pages"], 2, "two pages: {r}");
+    assert_eq!(r["words"], 5, "five words total: {r}");
+    let per = r["per_page"].as_array().unwrap();
+    assert_eq!(per.len(), 2, "per-page entries: {r}");
+    assert_eq!(per[0]["page"], 1, "1-based page: {r}");
+    assert_eq!(per[1]["words"], 1, "page 2 word count: {r}");
+    assert!(r["chars"].as_u64().unwrap() > 0, "chars counted: {r}");
+    assert!(
+        r["chars_no_spaces"].as_u64().unwrap() < r["chars"].as_u64().unwrap(),
+        "no-space char count is smaller: {r}"
+    );
+
+    std::fs::remove_file(&src).ok();
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");
