@@ -725,6 +725,51 @@ fn op_doc_to_slides(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": n }))
 }
 
+/// Convert a presentation into a document: each slide's first text line becomes
+/// a heading and the rest become paragraphs. opts: path (pptx/odp), output
+/// (docx/odt/pdf/md/html), notes => bool (append speaker notes as paragraphs),
+/// format. The inverse of `doc_to_slides`. Returns `{ ok, path, slides }`.
+fn op_slides_to_doc(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let strs = |s: &Value, field: &str| -> Vec<String> {
+        s.get(field)
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|t| t.as_str().map(str::to_string)).collect())
+            .unwrap_or_default()
+    };
+    let mut blocks: Vec<Value> = Vec::new();
+    for s in &slides {
+        let text = strs(s, "text");
+        if let Some((title, rest)) = text.split_first() {
+            blocks.push(json!({ "kind": "heading", "level": 1, "text": title }));
+            for line in rest {
+                blocks.push(json!({ "kind": "para", "text": line }));
+            }
+        }
+        if want_notes {
+            for n in strs(s, "notes").iter().filter(|n| !n.trim().is_empty()) {
+                blocks.push(json!({ "kind": "para", "text": n }));
+            }
+        }
+    }
+
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": slides.len() }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via

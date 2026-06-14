@@ -1204,6 +1204,38 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn slides_to_doc_round() {
+    let px = tmp("s2d.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[{{"title":"A","body":["a1","a2"]}},{{"title":"B","body":["b1"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("s2d.docx");
+    let r = call(
+        office__slides_to_doc,
+        &format!(r#"{{"path":"{px}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["slides"], 2, "two slides consumed: {r}");
+    let ol = call(office__doc_outline, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(ol["count"], 2, "two headings: {ol}");
+    assert_eq!(ol["outline"][0]["text"], "A", "first heading: {ol}");
+    assert_eq!(ol["outline"][1]["text"], "B", "second heading: {ol}");
+    let rd = call(office__doc_read, &format!(r#"{{"path":"{out}"}}"#));
+    let joined = rd["paragraphs"].to_string();
+    assert!(
+        joined.contains("a1") && joined.contains("a2") && joined.contains("b1"),
+        "bodies: {joined}"
+    );
+
+    std::fs::remove_file(&px).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_slides_from_headings() {
     let dx = tmp("d2s.docx");
     let w = call(

@@ -298,6 +298,15 @@ fn Office::doc_to_slides ($path, $output, %opts) {
         office__doc_to_slides(to_json({ path => $path, output => $output, level => $opts{level}, format => $opts{format} })))
 }
 
+## Convert a presentation into a document: each slide's first line becomes a
+## heading, the rest paragraphs. $output is a docx/odt/pdf/md/html path. opts:
+## notes => 1 to append speaker notes, format => override. The inverse of
+## doc_to_slides. Returns { ok, path, slides }.
+fn Office::slides_to_doc ($path, $output, %opts) {
+    Office::_decode("slides_to_doc",
+        office__slides_to_doc(to_json({ path => $path, output => $output, notes => $opts{notes}, format => $opts{format} })))
+}
+
 ## Split a document into multiple files at headings of a given level, written to
 ## $dir as {prefix}-{n}.{ext}. opts: level => heading level to split at (default
 ## 1), format => output extension (default: the source's), prefix => filename
