@@ -3368,6 +3368,44 @@ fn slides_to_sheet_one_row_per_slide() {
 }
 
 #[test]
+fn pdf_to_sheet_extracts_lines() {
+    let pdf = tmp("p2sheet.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{pdf}","elements":[
+                {{"type":"paragraph","text":"alpha line"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"beta line"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let out = tmp("p2sheet.xlsx");
+    let r = call(
+        office__pdf_to_sheet,
+        &format!(r#"{{"path":"{pdf}","output":"{out}"}}"#),
+    );
+    assert!(
+        r["rows"].as_u64().unwrap() >= 2,
+        "at least 2 data rows: {r}"
+    );
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "page", "header page: {rd}");
+    let joined = rd["sheets"][0]["rows"].to_string();
+    assert!(joined.contains("alpha"), "page 1 text present: {joined}");
+    assert!(joined.contains("beta"), "page 2 text present: {joined}");
+    // the beta line carries page number 2
+    let beta = rows.iter().find(|r| r[1] == "beta line").unwrap();
+    assert_eq!(beta[0].as_f64().unwrap(), 2.0, "beta on page 2: {rd}");
+
+    std::fs::remove_file(&pdf).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn xml_entities_survive_text_extraction() {
     // Regression: quick-xml emits `&amp;` etc. as standalone GeneralRef events,
     // not inside Text, so the readers must resolve them or `&`/`<`/`>` vanish.

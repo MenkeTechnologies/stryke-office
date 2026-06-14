@@ -7228,6 +7228,7 @@ export!(office__slides_to_md, op_slides_to_md);
 export!(office__slides_to_html, op_slides_to_html);
 export!(office__slides_to_text, op_slides_to_text);
 export!(office__slides_to_sheet, op_slides_to_sheet);
+export!(office__pdf_to_sheet, op_pdf_to_sheet);
 export!(office__md_to_slides, op_md_to_slides);
 export!(office__html_to_doc, op_html_to_doc);
 export!(office__doc_wordfreq, op_doc_wordfreq);

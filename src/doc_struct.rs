@@ -1428,6 +1428,39 @@ fn op_slides_to_sheet(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": slides.len() }))
 }
 
+/// Extract a PDF's text into a spreadsheet — one row per non-blank line, with
+/// its page number. Useful for pulling PDF content into spreadsheet tooling.
+/// opts: path (pdf), output (xlsx/ods/csv, required), format => override. Returns
+/// `{ ok, path, rows }` (data rows written, excluding the header).
+fn op_pdf_to_sheet(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_pdf_read(json!({ "path": path }))?;
+    let pages = read
+        .get("pages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut rows: Vec<Value> = vec![json!(["page", "text"])];
+    for (i, page) in pages.iter().enumerate() {
+        for line in page.as_str().unwrap_or("").lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            rows.push(json!([i + 1, line.trim()]));
+        }
+    }
+
+    let data = rows.len() - 1;
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "PDF", "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": data }))
+}
+
 /// Parse a Markdown outline into a presentation (the inverse of `slides_to_md`).
 /// opts: markdown => outline text, or path => a `.md` file; output (required) =>
 /// pptx/odp; format => override. Each heading line (`#`..`######`) starts a new
