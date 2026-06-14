@@ -215,6 +215,14 @@ fn Office::sheet_split_column ($path, $column, $output, %opts) {
         office__sheet_split_column(to_json({ path => $path, column => $column, output => $output, delimiter => $opts{delimiter}, into => $opts{into}, max => $opts{max}, trim => $opts{trim}, keep => $opts{keep}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Join several columns into one with a separator (Excel TEXTJOIN; inverse of
+## sheet_split_column). opts: separator, into, skip_blanks, keep, sheet, header,
+## format. Returns { ok, path, into }.
+fn Office::sheet_concat_columns ($path, $columns, $output, %opts) {
+    Office::_decode("sheet_concat_columns",
+        office__sheet_concat_columns(to_json({ path => $path, columns => $columns, output => $output, separator => $opts{separator}, into => $opts{into}, skip_blanks => $opts{skip_blanks}, keep => $opts{keep}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Join two spreadsheets on a key column (SQL JOIN). opts: on => shared key
 ## field name (or left_on + right_on), how => "inner" (default) | "left",
 ## left_sheet / right_sheet => name/index, format => override. Output columns are
