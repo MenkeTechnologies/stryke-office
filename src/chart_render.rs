@@ -300,6 +300,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_jitter(&mut img, &fnt, series, &opts, l, t, r, b, black, grid, kind == "jitter")
         }
+        "rug" => {
+            require_series(&opts)?;
+            render_rug(&mut img, &fnt, series, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -1294,6 +1298,66 @@ fn render_jitter(
         }
         let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         draw_text_mut(img, black, (cx - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(12.0), fnt, &name);
+    }
+}
+
+/// Rug plot (ggplot2 `geom_rug`) — a marginal tick at every raw value along a
+/// shared value (x) axis, one stacked lane per series so distributions can be
+/// compared. The 1-D density view that usually decorates a scatter/density plot,
+/// here standalone. Reads raw `data` per series.
+#[allow(clippy::too_many_arguments)]
+fn render_rug(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            xmin = xmin.min(v);
+            xmax = xmax.max(v);
+        }
+    }
+    if !xmin.is_finite() || !xmax.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    let pad = (xmax - xmin) * 0.05;
+    let (xmin, xmax) = (xmin - pad, xmax + pad);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let xp = |v: f64| l as f64 + (v - xmin) / (xmax - xmin) * pw;
+    for i in 0..=5 {
+        let v = xmin + (xmax - xmin) * i as f64 / 5.0;
+        let x = xp(v) as f32;
+        draw_line_segment_mut(img, (x, t as f32), (x, b as f32), grid);
+        draw_text_mut(img, black, x as i32 - 10, b + 6, PxScale::from(12.0), fnt, &fmt_num(v));
+    }
+
+    let nser = series.len().max(1);
+    let band = ph / nser as f64;
+    let tick = (band * 0.7).min(28.0);
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        // lane si occupies a horizontal band from the bottom upward
+        let baseline = b as f64 - si as f64 * band;
+        for v in series_nums(s) {
+            let x = xp(v) as f32;
+            draw_line_segment_mut(img, (x, baseline as f32), (x, (baseline - tick) as f32), color);
+        }
+        let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        draw_text_mut(img, black, l + 4, (baseline - tick - 14.0) as i32, PxScale::from(12.0), fnt, &name);
     }
 }
 

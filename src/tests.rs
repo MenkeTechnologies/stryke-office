@@ -10991,6 +10991,36 @@ fn chart_jitter_strip_raster_and_svg() {
 }
 
 #[test]
+fn chart_rug_raster_and_svg() {
+    let series = r#"[{"name":"x","data":[1,2,4,4,7,9]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"rug","width":420,"height":260,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("rug raster: {c}"));
+    assert_eq!(c["type"], "rug", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"rug","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "rug svg malformed"
+    );
+    // ticks are stroke-width 1.5 lines (axis/grid lines have no such attr) -> 6 values
+    assert_eq!(
+        svg.matches("stroke-width=\"1.5\"").count(),
+        6,
+        "one rug tick per value"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
