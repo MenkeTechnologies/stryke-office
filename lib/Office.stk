@@ -1555,6 +1555,13 @@ fn Office::text_sort ($path, %opts) {
         office__text_sort(to_json({ path => $path, output => $opts{output}, descending => $opts{descending}, numeric => $opts{numeric}, unique => $opts{unique}, ignore_case => $opts{ignore_case} })))
 }
 
+## Collapse duplicate lines (uniq). opts: output, count (prefix run counts),
+## global (dedupe non-adjacent too), ignore_case. Returns { ok, path, lines }.
+fn Office::text_uniq ($path, %opts) {
+    Office::_decode("text_uniq",
+        office__text_uniq(to_json({ path => $path, output => $opts{output}, count => $opts{count}, global => $opts{global}, ignore_case => $opts{ignore_case} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

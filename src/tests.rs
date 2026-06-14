@@ -9224,6 +9224,54 @@ fn text_sort_lines() {
 }
 
 #[test]
+fn text_uniq_adjacent_and_global() {
+    let path = tmp("uniq.txt");
+    // adjacent dup of "a"; "b" repeats non-adjacently.
+    std::fs::write(&path, "a\na\nb\nc\nb\n").unwrap();
+
+    // default: collapse adjacent only → a, b, c, b
+    let out = tmp("uniq_adj.txt");
+    let r = call(
+        office__text_uniq,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["lines"], 4, "adjacent collapse keeps 4: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(
+        t.lines().collect::<Vec<_>>(),
+        vec!["a", "b", "c", "b"],
+        "adjacent uniq: {t:?}"
+    );
+
+    // count mode → "2\ta" first line
+    let outc = tmp("uniq_c.txt");
+    call(
+        office__text_uniq,
+        &format!(r#"{{"path":"{path}","output":"{outc}","count":true}}"#),
+    );
+    let tc = std::fs::read_to_string(&outc).unwrap();
+    assert_eq!(tc.lines().next().unwrap(), "2\ta", "count prefix: {tc:?}");
+
+    // global: dedupe non-adjacent too → a, b, c
+    let outg = tmp("uniq_g.txt");
+    let rg = call(
+        office__text_uniq,
+        &format!(r#"{{"path":"{path}","output":"{outg}","global":true}}"#),
+    );
+    assert_eq!(rg["lines"], 3, "global dedupe keeps 3: {rg}");
+    let tg = std::fs::read_to_string(&outg).unwrap();
+    assert_eq!(
+        tg.lines().collect::<Vec<_>>(),
+        vec!["a", "b", "c"],
+        "global uniq preserves first-seen order: {tg:?}"
+    );
+
+    for f in [&path, &out, &outc, &outg] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
