@@ -208,6 +208,13 @@ fn Office::sheet_freq ($path, $column, %opts) {
         office__sheet_freq(to_json({ path => $path, column => $column, sheet => $opts{sheet}, header => $opts{header}, ignore_case => $opts{ignore_case}, top => $opts{top} })))
 }
 
+## Split one column into several by a delimiter (Excel Text to Columns). opts:
+## delimiter, into, max, trim, keep, sheet, header, format. Returns { ok, path, columns }.
+fn Office::sheet_split_column ($path, $column, $output, %opts) {
+    Office::_decode("sheet_split_column",
+        office__sheet_split_column(to_json({ path => $path, column => $column, output => $output, delimiter => $opts{delimiter}, into => $opts{into}, max => $opts{max}, trim => $opts{trim}, keep => $opts{keep}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Join two spreadsheets on a key column (SQL JOIN). opts: on => shared key
 ## field name (or left_on + right_on), how => "inner" (default) | "left",
 ## left_sheet / right_sheet => name/index, format => override. Output columns are

@@ -2466,6 +2466,133 @@ fn op_sheet_freq(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Split one column into several by a delimiter (Excel "Text to Columns" /
+/// pandas `str.split(expand=True)`). opts: path, output, column => name or
+/// 0-based index (required), delimiter => separator (default ","), into =>
+/// explicit new-column names (else `{name}_1..N`), max => cap the number of
+/// output fields (remaining delimiters stay in the last field), trim => strip
+/// from each part (default true), keep => keep the original column before the new
+/// ones (default false = replace), sheet, header, format. The new-column count is
+/// `into.len()` when given, else the widest split across data rows; short rows are
+/// padded with blanks. Returns `{ ok, path, columns }`.
+fn op_sheet_split_column(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let delimiter = opts.get("delimiter").and_then(Value::as_str).unwrap_or(",");
+    if delimiter.is_empty() {
+        return Err(anyhow!("delimiter must be non-empty"));
+    }
+    let trim = opts.get("trim").and_then(Value::as_bool).unwrap_or(true);
+    let keep = opts.get("keep").and_then(Value::as_bool).unwrap_or(false);
+    let max = opts.get("max").and_then(Value::as_u64).map(|n| n as usize);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let split_cell = |s: &str| -> Vec<String> {
+        let parts: Vec<&str> = match max {
+            Some(m) if m >= 1 => s.splitn(m, delimiter).collect(),
+            _ => s.split(delimiter).collect(),
+        };
+        parts
+            .into_iter()
+            .map(|p| {
+                if trim {
+                    p.trim().to_string()
+                } else {
+                    p.to_string()
+                }
+            })
+            .collect()
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let into_names: Option<Vec<String>> = opts
+        .get("into")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().map(cell_to_string).collect());
+    let ncols_new = match &into_names {
+        Some(names) => names.len(),
+        None => rows[data_start..]
+            .iter()
+            .map(|r| {
+                let cell = r
+                    .as_array()
+                    .and_then(|a| a.get(col))
+                    .unwrap_or(&Value::Null);
+                split_cell(&cell_to_string(cell)).len()
+            })
+            .max()
+            .unwrap_or(1),
+    };
+    let new_headers: Vec<String> = match into_names {
+        Some(names) => names,
+        None => (1..=ncols_new)
+            .map(|i| format!("{base_name}_{i}"))
+            .collect(),
+    };
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let mut out: Vec<Value> = cells.iter().take(col).cloned().collect();
+            if i < data_start {
+                if keep {
+                    out.push(cells.get(col).cloned().unwrap_or(Value::Null));
+                }
+                out.extend(new_headers.iter().map(|n| json!(n)));
+            } else {
+                if keep {
+                    out.push(cells.get(col).cloned().unwrap_or(Value::Null));
+                }
+                let raw = cells.get(col).map(cell_to_string).unwrap_or_default();
+                let mut parts = split_cell(&raw);
+                parts.resize(ncols_new, String::new());
+                out.extend(parts.into_iter().map(Value::String));
+            }
+            out.extend(cells.iter().skip(col + 1).cloned());
+            Value::Array(out)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "columns": ncols_new }))
+}
+
 /// Build a pivot table: group rows by one column and columns by another, with a
 /// value aggregated into each cell (Excel PivotTable). opts: path, output,
 /// rows => row-group column, cols => column-group column, value => aggregated
@@ -4910,6 +5037,7 @@ export!(office__sheet_rank, op_sheet_rank);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_freq, op_sheet_freq);
+export!(office__sheet_split_column, op_sheet_split_column);
 export!(office__sheet_pivot, op_sheet_pivot);
 export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);
