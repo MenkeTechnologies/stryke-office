@@ -6077,6 +6077,33 @@ fn pdf_split_bookmarks_by_chapter() {
 }
 
 #[test]
+fn pdf_page_sizes_per_page() {
+    let src = tmp("psizes.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"paragraph","text":"p1"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"p2"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let r = call(office__pdf_page_sizes, &format!(r#"{{"path":"{src}"}}"#));
+    assert_eq!(r["count"], 2, "two pages: {r}");
+    let pages = r["pages"].as_array().unwrap();
+    assert_eq!(pages[0]["page"], 1, "1-based: {r}");
+    let w = pages[0]["width"].as_f64().unwrap();
+    let h = pages[0]["height"].as_f64().unwrap();
+    assert!(w > 0.0 && h > 0.0, "positive dims: {r}");
+    assert!(h > w, "A4 portrait (height > width): {r}");
+
+    std::fs::remove_file(&src).ok();
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");

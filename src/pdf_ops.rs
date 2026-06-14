@@ -355,6 +355,24 @@ fn op_pdf_info(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Per-page dimensions of a PDF in points (1/72 inch). opts: path. Returns
+/// `{ pages: [{ page, width, height }], count }` with 1-based page numbers.
+/// Useful for layout analysis when pages differ in size.
+fn op_pdf_page_sizes(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages: Vec<Value> = doc
+        .get_pages()
+        .into_iter()
+        .map(|(num, pid)| {
+            let (w, h) = pdf_page_size(&doc, pid);
+            json!({ "page": num, "width": w, "height": h })
+        })
+        .collect();
+    let count = pages.len();
+    Ok(json!({ "pages": pages, "count": count }))
+}
+
 /// Set the crop box (visible region) on pages. opts: path, output, either
 /// `box` => [x0, y0, x1, y1] applied to all selected pages, or
 /// `margins` => [left, bottom, right, top] inset from each page's MediaBox.
