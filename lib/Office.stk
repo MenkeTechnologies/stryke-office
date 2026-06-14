@@ -979,6 +979,16 @@ fn Office::sheet_fill ($path, %opts) {
         office__sheet_fill(to_json({ path => $path, method => $opts{method}, value => $opts{value}, by => $opts{by}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Statistical imputation: fill blank cells with a column-wide statistic (sklearn
+## SimpleImputer). opts: strategy => "mean" (default) | "median" | "mode" | "zero",
+## by => column name/index or arrayref (default: all), decimals => round
+## mean/median, sheet, output (default: in place), header => 0 if first row is data,
+## format. Returns { ok, path, filled, columns }.
+fn Office::sheet_impute ($path, %opts) {
+    Office::_decode("sheet_impute",
+        office__sheet_impute(to_json({ path => $path, strategy => $opts{strategy}, by => $opts{by}, decimals => $opts{decimals}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Fill internal blank cells in numeric column(s) by linear interpolation between
 ## known neighbors (pandas Series.interpolate). opts: by (column(s); default all),
 ## decimals, output (default in place), sheet, header, format. Leading/trailing

@@ -222,6 +222,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_hstack($path, $right, $output, %opts)` | `{ok, path, rows, columns}` | concatenate two row-aligned sheets side by side (pandas `concat axis=1`); `sheet`/`right_sheet` opts |
 | `Office::sheet_cross($path, $right, $output, %opts)` | `{ok, path, rows}` | cartesian product (cross join) of two sheets (pandas merge `how='cross'`); `sheet`/`right_sheet` opts |
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/bfill/value, `by` columns, `value` constant |
+| `Office::sheet_impute($path, %opts)` | `{ok, path, filled, columns}` | fill blanks with a column statistic (sklearn `SimpleImputer`); `strategy` mean/median/mode/zero, `by`/`decimals` opts |
 | `Office::sheet_interpolate($path, %opts)` | `{ok, path, filled}` | fill internal blanks in numeric columns by linear interpolation (pandas `Series.interpolate`); `by`/`decimals` opts |
 | `Office::sheet_drop_empty($path, $output, %opts)` | `{ok, path, rows_removed, cols_removed}` | drop fully-empty rows and/or columns; `rows`/`cols` opts |
 | `Office::sheet_dropna($path, %opts)` | `{ok, path, kept, removed}` | drop rows blank in specified column(s) (pandas `dropna(subset)`); `by`/`how` (any/all) opts |

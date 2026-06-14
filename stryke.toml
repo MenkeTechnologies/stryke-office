@@ -105,6 +105,7 @@ exports = [
     "office__sheet_hstack",
     "office__sheet_cross",
     "office__sheet_fill",
+    "office__sheet_impute",
     "office__sheet_interpolate",
     "office__sheet_drop_empty",
     "office__sheet_dropna",

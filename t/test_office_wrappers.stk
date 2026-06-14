@@ -582,6 +582,17 @@ val $bfb = Office::sheet_read($bfo)
 assert_eq $bfb->[0]{rows}[2][0], "b", "sheet_fill bfill: blank backfilled from b"
 unlink $bfx
 unlink $bfo
+# sheet_impute: mean-fill a blank numeric cell
+val $imx = "$dir/$tag-impute.xlsx"
+Office::sheet_write($imx, [{ name => "S", rows => [["v"], [2], [""], [4], [6]] }])
+val $imo = "$dir/$tag-impute-out.xlsx"
+val $imr = Office::sheet_impute($imx, strategy => "mean", by => "v", output => $imo)
+assert_eq $imr->{filled}, 1, "sheet_impute: one blank filled"
+assert_eq $imr->{columns}, 1, "sheet_impute: one column"
+val $imb = Office::sheet_read($imo)
+assert_eq $imb->[0]{rows}[2][0], 4, "sheet_impute: mean of 2,4,6 = 4"
+unlink $imx
+unlink $imo
 # sheet_rolling: rolling sum over a window of 3
 val $rlx = "$dir/$tag-rolling.xlsx"
 Office::sheet_write($rlx, [{ name => "D", rows => [["v"], [10], [20], [30], [40]] }])
