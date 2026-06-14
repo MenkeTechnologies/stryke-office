@@ -3285,6 +3285,33 @@ fn doc_to_pdf_renders_blocks() {
 }
 
 #[test]
+fn html_to_pdf_renders() {
+    let html = tmp("h2p.html");
+    std::fs::write(
+        &html,
+        "<h1>Title</h1><p>hello world</p><ul><li>one</li><li>two</li></ul>",
+    )
+    .unwrap();
+
+    let out = tmp("h2p.pdf");
+    let r = call(
+        office__html_to_pdf,
+        &format!(r#"{{"input":"{html}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "convert: {r}");
+    assert!(r["elements"].as_u64().unwrap() >= 3, "elements mapped: {r}");
+
+    let pr = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let text = pr["text"].as_str().unwrap();
+    assert!(text.contains("Title"), "heading in pdf: {text:?}");
+    assert!(text.contains("hello world"), "paragraph in pdf: {text:?}");
+    assert!(text.contains("one"), "list item in pdf: {text:?}");
+
+    std::fs::remove_file(&html).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_write_footer_page_numbers() {
     use std::io::Read as _;
     let dx = tmp("pgnum.docx");

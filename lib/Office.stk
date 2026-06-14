@@ -659,6 +659,13 @@ fn Office::doc_to_pdf ($path, $output) {
         office__doc_to_pdf(to_json({ path => $path, output => $output })))
 }
 
+## Render an HTML file straight to a PDF (html_to_doc + doc_to_pdf in one).
+## Returns { ok, path, elements }.
+fn Office::html_to_pdf ($input, $output) {
+    Office::_decode("html_to_pdf",
+        office__html_to_pdf(to_json({ input => $input, output => $output })))
+}
+
 ## Convert a document into a presentation: each heading at $opts{level} (default
 ## 1) becomes a slide title, following content becomes body bullets. $output is
 ## a pptx/odp path. opts: level, format => override. Returns { ok, path, slides }.

@@ -211,6 +211,20 @@ val $pgr = Office::doc_write($pgn, [{ kind => "para", text => "body" }], footer 
 assert_ok $pgr->{ok}, "doc_write: page_numbers opt accepted"
 unlink $pgn
 
+# ── html -> pdf ─────────────────────────────────────────────────────
+# build the input HTML with sheet_to_html (avoids needing a raw file writer)
+val $h2sx = "$dir/$tag-h2p.xlsx"
+Office::sheet_write($h2sx, [{ name => "D", rows => [["Widget", "Gadget"]] }])
+val $h2pin = "$dir/$tag-h2p.html"
+Office::sheet_to_html($h2sx, output => $h2pin)
+val $h2pout = "$dir/$tag-h2p.pdf"
+Office::html_to_pdf($h2pin, $h2pout)
+val $h2pr = Office::pdf_read($h2pout)
+assert_ok ($h2pr->{text} =~ /Widget/), "html_to_pdf: text renders into pdf"
+unlink $h2sx
+unlink $h2pin
+unlink $h2pout
+
 # ── document -> pdf ─────────────────────────────────────────────────
 val $d2p = "$dir/$tag-d2p.docx"
 Office::doc_write($d2p, [
