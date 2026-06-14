@@ -260,6 +260,14 @@ fn Office::doc_stats ($path) {
     Office::_decode("doc_stats", office__doc_stats(to_json({ path => $path })))
 }
 
+## Convert a Markdown file into a document, preserving headings, bullet/ordered
+## lists, and pipe tables. $output's extension picks the format (docx/odt/pdf/
+## html/...). opts: format => override. Returns { ok, path, blocks }.
+fn Office::md_to_doc ($input, $output, %opts) {
+    Office::_decode("md_to_doc",
+        office__md_to_doc(to_json({ input => $input, output => $output, format => $opts{format} })))
+}
+
 ## Split a document into multiple files at headings of a given level, written to
 ## $dir as {prefix}-{n}.{ext}. opts: level => heading level to split at (default
 ## 1), format => output extension (default: the source's), prefix => filename

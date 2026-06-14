@@ -1204,6 +1204,47 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn md_to_doc_structured() {
+    let md = tmp("in.md");
+    std::fs::write(
+        &md,
+        "# Title\n\nintro paragraph\n\n- one\n- two\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n",
+    )
+    .unwrap();
+
+    let out = tmp("md_out.docx");
+    let r = call(
+        office__md_to_doc,
+        &format!(r#"{{"input":"{md}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "md_to_doc: {r}");
+
+    // heading preserved
+    let ol = call(office__doc_outline, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(ol["count"], 1, "one heading: {ol}");
+    assert_eq!(ol["outline"][0]["text"], "Title", "heading text: {ol}");
+    assert_eq!(ol["outline"][0]["level"], 1, "heading level: {ol}");
+
+    // table preserved
+    let tb = call(office__doc_tables, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(tb["count"], 1, "one table: {tb}");
+    assert_eq!(tb["tables"][0]["rows"][0][0], "a", "table header: {tb}");
+    assert_eq!(tb["tables"][0]["rows"][1][1], "2", "table cell: {tb}");
+
+    // list items + paragraph present in text
+    let rd = call(office__doc_read, &format!(r#"{{"path":"{out}"}}"#));
+    let joined = rd["paragraphs"].to_string();
+    assert!(joined.contains("intro paragraph"), "paragraph: {joined}");
+    assert!(
+        joined.contains("one") && joined.contains("two"),
+        "list items: {joined}"
+    );
+
+    std::fs::remove_file(&md).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_split_at_headings() {
     let path = tmp("split.docx");
     let w = call(
