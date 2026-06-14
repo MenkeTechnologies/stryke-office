@@ -3584,6 +3584,31 @@ fn pdf_insert_at_position() {
 }
 
 #[test]
+fn pdf_draw_rect_on_pages() {
+    let src = tmp("rect.pdf");
+    call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"heading","level":1,"text":"H"}}]}}"#),
+    );
+    let out = tmp("rect_out.pdf");
+    let r = call(
+        office__pdf_draw_rect,
+        &format!(
+            r#"{{"path":"{src}","rects":[[50,50,100,80]],"color":[255,0,0],"output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["pages"], 1, "drawn on 1 page: {r}");
+    assert_eq!(r["rects"], 1, "one rect: {r}");
+    // output is still a valid PDF
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 1, "valid pdf: {info}");
+
+    for f in [&src, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(

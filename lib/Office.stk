@@ -693,6 +693,15 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Draw rectangles on PDF pages (color blocks, covering regions, highlights).
+## $rects is an arrayref of [x, y, w, h] (points, y from bottom). opts: color
+## (default black), fill => 0 to stroke instead, pages => [1-based subset]
+## (default all). Returns { ok, path, pages, rects }.
+fn Office::pdf_draw_rect ($path, $rects, $output, %opts) {
+    Office::_decode("pdf_draw_rect",
+        office__pdf_draw_rect(to_json({ path => $path, rects => $rects, output => $output, color => $opts{color}, fill => $opts{fill}, pages => $opts{pages} })))
+}
+
 ## Insert $insert's pages into the $path PDF after a given page. opts: position
 ## => 1-based page after which to insert (0 = before all, default = end).
 ## Returns { ok, path, pages }.
