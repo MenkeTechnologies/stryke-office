@@ -2930,6 +2930,40 @@ fn op_sheet_head(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": kept }))
 }
 
+/// Top-N rows by a column (sort then take N). opts: path, output, by => column
+/// (required), n => row count (default 10), ascending => bool (default false =
+/// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
+fn op_sheet_top(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let by = opts
+        .get("by")
+        .cloned()
+        .ok_or_else(|| anyhow!("missing by (column name or index)"))?;
+    let ascending = opts
+        .get("ascending")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    // Sort base -> output, then keep the first N rows of output in place.
+    let mut sopts = json!({ "path": path, "by": by, "output": output, "descending": !ascending });
+    for k in ["sheet", "header", "numeric", "format"] {
+        if let Some(v) = opts.get(k) {
+            sopts[k] = v.clone();
+        }
+    }
+    op_sheet_sort(sopts)?;
+
+    let mut hopts = json!({ "path": output, "output": output });
+    hopts["n"] = opts.get("n").cloned().unwrap_or_else(|| json!(10));
+    for k in ["sheet", "header", "format"] {
+        if let Some(v) = opts.get(k) {
+            hopts[k] = v.clone();
+        }
+    }
+    op_sheet_head(hopts)
+}
+
 /// Rename a sheet in a workbook. opts: path, output (default: in place),
 /// from => sheet to rename (name or index; default first), to => new name
 /// (required), format. Returns `{ ok, path, renamed }`.
@@ -4154,6 +4188,7 @@ export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
+export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
 export!(office__sheet_remove, op_sheet_remove);

@@ -531,6 +531,33 @@ fn sheet_rename_one() {
 }
 
 #[test]
+fn sheet_top_by_column() {
+    let path = tmp("top.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","sales"],["a",30],["b",10],["c",20]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("top_out.xlsx");
+    let r = call(
+        office__sheet_top,
+        &format!(r#"{{"path":"{path}","by":"sales","n":2,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["rows"], 2, "kept 2: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[1][0], "a", "highest first: {rd}");
+    assert_eq!(rows[2][0], "c", "second highest: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_head_and_tail() {
     let path = tmp("head.xlsx");
     let w = call(
