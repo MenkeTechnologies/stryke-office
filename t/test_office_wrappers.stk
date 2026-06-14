@@ -1,0 +1,87 @@
+## t/test_office_wrappers.stk — runtime round-trips for wrappers that the
+## FFI-level Rust suite does not exercise: the hashref-argument wrappers
+## (replace_text / text_replace / meta_write / pdf_set_outline) and the
+## conversion + analytics functions added on top of the original surface.
+##
+## These call the real `Office::*` stryke wrappers, so they catch wrapper-layer
+## bugs (e.g. assigning a hashref literal to a `%` hash) that direct FFI tests
+## miss. Requires the cdylib installed (`s pkg install -g .`).
+
+use Office
+
+val $dir = $ENV{TMPDIR} // "/tmp"
+val $tag = "stryke-office-wrap-$$"
+
+# ── replace_text: hashref { find => replacement } across a docx ──────
+val $docx = "$dir/$tag.docx"
+Office::doc_write($docx, [{ kind => "para", text => "Hello NAME" }])
+Office::replace_text($docx, { NAME => "World" })
+val @rp = Office::doc_read($docx)
+assert_ok scalar(grep { /Hello World/ } @rp), "replace_text: placeholder replaced"
+unlink $docx
+
+# ── text_replace: hashref over a plain-text csv ─────────────────────
+val $csv = "$dir/$tag.csv"
+Office::sheet_write($csv, [{ name => "S", rows => [["a", "b"], ["foo", "bar"]] }])
+Office::text_replace($csv, { foo => "baz" })
+val $cs = Office::sheet_read($csv)
+assert_eq $cs->[0]{rows}[1][0], "baz", "text_replace: csv cell replaced"
+unlink $csv
+
+# ── meta_write / meta_read: hashref props ───────────────────────────
+val $mx = "$dir/$tag-meta.docx"
+Office::doc_write($mx, [{ kind => "para", text => "body" }])
+Office::meta_write($mx, { title => "My Title", author => "Jane" })
+val $meta = Office::meta_read($mx)
+assert_eq $meta->{title}, "My Title", "meta_write/read: title round-trips"
+unlink $mx
+
+# ── pdf_set_outline / pdf_outline: arrayref of bookmark nodes ───────
+val $pdf = "$dir/$tag.pdf"
+Office::pdf_write($pdf, ["Page one"])
+Office::pdf_set_outline($pdf, [{ title => "Top", page => 1 }])
+val $ol = Office::pdf_outline($pdf)
+assert_eq $ol->{count}, 1, "pdf_set_outline: one bookmark"
+assert_eq $ol->{outline}[0]{title}, "Top", "pdf_set_outline: title round-trips"
+unlink $pdf
+
+# ── spreadsheet <-> markdown round-trip ─────────────────────────────
+val $xl = "$dir/$tag-2.xlsx"
+Office::sheet_write($xl, [{ name => "S", rows => [["Item", "Count"], ["apples", 5]] }])
+val $md = Office::sheet_to_md($xl)
+assert_ok ($md->{markdown} =~ /\| Item \| Count \|/), "sheet_to_md: header row"
+
+val $back = "$dir/$tag-md.xlsx"
+Office::md_to_sheet($back, markdown => "| A | B |\n| --- | --- |\n| 1 | 2 |")
+val $ms = Office::sheet_read($back)
+assert_eq $ms->[0]{rows}[0][0], "A", "md_to_sheet: header parsed"
+unlink $back
+
+# ── spreadsheet -> html ─────────────────────────────────────────────
+val $html = Office::sheet_to_html($xl, title => "Report")
+assert_ok ($html->{html} =~ /<th>Item<\/th>/), "sheet_to_html: header cell"
+
+# ── analytics: describe + freq ──────────────────────────────────────
+val $desc = Office::sheet_describe($xl)
+assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"
+
+val $fr = Office::sheet_freq($xl, "Item")
+assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
+unlink $xl
+
+# ── deck -> markdown ────────────────────────────────────────────────
+val $pptx = "$dir/$tag.pptx"
+Office::slides_write($pptx, [{ title => "Intro", body => ["a", "b"] }])
+val $smd = Office::slides_to_md($pptx)
+assert_ok ($smd->{markdown} =~ /## Intro/), "slides_to_md: title heading"
+unlink $pptx
+
+# ── pdf text statistics ─────────────────────────────────────────────
+val $ps = "$dir/$tag-s.pdf"
+Office::pdf_write($ps, ["alpha beta", "gamma"])
+val $stats = Office::pdf_stats($ps)
+assert_eq $stats->{pages}, 1, "pdf_stats: page count"
+assert_ok ($stats->{words} >= 3), "pdf_stats: word count"
+unlink $ps
+
+test_run
