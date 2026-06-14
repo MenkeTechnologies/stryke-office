@@ -19,6 +19,9 @@ val $grt = "$dir/$tag-grep.txt"
 Office::sheet_to_text($grx, output => $grt)
 val $grr = Office::text_grep($grt, "banana")
 assert_eq $grr->{count}, 1, "text_grep: one matching line"
+# text_grep regex mode: lines starting with a or b
+val $grrx = Office::text_grep($grt, '^[ab]', regex => 1)
+assert_ok ($grrx->{count} >= 2), "text_grep: regex matches apple and banana"
 val $grs = Office::text_stats($grt)
 assert_ok ($grs->{lines} >= 3), "text_stats: counts lines"
 # sort the lines descending

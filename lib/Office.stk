@@ -1819,11 +1819,12 @@ fn Office::text_extract ($path, $pattern, %opts) {
         office__text_extract(to_json({ path => $path, pattern => $pattern, group => $opts{group}, unique => $opts{unique}, ignore_case => $opts{ignore_case}, output => $opts{output} })))
 }
 
-## Grep matching lines from a text file. opts: ignore_case, invert, max.
-## Returns { count, matches => [{ line, text }] } (1-based line numbers).
+## Grep matching lines from a text file. opts: regex (treat query as a regex),
+## ignore_case, invert, max. Returns { count, matches => [{ line, text }] }
+## (1-based line numbers).
 fn Office::text_grep ($path, $query, %opts) {
     Office::_decode("text_grep",
-        office__text_grep(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case}, invert => $opts{invert}, max => $opts{max} })))
+        office__text_grep(to_json({ path => $path, query => $query, regex => $opts{regex}, ignore_case => $opts{ignore_case}, invert => $opts{invert}, max => $opts{max} })))
 }
 
 ## wc-style stats for a raw text file. Returns { lines, words, chars, bytes }.
