@@ -153,6 +153,7 @@ exports = [
     "office__slides_append",
     "office__slides_insert",
     "office__slides_set_title",
+    "office__slides_set_body",
     "office__pdf_read",
     "office__pdf_write",
     "office__pdf_build",

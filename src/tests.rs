@@ -5688,6 +5688,37 @@ fn slides_set_title_replaces() {
 }
 
 #[test]
+fn slides_set_body_replaces() {
+    let deck = tmp("setbody.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{deck}","slides":[{{"title":"Keep","body":["old1","old2"]}},{{"title":"Two","body":["b"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("setbody_out.pptx");
+    let r = call(
+        office__slides_set_body,
+        &serde_json::json!({
+            "path": deck, "slide": 1, "body": ["new line one", "new line two"], "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["slide"], 1, "slide echoed: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides[0]["text"][0], "Keep", "title preserved: {rd}");
+    assert_eq!(slides[0]["text"][1], "new line one", "body replaced: {rd}");
+    assert_eq!(slides[0]["text"][2], "new line two", "body line 2: {rd}");
+    assert_eq!(slides[1]["text"][1], "b", "other slide untouched: {rd}");
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn slides_split_one_file_per_slide() {
     let deck = tmp("splitdeck.pptx");
     let w = call(
