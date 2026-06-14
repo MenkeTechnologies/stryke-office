@@ -25,6 +25,9 @@ assert_ok ($grs->{lines} >= 3), "text_stats: counts lines"
 val $gso = "$dir/$tag-sort.txt"
 val $gsr = Office::text_sort($grt, output => $gso, descending => 1)
 assert_ok ($gsr->{lines} >= 3), "text_sort: line count"
+# head: first line
+val $ghd = Office::text_head($grt, n => 1)
+assert_eq $ghd->{count}, 1, "text_head: one line"
 unlink $grx
 unlink $grt
 unlink $gso

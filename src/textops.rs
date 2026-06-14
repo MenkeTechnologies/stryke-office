@@ -437,3 +437,29 @@ fn op_text_sort(opts: Value) -> Result<Value> {
     std::fs::write(&output, out)?;
     Ok(json!({ "ok": true, "path": output, "lines": lines.len() }))
 }
+
+/// First (or last) N lines of a text file (`head`/`tail`). opts: path, n =>
+/// number of lines (default 10), tail => take from the end (default false),
+/// output => also write the slice to a file (omit to just return it). Returns
+/// `{ count, lines: [...], path? }`.
+fn op_text_head(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let n = opts.get("n").and_then(Value::as_u64).unwrap_or(10) as usize;
+    let tail = opts.get("tail").and_then(flag_of).unwrap_or(false);
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let all: Vec<&str> = text.lines().collect();
+    let slice: Vec<String> = if tail {
+        all.iter().rev().take(n).rev().map(|s| s.to_string()).collect()
+    } else {
+        all.iter().take(n).map(|s| s.to_string()).collect()
+    };
+
+    let mut out = json!({ "count": slice.len(), "lines": slice });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, format!("{}\n", out["lines"]
+            .as_array().unwrap().iter().filter_map(Value::as_str).collect::<Vec<_>>().join("\n")))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}

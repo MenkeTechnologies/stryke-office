@@ -8486,6 +8486,36 @@ fn text_sort_lines() {
 }
 
 #[test]
+fn text_head_and_tail() {
+    let path = tmp("head.txt");
+    std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
+
+    let h = call(office__text_head, &format!(r#"{{"path":"{path}","n":2}}"#));
+    assert_eq!(h["count"], 2, "head 2: {h}");
+    assert_eq!(h["lines"][0], "l1", "first line: {h}");
+    assert_eq!(h["lines"][1], "l2", "second line: {h}");
+
+    let t = call(
+        office__text_head,
+        &format!(r#"{{"path":"{path}","n":2,"tail":true}}"#),
+    );
+    assert_eq!(t["lines"][0], "l4", "tail first: {t}");
+    assert_eq!(t["lines"][1], "l5", "tail last: {t}");
+
+    // write the head slice to a file
+    let out = tmp("head_out.txt");
+    call(
+        office__text_head,
+        &format!(r#"{{"path":"{path}","n":1,"output":"{out}"}}"#),
+    );
+    let written = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(written.trim(), "l1", "head slice written: {written:?}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn replace_text_xlsx_strings() {
     let path = tmp("tmpl.xlsx");
     call(

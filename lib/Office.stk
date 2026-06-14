@@ -1425,6 +1425,13 @@ fn Office::text_sort ($path, %opts) {
         office__text_sort(to_json({ path => $path, output => $opts{output}, descending => $opts{descending}, numeric => $opts{numeric}, unique => $opts{unique}, ignore_case => $opts{ignore_case} })))
 }
 
+## First (or last) N lines of a text file (head/tail). opts: n (default 10),
+## tail, output. Returns { count, lines, path? }.
+fn Office::text_head ($path, %opts) {
+    Office::_decode("text_head",
+        office__text_head(to_json({ path => $path, n => $opts{n}, tail => $opts{tail}, output => $opts{output} })))
+}
+
 ## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
 ## per data record, writing one file per record into $dir. opts: data =>
 ## spreadsheet path (read as records) or records => arrayref of hashes, sheet =>
