@@ -152,6 +152,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |
 | `Office::records_write($path, $records, %opts)` | `{rows, fields}` | write objects to a sheet (header + rows); `fields`/`sheet_name` opts |
 | `Office::sheet_to_json($path, $output, %opts)` | `{count}` | export a sheet to a JSON file (array of objects); `pretty` opt |
+| `Office::sheet_to_ndjson($path, $output, %opts)` | `{ok, path, count}` | export a sheet as JSON Lines/NDJSON (one object per data row); `sheet` opt |
 | `Office::json_to_sheet($input, $output, %opts)` | `{rows, fields}` | import a JSON array-of-objects file into a spreadsheet |
 | `Office::sheet_sort($path, $by, $output, %opts)` | `{sorted, column}` | sort data rows by a column (header kept); `descending`/`numeric`/`ignore_case` opts |
 | `Office::sheet_rank($path, $by, $output, %opts)` | `{ok, path, ranked}` | append a rank column by a column without reordering (Excel `RANK`); `ascending`/`dense`/`name` opts |
