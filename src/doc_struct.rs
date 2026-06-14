@@ -360,6 +360,123 @@ fn op_doc_outline(opts: Value) -> Result<Value> {
     Ok(json!({ "count": outline.len(), "outline": outline }))
 }
 
+// ── markdown -> blocks ────────────────────────────────────────────────────────
+
+/// Parse an ATX heading line (`# `..`###### `) into a heading block.
+fn md_heading(t: &str) -> Option<Value> {
+    if !t.starts_with('#') {
+        return None;
+    }
+    let hashes = t.chars().take_while(|&c| c == '#').count();
+    if !(1..=6).contains(&hashes) || !t[hashes..].starts_with(' ') {
+        return None;
+    }
+    Some(json!({ "kind": "heading", "level": hashes as u64, "text": t[hashes..].trim() }))
+}
+
+/// Parse a list item line, returning (ordered, text).
+fn md_list_item(t: &str) -> Option<(bool, String)> {
+    for p in ["- ", "* ", "+ "] {
+        if let Some(r) = t.strip_prefix(p) {
+            return Some((false, r.trim().to_string()));
+        }
+    }
+    let digits: String = t.chars().take_while(char::is_ascii_digit).collect();
+    if !digits.is_empty() {
+        if let Some(r) = t[digits.len()..].strip_prefix(". ") {
+            return Some((true, r.trim().to_string()));
+        }
+    }
+    None
+}
+
+/// Is this line a Markdown table separator (`| --- | :--: |`)?
+fn md_separator(s: &str) -> bool {
+    let s = s.trim();
+    !s.is_empty() && s.contains('-') && s.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+}
+
+/// Split a Markdown table row into a JSON array of trimmed cell strings.
+fn md_row(t: &str) -> Value {
+    let t = t.trim().trim_start_matches('|').trim_end_matches('|');
+    Value::Array(
+        t.split('|')
+            .map(|c| json!(c.trim().replace("\\|", "|")))
+            .collect(),
+    )
+}
+
+fn md_flush_para(para: &mut Vec<String>, blocks: &mut Vec<Value>) {
+    if !para.is_empty() {
+        blocks.push(json!({ "kind": "para", "text": std::mem::take(para).join(" ") }));
+    }
+}
+
+/// Parse a Markdown subset into `doc_write` blocks: ATX headings, bullet/ordered
+/// lists, pipe tables, and blank-line-separated paragraphs.
+fn parse_markdown_blocks(text: &str) -> Vec<Value> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut para: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let t = lines[i].trim();
+        if t.is_empty() {
+            md_flush_para(&mut para, &mut blocks);
+            i += 1;
+        } else if let Some(h) = md_heading(t) {
+            md_flush_para(&mut para, &mut blocks);
+            blocks.push(h);
+            i += 1;
+        } else if t.starts_with('|') && i + 1 < lines.len() && md_separator(lines[i + 1]) {
+            md_flush_para(&mut para, &mut blocks);
+            let mut rows = vec![md_row(t)];
+            i += 2;
+            while i < lines.len() && lines[i].trim().starts_with('|') {
+                rows.push(md_row(lines[i].trim()));
+                i += 1;
+            }
+            blocks.push(json!({ "kind": "table", "rows": rows }));
+        } else if let Some((ordered, item)) = md_list_item(t) {
+            md_flush_para(&mut para, &mut blocks);
+            let mut items = vec![Value::String(item)];
+            i += 1;
+            while i < lines.len() {
+                match md_list_item(lines[i].trim()) {
+                    Some((o2, it2)) if o2 == ordered => {
+                        items.push(Value::String(it2));
+                        i += 1;
+                    }
+                    _ => break,
+                }
+            }
+            blocks.push(json!({ "kind": "list", "ordered": ordered, "items": items }));
+        } else {
+            para.push(t.to_string());
+            i += 1;
+        }
+    }
+    md_flush_para(&mut para, &mut blocks);
+    blocks
+}
+
+/// Convert a Markdown file into a document. opts: input (.md), output (target;
+/// format from extension — docx/odt/pdf/html/…), format => override. Headings,
+/// lists, and pipe tables are preserved. Returns `{ ok, path, blocks }`.
+fn op_md_to_doc(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let text = std::fs::read_to_string(input)?;
+    let blocks = parse_markdown_blocks(&text);
+    let n = blocks.len();
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "blocks": n }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via
