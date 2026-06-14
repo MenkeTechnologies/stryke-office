@@ -153,6 +153,7 @@ exports = [
     "office__text_replace",
     "office__text_grep",
     "office__text_stats",
+    "office__text_sort",
     "office__doc_tables",
     "office__doc_table_to_sheet",
     "office__sheet_to_doc",

@@ -8004,6 +8004,7 @@ export!(office__mail_merge, op_mail_merge);
 export!(office__text_replace, op_text_replace);
 export!(office__text_grep, op_text_grep);
 export!(office__text_stats, op_text_stats);
+export!(office__text_sort, op_text_sort);
 
 // structured document reads (tables) — read-side mirror of doc_write blocks
 include!("doc_struct.rs");

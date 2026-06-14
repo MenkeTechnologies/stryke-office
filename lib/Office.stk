@@ -1418,6 +1418,13 @@ fn Office::text_stats ($path) {
     Office::_decode("text_stats", office__text_stats(to_json({ path => $path })))
 }
 
+## Sort the lines of a text file (sort/uniq). opts: output, descending, numeric,
+## unique, ignore_case. Returns { ok, path, lines }.
+fn Office::text_sort ($path, %opts) {
+    Office::_decode("text_sort",
+        office__text_sort(to_json({ path => $path, output => $opts{output}, descending => $opts{descending}, numeric => $opts{numeric}, unique => $opts{unique}, ignore_case => $opts{ignore_case} })))
+}
+
 ## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
 ## per data record, writing one file per record into $dir. opts: data =>
 ## spreadsheet path (read as records) or records => arrayref of hashes, sheet =>
