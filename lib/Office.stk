@@ -627,6 +627,13 @@ fn Office::sheet_fill ($path, %opts) {
         office__sheet_fill(to_json({ path => $path, method => $opts{method}, value => $opts{value}, by => $opts{by}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Drop fully-empty rows and/or columns. opts: rows (default 1), cols (default
+## 0), output, sheet, header, format. Returns { ok, path, rows_removed, cols_removed }.
+fn Office::sheet_drop_empty ($path, $output, %opts) {
+    Office::_decode("sheet_drop_empty",
+        office__sheet_drop_empty(to_json({ path => $path, output => $output, rows => $opts{rows}, cols => $opts{cols}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns
