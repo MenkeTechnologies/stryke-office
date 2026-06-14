@@ -2711,6 +2711,95 @@ fn op_sheet_cumsum(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append an expanding-window cumulative column for the running maximum, minimum,
+/// or product (pandas `cummax`/`cummin`/`cumprod`; the running-sum case is the
+/// dedicated `sheet_cumsum`). opts: path, output, column => name/index
+/// (required), agg => max|min|prod (default max), into => header (default
+/// "{column}_cum{agg}"), decimals, sheet, header, format. Blank/non-numeric cells
+/// carry the running value forward unchanged. Returns `{ ok, path, column }`.
+fn op_sheet_cumulative(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("max");
+    if !matches!(agg, "max" | "min" | "prod") {
+        return Err(anyhow!("unknown agg: {agg} (max|min|prod)"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_cum{agg}"));
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut running: Option<f64> = None;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                if let Some(x) = cells.get(col).and_then(sheet_cell_num) {
+                    running = Some(match (running, agg) {
+                        (None, _) => x,
+                        (Some(r), "max") => r.max(x),
+                        (Some(r), "min") => r.min(x),
+                        (Some(r), _) => r * x,
+                    });
+                }
+                let cell = match running {
+                    Some(v) => {
+                        let v = match decimals {
+                            Some(d) => {
+                                let f = 10f64.powi(d as i32);
+                                (v * f).round() / f
+                            }
+                            None => v,
+                        };
+                        json!(v)
+                    }
+                    None => json!(""),
+                };
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Append a percent-of-total column: each numeric value as a percentage of the
 /// column's sum. opts: path, output, column => name or 0-based index (required),
 /// into => new column header (default "{column}_pct"), decimals => round to this
@@ -9035,6 +9124,7 @@ export!(office__sheet_insert_rows, op_sheet_insert_rows);
 export!(office__sheet_delete_rows, op_sheet_delete_rows);
 export!(office__sheet_insert_column, op_sheet_insert_column);
 export!(office__sheet_cumsum, op_sheet_cumsum);
+export!(office__sheet_cumulative, op_sheet_cumulative);
 export!(office__sheet_pct, op_sheet_pct);
 export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_movavg, op_sheet_movavg);

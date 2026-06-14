@@ -232,6 +232,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_delete_rows($path, $at, %opts)` | `{ok, path, deleted}` | delete rows from a 1-based position; `count`/`output`/`sheet` opts |
 | `Office::sheet_insert_column($path, %opts)` | `{ok, path, at}` | insert a column at a 1-based position (shifts right); `at`/`name`/`value` opts |
 | `Office::sheet_cumsum($path, $column, $output, %opts)` | `{ok, path, column}` | append a running-total (cumulative sum) column for a numeric column; `into` opt |
+| `Office::sheet_cumulative($path, $column, $output, %opts)` | `{ok, path, column}` | append a cumulative running max/min/product column (pandas `cummax`/`cummin`/`cumprod`); `agg`/`into`/`decimals` opts |
 | `Office::sheet_pct($path, $column, $output, %opts)` | `{ok, path, column}` | append a percent-of-total column (value ÷ column sum × 100); `into`/`decimals` opts |
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |
 | `Office::sheet_movavg($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a moving-average (rolling mean) column over a window; `into`/`decimals` opts |

@@ -362,6 +362,17 @@ assert_eq $rlb->[0]{rows}[3][1], 60, "sheet_rolling: window sum 60"
 assert_eq $rlb->[0]{rows}[4][1], 90, "sheet_rolling: window sum 90"
 unlink $rlx
 unlink $rlo
+# sheet_cumulative: running max
+val $cmx = "$dir/$tag-cumul.xlsx"
+Office::sheet_write($cmx, [{ name => "D", rows => [["v"], [3], [1], [4], [2]] }])
+val $cmo = "$dir/$tag-cumul-out.xlsx"
+val $cmr = Office::sheet_cumulative($cmx, "v", $cmo, agg => "max")
+assert_eq $cmr->{column}, "v_cummax", "sheet_cumulative: default column name"
+val $cmb = Office::sheet_read($cmo)
+assert_eq $cmb->[0]{rows}[3][1], 4, "sheet_cumulative: running max reaches 4"
+assert_eq $cmb->[0]{rows}[4][1], 4, "sheet_cumulative: running max holds at 4"
+unlink $cmx
+unlink $cmo
 # sheet_pct_change: row-over-row percentage change
 val $pcx = "$dir/$tag-pctchg.xlsx"
 Office::sheet_write($pcx, [{ name => "D", rows => [["v"], [100], [150], [75]] }])

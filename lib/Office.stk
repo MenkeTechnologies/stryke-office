@@ -204,6 +204,14 @@ fn Office::sheet_cumsum ($path, $column, $output, %opts) {
         office__sheet_cumsum(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a cumulative running max/min/product column (pandas cummax/cummin/
+## cumprod). opts: agg (max|min|prod, default max), into, decimals, sheet, header,
+## format. Returns { ok, path, column }.
+fn Office::sheet_cumulative ($path, $column, $output, %opts) {
+    Office::_decode("sheet_cumulative",
+        office__sheet_cumulative(to_json({ path => $path, column => $column, output => $output, agg => $opts{agg}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a percent-of-total column (value / column sum * 100). opts: into,
 ## decimals (round), sheet, header, format. Returns { ok, path, column }.
 fn Office::sheet_pct ($path, $column, $output, %opts) {

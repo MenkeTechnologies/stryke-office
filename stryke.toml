@@ -33,6 +33,7 @@ exports = [
     "office__sheet_delete_rows",
     "office__sheet_insert_column",
     "office__sheet_cumsum",
+    "office__sheet_cumulative",
     "office__sheet_pct",
     "office__sheet_normalize",
     "office__sheet_movavg",
