@@ -5370,6 +5370,45 @@ fn pdf_highlight_adds_annotation() {
 }
 
 #[test]
+fn pdf_annotations_lists_all() {
+    let src = tmp("pann.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"paragraph","text":"doc"}}]}}"#),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+    call(
+        office__pdf_add_link,
+        &format!(r#"{{"path":"{src}","page":1,"url":"https://x.test","rect":[10,10,100,30]}}"#),
+    );
+    call(
+        office__pdf_highlight,
+        &format!(r#"{{"path":"{src}","page":1,"rect":[10,40,100,60]}}"#),
+    );
+
+    let a = call(office__pdf_annotations, &format!(r#"{{"path":"{src}"}}"#));
+    assert_eq!(a["count"], 2, "two annotations: {a}");
+    let subtypes: Vec<&str> = a["annotations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["subtype"].as_str().unwrap())
+        .collect();
+    assert!(subtypes.contains(&"Link"), "has Link: {a}");
+    assert!(subtypes.contains(&"Highlight"), "has Highlight: {a}");
+    // the Link entry exposes its uri
+    let link = a["annotations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["subtype"] == "Link")
+        .unwrap();
+    assert_eq!(link["uri"], "https://x.test", "link uri: {a}");
+
+    std::fs::remove_file(&src).ok();
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");

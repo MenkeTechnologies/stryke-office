@@ -190,8 +190,10 @@ Office::pdf_add_link($plp, "https://stryke.dev", page => 1, rect => [10, 10, 200
 val $plr = Office::pdf_links($plp)
 assert_eq $plr->{count}, 1, "pdf_links: one link"
 assert_eq $plr->{links}[0]{url}, "https://stryke.dev", "pdf_links: url round-trips"
-# add a highlight, then strip everything and confirm the link is gone
+# add a highlight, list all annotations, then strip everything
 Office::pdf_highlight($plp, [10, 10, 200, 30], page => 1)
+val $pann = Office::pdf_annotations($plp)
+assert_eq $pann->{count}, 2, "pdf_annotations: link + highlight listed"
 Office::pdf_remove_annotations($plp)
 val $plr2 = Office::pdf_links($plp)
 assert_eq $plr2->{count}, 0, "pdf_remove_annotations: link stripped"
