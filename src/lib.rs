@@ -1114,6 +1114,44 @@ fn op_sheet_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "sheets": n }))
 }
 
+/// Concatenate spreadsheets aligned by column name (SQL UNION / pandas concat).
+/// Each input is read as records and stacked; the output columns are the union
+/// of all field names (first-seen order), missing values null-filled — so files
+/// with the same logical columns in different orders combine correctly. opts:
+/// inputs => [paths], output, sheet => source sheet selector, format. Returns
+/// `{ ok, path, sources, rows, fields }`.
+fn op_sheet_union(opts: Value) -> Result<Value> {
+    let inputs = opts
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing inputs (expected array of paths)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let mut all: Vec<Value> = Vec::new();
+    for inp in inputs {
+        let p = inp
+            .as_str()
+            .ok_or_else(|| anyhow!("input path must be a string"))?;
+        let recs = op_sheet_records(json!({ "path": p, "sheet": opts.get("sheet") }))?;
+        if let Some(a) = recs.get("records").and_then(Value::as_array) {
+            all.extend(a.iter().cloned());
+        }
+    }
+
+    let mut wopts = json!({ "path": output, "records": all });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    let res = op_records_write(wopts)?;
+    Ok(json!({
+        "ok": true,
+        "path": output,
+        "sources": inputs.len(),
+        "rows": res.get("rows").cloned().unwrap_or(json!(0)),
+        "fields": res.get("fields").cloned().unwrap_or(json!([])),
+    }))
+}
+
 /// A cell's numeric value, if it is a number or a numeric-looking string.
 fn sheet_cell_num(v: &Value) -> Option<f64> {
     match v {
@@ -3895,6 +3933,7 @@ pub extern "C" fn office__pkg_version(args: *const c_char) -> *const c_char {
 export!(office__sheet_read, op_sheet_read);
 export!(office__sheet_write, op_sheet_write);
 export!(office__sheet_merge, op_sheet_merge);
+export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);

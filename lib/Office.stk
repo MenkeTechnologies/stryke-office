@@ -59,6 +59,16 @@ fn Office::sheet_write ($path, $sheets, %opts) {
     Office::_decode("sheet_write", office__sheet_write(to_json($r)))
 }
 
+## Concatenate spreadsheets aligned by column name (SQL UNION). $inputs is an
+## arrayref of paths; rows are stacked and the output columns are the union of
+## all field names (missing values blank) — so files with the same columns in
+## different orders combine correctly. opts: sheet, format. Returns
+## { ok, path, sources, rows, fields }.
+fn Office::sheet_union ($inputs, $output, %opts) {
+    Office::_decode("sheet_union",
+        office__sheet_union(to_json({ inputs => $inputs, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Combine spreadsheets into one. $inputs is an arrayref of paths; the target
 ## format comes from $output's extension (so this also converts). opts: mode =>
 ## "sheets" (default, keep each source sheet) | "rows" (stack all rows into one
