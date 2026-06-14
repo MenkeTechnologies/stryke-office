@@ -3470,6 +3470,46 @@ fn md_to_pdf_renders() {
 }
 
 #[test]
+fn doc_add_toc_from_headings() {
+    let dx = tmp("toc.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Chapter One"}},
+                {{"kind":"para","text":"body a"}},
+                {{"kind":"heading","level":2,"text":"Section 1.1"}},
+                {{"kind":"heading","level":1,"text":"Chapter Two"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__doc_add_toc, &format!(r#"{{"path":"{dx}"}}"#));
+    assert_eq!(r["entries"], 3, "three headings in toc: {r}");
+
+    // the TOC heading is now the document's first heading
+    let ol = call(office__doc_outline, &format!(r#"{{"path":"{dx}"}}"#));
+    assert_eq!(
+        ol["outline"][0]["text"], "Table of Contents",
+        "toc title first: {ol}"
+    );
+    // TOC entry paragraphs include the chapter titles
+    let rd = call(office__doc_read, &format!(r#"{{"path":"{dx}"}}"#));
+    let joined = rd["paragraphs"].to_string();
+    assert!(
+        joined.contains("Chapter One"),
+        "toc lists Chapter One: {joined}"
+    );
+    assert!(
+        joined.contains("Section 1.1"),
+        "toc lists subsection: {joined}"
+    );
+
+    std::fs::remove_file(&dx).ok();
+}
+
+#[test]
 fn doc_write_footer_page_numbers() {
     use std::io::Read as _;
     let dx = tmp("pgnum.docx");

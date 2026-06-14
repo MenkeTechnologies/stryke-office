@@ -151,6 +151,7 @@ exports = [
     "office__doc_to_pdf",
     "office__html_to_pdf",
     "office__md_to_pdf",
+    "office__doc_add_toc",
     "office__doc_to_slides",
     "office__slides_to_doc",
     "office__slides_to_pdf",
