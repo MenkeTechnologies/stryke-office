@@ -2143,6 +2143,38 @@ fn slides_outline_lists_titles() {
 }
 
 #[test]
+fn slides_to_md_outline() {
+    let px = tmp("s2md.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[{{"title":"Intro","body":["a","b"]}},{{"title":"End","body":[]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__slides_to_md, &format!(r#"{{"path":"{px}"}}"#));
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+    let md = r["markdown"].as_str().unwrap();
+    assert!(md.contains("## Intro"), "title heading: {md}");
+    assert!(md.contains("- a"), "first bullet: {md}");
+    assert!(md.contains("- b"), "second bullet: {md}");
+    assert!(md.contains("## End"), "second slide heading: {md}");
+
+    // custom heading level
+    let r3 = call(
+        office__slides_to_md,
+        &format!(r#"{{"path":"{px}","level":3}}"#),
+    );
+    assert!(
+        r3["markdown"].as_str().unwrap().contains("### Intro"),
+        "level 3 heading: {r3}"
+    );
+
+    std::fs::remove_file(&px).ok();
+}
+
+#[test]
 fn doc_to_slides_from_headings() {
     let dx = tmp("d2s.docx");
     let w = call(
