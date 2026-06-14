@@ -231,6 +231,14 @@ fn Office::sheet_diff ($left, $right, %opts) {
         office__sheet_diff(to_json({ left => $left, right => $right, sheet => $opts{sheet}, left_sheet => $opts{left_sheet}, right_sheet => $opts{right_sheet} })))
 }
 
+## Rename a sheet in a workbook. opts: from => sheet to rename (name/index,
+## default first), output (default: in place), format. $to is the new name.
+## Returns { ok, path, renamed }.
+fn Office::sheet_rename ($path, $to, %opts) {
+    Office::_decode("sheet_rename",
+        office__sheet_rename(to_json({ path => $path, to => $to, from => $opts{from}, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Keep only the first (or last) N data rows of a sheet. opts: n => row count
 ## (default 10), tail => 1 to take the last N, header => 0 to drop the header,
 ## sheet, format => override. Returns { ok, path, rows }.
