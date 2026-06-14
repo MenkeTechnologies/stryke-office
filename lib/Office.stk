@@ -283,6 +283,13 @@ fn Office::doc_to_md ($path, $output) {
         office__doc_to_md(to_json({ path => $path, output => $output })))
 }
 
+## Convert a docx/odt to structured HTML (headings + tables preserved), written
+## to $output. The inverse of html_to_doc. Returns { ok, path, blocks }.
+fn Office::doc_to_html ($path, $output) {
+    Office::_decode("doc_to_html",
+        office__doc_to_html(to_json({ path => $path, output => $output })))
+}
+
 ## Split a document into multiple files at headings of a given level, written to
 ## $dir as {prefix}-{n}.{ext}. opts: level => heading level to split at (default
 ## 1), format => output extension (default: the source's), prefix => filename
