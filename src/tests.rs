@@ -257,6 +257,35 @@ fn sheet_dtypes_infers_column_types() {
 }
 
 #[test]
+fn sheet_mode_most_frequent() {
+    let path = tmp("mode.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["color","n"],
+                ["red",1],
+                ["blue",1],
+                ["red",2],
+                ["red",3]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_mode, &format!(r#"{{"path":"{path}"}}"#));
+    let cols = r["columns"].as_array().unwrap();
+    assert_eq!(cols[0]["name"], "color", "col0 name: {r}");
+    assert_eq!(cols[0]["mode"], "red", "most frequent color: {r}");
+    assert_eq!(cols[0]["count"], 3, "red appears 3x: {r}");
+    // n column: 1 appears twice -> mode 1
+    assert_eq!(cols[1]["mode"].as_f64().unwrap(), 1.0, "n mode 1: {r}");
+    assert_eq!(cols[1]["count"], 2, "1 appears 2x: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_quantile_arbitrary_percentile() {
     let path = tmp("quantile.xlsx");
     let w = call(

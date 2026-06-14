@@ -151,6 +151,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_agg($path, $column, %opts)` | `{column, agg, value, count}` | single-column scalar aggregate (`agg` sum/mean/min/max/count/median) |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | Pearson correlation matrix between numeric columns (pandas `df.corr()`) |
 | `Office::sheet_dtypes($path, %opts)` | `{sheet, rows, columns:[{name,type,counts}]}` | infer each column's data type (integer/float/bool/string/mixed/empty; pandas `df.dtypes`) |
+| `Office::sheet_mode($path, %opts)` | `{sheet, rows, columns:[{name,mode,count}]}` | most-frequent value (mode) of each column (text or numeric) |
 | `Office::sheet_cov($path, %opts)` | `{sheet, columns, matrix}` | sample covariance matrix between numeric columns (diagonal = sample variance; pandas `df.cov()`) |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |
