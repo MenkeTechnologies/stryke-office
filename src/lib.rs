@@ -2591,6 +2591,41 @@ fn op_sheet_head(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": kept }))
 }
 
+/// Rename a sheet in a workbook. opts: path, output (default: in place),
+/// from => sheet to rename (name or index; default first), to => new name
+/// (required), format. Returns `{ ok, path, renamed }`.
+fn op_sheet_rename(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let to = req_str(&opts, "to")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let idx = match opts.get("from") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    sheets[idx]["name"] = json!(to);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "renamed": to }))
+}
+
 /// Read one sheet's rows from a file, selected by name/index (default first).
 fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3604,6 +3639,7 @@ export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
+export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);

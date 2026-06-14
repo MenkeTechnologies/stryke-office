@@ -338,6 +338,32 @@ fn sheet_diff_cells() {
 }
 
 #[test]
+fn sheet_rename_one() {
+    let path = tmp("ren.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"Sheet1","rows":[["a"],[1]]}},{{"name":"X","rows":[["b"],[2]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("ren_out.xlsx");
+    let r = call(
+        office__sheet_rename,
+        &format!(r#"{{"path":"{path}","from":"Sheet1","to":"Data","output":"{out}"}}"#),
+    );
+    assert_eq!(r["renamed"], "Data", "renamed: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(rd["sheets"][0]["name"], "Data", "first sheet renamed: {rd}");
+    assert_eq!(rd["sheets"][1]["name"], "X", "other sheet preserved: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_head_and_tail() {
     let path = tmp("head.xlsx");
     let w = call(
