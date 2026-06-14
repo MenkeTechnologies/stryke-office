@@ -316,6 +316,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_ridgeline(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
         }
+        "smooth" | "loess" => {
+            require_series(&opts)?;
+            render_smooth(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -1740,6 +1744,128 @@ fn render_ridgeline(
         }
         let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         draw_text_mut(img, black, l + 4, baseline as i32 - 12, PxScale::from(12.0), fnt, &name);
+    }
+}
+
+/// LOESS (locally weighted degree-1 regression) of scatter `points`, evaluated
+/// at each x in `grid`. For each query, the nearest `span` fraction of points
+/// are tricube-weighted and a weighted line is fit; the fitted value is taken at
+/// the query x. Returns `(x, yhat)` pairs. Shared by both backends.
+fn loess_fit(points: &[(f64, f64)], span: f64, grid: &[f64]) -> Vec<(f64, f64)> {
+    let n = points.len();
+    if n < 2 {
+        return Vec::new();
+    }
+    let k = ((span.clamp(0.05, 1.0) * n as f64).ceil() as usize).clamp(2, n);
+    grid
+        .iter()
+        .map(|&x0| {
+            // k-th nearest distance sets the local bandwidth.
+            let mut dists: Vec<f64> = points.iter().map(|&(x, _)| (x - x0).abs()).collect();
+            dists.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let dmax = dists[k - 1].max(1e-12);
+            let (mut sw, mut swx, mut swy, mut swxx, mut swxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+            for &(x, y) in points {
+                let u = (x - x0).abs() / dmax;
+                if u >= 1.0 {
+                    continue;
+                }
+                let w = (1.0 - u * u * u).powi(3); // tricube
+                sw += w;
+                swx += w * x;
+                swy += w * y;
+                swxx += w * x * x;
+                swxy += w * x * y;
+            }
+            let denom = sw * swxx - swx * swx;
+            let yhat = if sw <= 0.0 {
+                0.0
+            } else if denom.abs() < 1e-12 {
+                swy / sw
+            } else {
+                let b = (sw * swxy - swx * swy) / denom;
+                let a = (swy - b * swx) / sw;
+                a + b * x0
+            };
+            (x0, yhat)
+        })
+        .collect()
+}
+
+/// LOESS smooth plot (ggplot2 `geom_smooth`, default method) — a locally
+/// weighted regression curve over each series' scatter `data => [[x,y],…]`,
+/// drawn above the faint points. Distinct from `scatter`'s linear `trendline`.
+/// opts: `span` => smoothing fraction (default 0.6), `points` => curve
+/// resolution (default 80).
+#[allow(clippy::too_many_arguments)]
+fn render_smooth(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid_color: Rgba<u8>,
+) {
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for (x, y) in series_points(s) {
+            xmin = xmin.min(x);
+            xmax = xmax.max(x);
+            ymin = ymin.min(y);
+            ymax = ymax.max(y);
+        }
+    }
+    if !xmin.is_finite() || !ymin.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let (px0, py0) = ((xmax - xmin) * 0.05, (ymax - ymin) * 0.05);
+    let (xmin, xmax, ymin, ymax) = (xmin - px0, xmax + px0, ymin - py0, ymax + py0);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let xp = |x: f64| (l as f64 + (x - xmin) / (xmax - xmin) * pw) as f32;
+    let yp = |y: f64| (b as f64 - (y - ymin) / (ymax - ymin) * ph) as f32;
+    for i in 0..=5 {
+        let yv = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(yv);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid_color);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &fmt_num(yv));
+    }
+    draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmin));
+    draw_text_mut(img, black, ((l as f64 + pw) - 36.0) as i32, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmax));
+
+    let span = opts.get("span").and_then(Value::as_f64).unwrap_or(0.6);
+    let np = opts.get("points").and_then(Value::as_u64).unwrap_or(80).clamp(8, 400) as usize;
+    for (si, s) in series.iter().enumerate() {
+        let pts = series_points(s);
+        if pts.is_empty() {
+            continue;
+        }
+        let color = series_color(s, si);
+        let mut faint = color;
+        faint.0[3] = 80;
+        for (x, y) in &pts {
+            draw_filled_circle_mut(img, (xp(*x) as i32, yp(*y) as i32), 2, faint);
+        }
+        let xs: Vec<f64> = (0..np).map(|i| xmin + (xmax - xmin) * i as f64 / (np - 1).max(1) as f64).collect();
+        let curve = loess_fit(&pts, span, &xs);
+        let verts: Vec<(f32, f32)> = curve.iter().map(|&(x, y)| (xp(x), yp(y))).collect();
+        for w in verts.windows(2) {
+            draw_line_segment_mut(img, w[0], w[1], color);
+        }
     }
 }
 

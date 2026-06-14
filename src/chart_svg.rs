@@ -85,6 +85,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "beeswarm" => svg_beeswarm(&mut s, series, opts, l, t, r, b),
         "contour" | "density2d" => svg_contour(&mut s, series, opts, l, t, r, b),
         "ridgeline" | "ridge" | "joyplot" => svg_ridgeline(&mut s, series, opts, l, t, r, b),
+        "smooth" | "loess" => svg_smooth(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1743,6 +1744,66 @@ fn svg_ridgeline(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64,
         let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="1.5"/>"##);
         let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, l + 4.0, baseline - 4.0, xml_escape(&name));
+    }
+}
+
+/// LOESS smooth plot (vector; ggplot2 `geom_smooth`). A locally weighted
+/// regression curve per series over the faint scatter points. opts: `span`
+/// (default 0.6), `points` (curve resolution, default 80).
+fn svg_smooth(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for (x, y) in series_points(ser) {
+            xmin = xmin.min(x);
+            xmax = xmax.max(x);
+            ymin = ymin.min(y);
+            ymax = ymax.max(y);
+        }
+    }
+    if !xmin.is_finite() || !ymin.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let (px0, py0) = ((xmax - xmin) * 0.05, (ymax - ymin) * 0.05);
+    let (xmin, xmax, ymin, ymax) = (xmin - px0, xmax + px0, ymin - py0, ymax + py0);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let xp = |x: f64| l + (x - xmin) / (xmax - xmin) * pw;
+    let yp = |y: f64| b - (y - ymin) / (ymax - ymin) * ph;
+    for i in 0..=5 {
+        let yv = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(yv);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(yv)));
+    }
+    let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(xmin)));
+    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(xmax)));
+
+    let span = opts.get("span").and_then(Value::as_f64).unwrap_or(0.6);
+    let np = opts.get("points").and_then(Value::as_u64).unwrap_or(80).clamp(8, 400) as usize;
+    for (si, ser) in series.iter().enumerate() {
+        let pts = series_points(ser);
+        if pts.is_empty() {
+            continue;
+        }
+        let col = svg_palette(si);
+        for (x, y) in &pts {
+            let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="2" fill="{col}" fill-opacity="0.32"/>"##, xp(*x), yp(*y));
+        }
+        let xs: Vec<f64> = (0..np).map(|i| xmin + (xmax - xmin) * i as f64 / (np - 1).max(1) as f64).collect();
+        let curve = loess_fit(&pts, span, &xs);
+        let mut line = String::new();
+        for &(x, y) in &curve {
+            let _ = write!(line, "{:.1},{:.1} ", xp(x), yp(y));
+        }
+        let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="2.5"/>"##);
     }
 }
 
