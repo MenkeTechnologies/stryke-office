@@ -8002,6 +8002,7 @@ include!("textops.rs");
 export!(office__replace_text, op_replace_text);
 export!(office__mail_merge, op_mail_merge);
 export!(office__text_replace, op_text_replace);
+export!(office__text_grep, op_text_grep);
 
 // structured document reads (tables) — read-side mirror of doc_write blocks
 include!("doc_struct.rs");

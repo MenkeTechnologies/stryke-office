@@ -1406,6 +1406,13 @@ fn Office::text_replace ($path, $replace, %opts) {
         office__text_replace(to_json({ path => $path, replace => $replace, output => $opts{output}, ignore_case => $opts{ignore_case} })))
 }
 
+## Grep matching lines from a text file. opts: ignore_case, invert, max.
+## Returns { count, matches => [{ line, text }] } (1-based line numbers).
+fn Office::text_grep ($path, $query, %opts) {
+    Office::_decode("text_grep",
+        office__text_grep(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case}, invert => $opts{invert}, max => $opts{max} })))
+}
+
 ## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
 ## per data record, writing one file per record into $dir. opts: data =>
 ## spreadsheet path (read as records) or records => arrayref of hashes, sheet =>
