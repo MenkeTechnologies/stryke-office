@@ -156,6 +156,14 @@ fn Office::sheet_irr ($path, $column, %opts) {
         office__sheet_irr(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Generate a loan amortization schedule [period, payment, principal, interest,
+## balance] from $rate (periodic), $nper (periods), $pv (principal) into $output.
+## opts: decimals (default 2), format. Returns { ok, path, payment, periods }.
+fn Office::sheet_amortize ($rate, $nper, $pv, $output, %opts) {
+    Office::_decode("sheet_amortize",
+        office__sheet_amortize(to_json({ rate => $rate, nper => $nper, pv => $pv, output => $output, decimals => $opts{decimals}, format => $opts{format} })))
+}
+
 ## Autocorrelation function (ACF) of a $column treated as an ordered series.
 ## opts: lags (max lag, default 10), decimals, sheet, header. Returns { ok,
 ## column, n, acf } with acf = [{ lag, value }] for lags 0..=lags (r0 = 1).

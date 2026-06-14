@@ -154,6 +154,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_moments($path, $column, %opts)` | `{ok, n, mean, variance, std, skewness, kurtosis}` | distribution moments of a column (skewness g1, excess kurtosis g2); complements `sheet_describe` |
 | `Office::sheet_npv($path, $column, $rate, %opts)` | `{ok, npv, n, rate}` | net present value of a cashflow column at periodic `rate` (Excel `NPV`); `start` exponent opt |
 | `Office::sheet_irr($path, $column, %opts)` | `{ok, irr, n}` | internal rate of return of a cashflow column (Excel `IRR`), found by bisection; requires a sign change |
+| `Office::sheet_amortize($rate, $nper, $pv, $output, %opts)` | `{ok, path, payment, periods}` | generate a loan amortization schedule `[period, payment, principal, interest, balance]`; `decimals` opt |
 | `Office::sheet_autocorr($path, $column, %opts)` | `{ok, column, n, acf}` | autocorrelation function (ACF) of a column as an ordered series; `lags` (default 10) |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | correlation matrix between numeric columns (pandas `df.corr()`); `method` pearson (default), spearman (rank), or kendall (tau-b) |
 | `Office::sheet_regress($path, $x, $y, %opts)` | `{ok, slope, intercept, r2, n, path?}` | simple OLS regression `lm(y ~ x)`; `output` appends predicted/residual columns, `decimals` rounds coefficients |

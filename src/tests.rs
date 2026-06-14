@@ -523,6 +523,37 @@ fn sheet_irr_internal_rate() {
 }
 
 #[test]
+fn sheet_amortize_schedule() {
+    // $1000 at 1%/period over 12 periods
+    let out = tmp("amort.xlsx");
+    let r = call(
+        office__sheet_amortize,
+        &format!(r#"{{"rate":0.01,"nper":12,"pv":1000,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["periods"].as_u64().unwrap(), 12, "12 periods: {r}");
+    // PMT = 1000*0.01 / (1 - 1.01^-12) = 88.8488...
+    assert!(
+        (r["payment"].as_f64().unwrap() - 88.85).abs() < 0.01,
+        "level payment ~88.85: {r}"
+    );
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 13, "header + 12 rows");
+    assert_eq!(rows[0][0], "period", "header: {rd}");
+    // first period interest = 1000 * 0.01 = 10
+    assert_eq!(
+        rows[1][3].as_f64().unwrap(),
+        10.0,
+        "first interest = 10: {rd}"
+    );
+    // final balance is 0 (drift absorbed)
+    assert_eq!(rows[12][4].as_f64().unwrap(), 0.0, "final balance 0: {rd}");
+
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_autocorr_acf() {
     // a perfectly periodic series: ACF at lag 0 is 1; an alternating series is
     // anti-correlated at lag 1.
