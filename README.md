@@ -168,6 +168,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
 | `Office::sheet_rename($path, $to, %opts)` | `{renamed}` | rename a sheet in a workbook; `from` selects which |
 | `Office::sheet_add($path, $name, %opts)` | `{sheets}` | add a new sheet to a workbook; `rows`/`position` opts |
+| `Office::sheet_remove($path, $sheet, %opts)` | `{removed, sheets}` | remove a sheet from a workbook (by name/index) |
 | `Office::sheet_info($path)` | `{count, sheets:[{name,rows,cols}]}` | workbook overview: sheet names + dimensions |
 | `Office::sheet_diff($left, $right, %opts)` | `{count, changed:[{ref,row,col,left,right}], left_rows, right_rows}` | cell-by-cell diff of two sheets |
 | `Office::sheet_to_slides($path, $output, %opts)` | `{slides}` | one slide per row; `title_field` titles each, other fields → body lines |

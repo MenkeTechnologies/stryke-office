@@ -257,6 +257,14 @@ fn Office::sheet_add ($path, $name, %opts) {
         office__sheet_add(to_json({ path => $path, name => $name, rows => $opts{rows}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Remove a sheet from a workbook. $sheet selects which (name or index). opts:
+## output (default in place), format. Errors if it would remove the only sheet.
+## Returns { ok, path, removed, sheets }.
+fn Office::sheet_remove ($path, $sheet, %opts) {
+    Office::_decode("sheet_remove",
+        office__sheet_remove(to_json({ path => $path, sheet => $sheet, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Rename a sheet in a workbook. opts: from => sheet to rename (name/index,
 ## default first), output (default: in place), format. $to is the new name.
 ## Returns { ok, path, renamed }.

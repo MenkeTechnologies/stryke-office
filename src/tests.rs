@@ -338,6 +338,38 @@ fn sheet_diff_cells() {
 }
 
 #[test]
+fn sheet_remove_one() {
+    let path = tmp("rm.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"A","rows":[["x"],[1]]}},{{"name":"B","rows":[["y"],[2]]}},{{"name":"C","rows":[["z"],[3]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("rm_out.xlsx");
+    let r = call(
+        office__sheet_remove,
+        &format!(r#"{{"path":"{path}","sheet":"B","output":"{out}"}}"#),
+    );
+    assert_eq!(r["removed"], "B", "removed B: {r}");
+    assert_eq!(r["sheets"], 2, "two remain: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let names: Vec<&str> = rd["sheets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["A", "C"], "A and C remain: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_add_new() {
     let path = tmp("add.xlsx");
     let w = call(

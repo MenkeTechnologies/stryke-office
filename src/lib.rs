@@ -2817,6 +2817,45 @@ fn op_sheet_add(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sheets": n }))
 }
 
+/// Remove a sheet from a workbook. opts: path, output (default in place),
+/// sheet => the sheet to remove (name or index; required), format. Errors if it
+/// would remove the only sheet. Returns `{ ok, path, removed, sheets }`.
+fn op_sheet_remove(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let idx = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => return Err(anyhow!("missing sheet to remove (name or index)")),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    if sheets.len() <= 1 {
+        return Err(anyhow!("cannot remove the only sheet"));
+    }
+    let removed = sheets[idx]["name"].as_str().unwrap_or("").to_string();
+    sheets.remove(idx);
+
+    let n = sheets.len();
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "removed": removed, "sheets": n }))
+}
+
 /// Read one sheet's rows from a file, selected by name/index (default first).
 fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3834,6 +3873,7 @@ export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
+export!(office__sheet_remove, op_sheet_remove);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);
