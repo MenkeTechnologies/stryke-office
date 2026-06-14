@@ -730,10 +730,10 @@ fn pdf_snippet(text: &str, idx: usize, match_len: usize) -> String {
     text[start..end].split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Search a PDF's text page by page. opts: path, query (required),
-/// ignore_case (default false). Returns `{ count, matched_pages,
-/// pages: [{ page, count, snippet }] }` — `count` is total occurrences,
-/// page numbers are 1-based.
+/// Search a PDF's text page by page. opts: path, query (required; literal, or a
+/// regex when `regex => true`), regex (default false), ignore_case (default
+/// false). Returns `{ count, matched_pages, pages: [{ page, count, snippet }] }`
+/// — `count` is total occurrences, page numbers are 1-based.
 fn op_pdf_search(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let query = req_str(&opts, "query")?;
@@ -744,6 +744,18 @@ fn op_pdf_search(opts: Value) -> Result<Value> {
         .get("ignore_case")
         .and_then(flag_of)
         .unwrap_or(false);
+    let regex_mode = opts.get("regex").and_then(flag_of).unwrap_or(false);
+    // With `regex => 1` the query is a regular expression (compiled once).
+    let re = if regex_mode {
+        Some(
+            regex::RegexBuilder::new(query)
+                .case_insensitive(ignore_case)
+                .build()
+                .map_err(|e| anyhow!("invalid regex: {e}"))?,
+        )
+    } else {
+        None
+    };
     let bytes = std::fs::read(path)?;
     let pages = lo_core::extract_pages_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
     let needle = if ignore_case {
@@ -755,19 +767,30 @@ fn op_pdf_search(opts: Value) -> Result<Value> {
     let mut total = 0usize;
     let mut hits = Vec::new();
     for (i, page) in pages.iter().enumerate() {
-        let hay = if ignore_case {
-            page.to_lowercase()
-        } else {
-            page.clone()
+        let (c, idx, mlen, snip_src) = match &re {
+            Some(r) => {
+                let cnt = r.find_iter(page).count();
+                let first = r.find(page);
+                (
+                    cnt,
+                    first.map_or(0, |m| m.start()),
+                    first.map_or(needle.len(), |m| m.len()),
+                    page.clone(),
+                )
+            }
+            None => {
+                let hay = if ignore_case { page.to_lowercase() } else { page.clone() };
+                let cnt = hay.matches(&needle).count();
+                let idx = hay.find(&needle).unwrap_or(0);
+                (cnt, idx, needle.len(), hay)
+            }
         };
-        let c = hay.matches(&needle).count();
         if c > 0 {
             total += c;
-            let idx = hay.find(&needle).unwrap_or(0);
             hits.push(json!({
                 "page": i + 1,
                 "count": c,
-                "snippet": pdf_snippet(&hay, idx, needle.len()),
+                "snippet": pdf_snippet(&snip_src, idx, mlen),
             }));
         }
     }

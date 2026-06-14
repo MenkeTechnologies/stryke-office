@@ -349,7 +349,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_reorder($path, $order, $output)` | `{pages}` | reorder/subset/repeat pages by a 1-based `order` list |
 | `Office::pdf_attach($path, $file, $output, %opts)` | `{name, size, count}` | embed a file (EmbeddedFiles name tree); `name` overrides basename |
 | `Office::pdf_attachments($path, %opts)` | `{attachments:[{name,size}], count}` | list embedded files; `extract_dir` writes them out |
-| `Office::pdf_search($path, $query, %opts)` | `{count, matched_pages, pages:[{page,count,snippet}]}` | per-page full-text search; `ignore_case` opt |
+| `Office::pdf_search($path, $query, %opts)` | `{count, matched_pages, pages:[{page,count,snippet}]}` | per-page full-text search; `regex`/`ignore_case` opts |
 | `Office::pdf_burst($path, $dir, %opts)` | `{count, files}` | split into one PDF per page (`{prefix}-{n}.pdf`) |
 | `Office::pdf_chunk($path, $size, $dir, %opts)` | `{count, files}` | split into fixed-size page chunks (last may be shorter) |
 | `Office::pdf_split_ranges($path, $ranges, $dir, %opts)` | `{count, files}` | split into one file per `[start,end]` range |
