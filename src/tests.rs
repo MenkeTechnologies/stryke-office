@@ -5374,6 +5374,40 @@ fn slides_insert_at_position() {
 }
 
 #[test]
+fn slides_set_title_replaces() {
+    let deck = tmp("settitle.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{deck}","slides":[{{"title":"Old","body":["keep me"]}},{{"title":"Two","body":["b"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("settitle_out.pptx");
+    let r = call(
+        office__slides_set_title,
+        &format!(r#"{{"path":"{deck}","slide":1,"title":"New Title","output":"{out}"}}"#),
+    );
+    assert_eq!(r["slide"], 1, "slide number echoed: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides[0]["text"][0], "New Title", "title replaced: {rd}");
+    assert_eq!(slides[0]["text"][1], "keep me", "body preserved: {rd}");
+    assert_eq!(slides[1]["text"][0], "Two", "other slide untouched: {rd}");
+
+    // out-of-range slide errors
+    let bad = call(
+        office__slides_set_title,
+        &format!(r#"{{"path":"{deck}","slide":9,"title":"X","output":"{out}"}}"#),
+    );
+    assert!(bad["error"].is_string(), "out-of-range rejected: {bad}");
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn slides_split_one_file_per_slide() {
     let deck = tmp("splitdeck.pptx");
     let w = call(

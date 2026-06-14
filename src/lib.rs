@@ -11294,6 +11294,70 @@ fn op_slides_insert(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "position": pos + 1, "slides": total }))
 }
 
+/// Set (replace) the title of one slide — useful for templating a deck. The
+/// title is the slide's first text line; the body lines are preserved. opts:
+/// path, output (default in place), slide => 1-based slide number (required),
+/// title => new title text (required), format. Returns `{ ok, path, slide }`.
+fn op_slides_set_title(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let slide = opts
+        .get("slide")
+        .and_then(Value::as_u64)
+        .filter(|&n| n >= 1)
+        .ok_or_else(|| anyhow!("missing slide (1-based slide number)"))? as usize;
+    let title = req_str(&opts, "title")?.to_string();
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let existing = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if slide > existing.len() {
+        return Err(anyhow!(
+            "slide {slide} out of range (deck has {})",
+            existing.len()
+        ));
+    }
+    let out_slides: Vec<Value> = existing
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let text: Vec<String> = s
+                .get("text")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|t| t.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let (cur_title, body) = text
+                .split_first()
+                .map(|(h, rest)| (h.clone(), rest.to_vec()))
+                .unwrap_or_default();
+            let new_title = if i + 1 == slide {
+                title.clone()
+            } else {
+                cur_title
+            };
+            json!({ "title": new_title, "body": body })
+        })
+        .collect();
+
+    let mut wopts = json!({ "path": output, "slides": out_slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slide": slide }))
+}
+
 // ── pdf (self-contained, via lo_core) ────────────────────────────────────────
 
 fn op_pdf_read(opts: Value) -> Result<Value> {
@@ -11504,6 +11568,7 @@ export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);
 export!(office__slides_append, op_slides_append);
 export!(office__slides_insert, op_slides_insert);
+export!(office__slides_set_title, op_slides_set_title);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 
