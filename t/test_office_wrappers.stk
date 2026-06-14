@@ -301,6 +301,16 @@ unlink $h2sx
 unlink $m2pin
 unlink $m2pout
 
+# ── doc_to_sheet ────────────────────────────────────────────────────
+val $d2shx = "$dir/$tag-d2sheet.docx"
+Office::doc_write($d2shx, [{ kind => "heading", level => 1, text => "Head" }, { kind => "para", text => "body" }])
+val $d2sho = "$dir/$tag-d2sheet.xlsx"
+Office::doc_to_sheet($d2shx, $d2sho)
+val $d2shr = Office::sheet_get_cell($d2sho, "B2")
+assert_eq $d2shr->{value}, "Head", "doc_to_sheet: heading text in row"
+unlink $d2shx
+unlink $d2sho
+
 # ── doc_add_toc ─────────────────────────────────────────────────────
 val $tocd = "$dir/$tag-toc.docx"
 Office::doc_write($tocd, [

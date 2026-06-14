@@ -3470,6 +3470,41 @@ fn pdf_to_sheet_extracts_lines() {
 }
 
 #[test]
+fn doc_to_sheet_one_row_per_block() {
+    let dx = tmp("d2sheet.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Title"}},
+                {{"kind":"para","text":"body text"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("d2sheet.xlsx");
+    let r = call(
+        office__doc_to_sheet,
+        &format!(r#"{{"path":"{dx}","output":"{out}"}}"#),
+    );
+    assert!(
+        r["rows"].as_u64().unwrap() >= 2,
+        "at least 2 data rows: {r}"
+    );
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "level", "header level: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.0, "heading level 1: {rd}");
+    assert_eq!(rows[1][1], "Title", "heading text: {rd}");
+    assert_eq!(rows[2][0].as_f64().unwrap(), 0.0, "body level 0: {rd}");
+    assert_eq!(rows[2][1], "body text", "body text: {rd}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn xml_entities_survive_text_extraction() {
     // Regression: quick-xml emits `&amp;` etc. as standalone GeneralRef events,
     // not inside Text, so the readers must resolve them or `&`/`<`/`>` vanish.
