@@ -146,6 +146,14 @@ fn Office::sheet_to_sql ($path, $table, %opts) {
         office__sheet_to_sql(to_json({ path => $path, table => $table, output => $opts{output}, columns => $opts{columns}, batch => $opts{batch}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Render a sheet as a LaTeX tabular. opts: output (.tex; omit to return), align
+## (column spec e.g. "lcr"), booktabs (\toprule rules), caption (wrap in a table
+## float), sheet, header. Returns { ok, rows, cols, latex, path? }.
+fn Office::sheet_to_latex ($path, %opts) {
+    Office::_decode("sheet_to_latex",
+        office__sheet_to_latex(to_json({ path => $path, output => $opts{output}, align => $opts{align}, booktabs => $opts{booktabs}, caption => $opts{caption}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Parse a GitHub-flavored Markdown table into a spreadsheet (inverse of
 ## sheet_to_md). opts: markdown (table text) or path (.md file), name, format.
 ## Returns { ok, path, rows, cols }.

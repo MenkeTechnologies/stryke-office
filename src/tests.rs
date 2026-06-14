@@ -506,6 +506,49 @@ fn sheet_to_sql_inserts() {
 }
 
 #[test]
+fn sheet_to_latex_tabular() {
+    let path = tmp("tolatex.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[
+                ["Item","Cost"],
+                ["a&b",5],
+                ["100%",10]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_to_latex,
+        &format!(r#"{{"path":"{path}","booktabs":true,"caption":"My Table"}}"#),
+    );
+    let tex = r["latex"].as_str().unwrap();
+    assert!(
+        tex.contains("\\begin{tabular}{ll}"),
+        "tabular + align: {tex}"
+    );
+    assert!(tex.contains("\\toprule"), "booktabs rule: {tex}");
+    assert!(tex.contains("Item & Cost \\\\"), "header row: {tex}");
+    assert!(
+        tex.contains("a\\&b & 5 \\\\"),
+        "ampersand escaped, int bare: {tex}"
+    );
+    assert!(tex.contains("100\\% & 10 \\\\"), "percent escaped: {tex}");
+    assert!(tex.contains("\\caption{My Table}"), "caption float: {tex}");
+
+    // plain (no booktabs) uses \hline
+    let r2 = call(office__sheet_to_latex, &format!(r#"{{"path":"{path}"}}"#));
+    assert!(
+        r2["latex"].as_str().unwrap().contains("\\hline"),
+        "hline rules: {r2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn md_to_sheet_parses_table() {
     // Leading prose then a GFM table with an escaped pipe; prose must be ignored.
     let md =
