@@ -1321,4 +1321,9 @@ val $rugsvg = Office::chart_svg("rug", [{ name => "x", data => [1, 2, 4, 4, 7, 9
 assert_ok ($rugsvg =~ /^<svg/), "chart rug: svg document"
 assert_ok ($rugsvg =~ /stroke-width="1.5"/), "chart rug: tick marks"
 
+# ── chart beeswarm: collision-free point swarm to SVG ───────────────
+val $beesvg = Office::chart_svg("beeswarm", [{ name => "g", data => [4, 4, 4, 4, 4, 5, 5, 3, 3, 6] }])
+assert_ok ($beesvg =~ /^<svg/), "chart beeswarm: svg document"
+assert_ok ($beesvg =~ /circle/), "chart beeswarm: point swarm"
+
 test_run

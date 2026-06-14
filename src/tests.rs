@@ -11021,6 +11021,56 @@ fn chart_rug_raster_and_svg() {
 }
 
 #[test]
+fn beeswarm_offsets_avoid_overlap() {
+    // ten identical y values must fan out so no two points overlap in x
+    let ys = vec![100.0; 10];
+    let radius = 3.0;
+    let offs = beeswarm_offsets(&ys, radius, 200.0);
+    assert_eq!(offs.len(), 10);
+    let mut sorted = offs.clone();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    for w in sorted.windows(2) {
+        assert!(
+            (w[1] - w[0]).abs() >= 2.0 * radius - 1e-6,
+            "adjacent same-y points separated by >= diameter: {sorted:?}"
+        );
+    }
+    // points at well-separated y can share x = 0 (no horizontal spread needed)
+    let ys2 = vec![0.0, 100.0, 200.0];
+    let offs2 = beeswarm_offsets(&ys2, radius, 200.0);
+    assert!(
+        offs2.iter().all(|&o| o.abs() < 1e-9),
+        "no spread when y separated: {offs2:?}"
+    );
+}
+
+#[test]
+fn chart_beeswarm_raster_and_svg() {
+    let series = r#"[{"name":"g","data":[4,4,4,4,4,5,5,3,3,6]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"beeswarm","width":420,"height":340,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("beeswarm raster: {c}"));
+    assert_eq!(c["type"], "beeswarm", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"beeswarm","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "beeswarm svg malformed"
+    );
+    // one circle per value (10)
+    assert_eq!(svg.matches("<circle").count(), 10, "one point per value");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
