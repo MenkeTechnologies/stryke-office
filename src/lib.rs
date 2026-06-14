@@ -2682,6 +2682,74 @@ fn op_sheet_to_latex(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Serialize a sheet as an RFC-4180 CSV string (proper quoting), returned in the
+/// result — distinct from `sheet_write` to a `.csv` file (which is path/extension
+/// driven). A field is quoted (with `"` doubled) when it contains the delimiter,
+/// a quote, or a newline. opts: path, delimiter => field separator (default ","),
+/// sheet, output => also write the text to a file (omit to just return it).
+/// Whole-number floats render without a trailing `.0`. Returns
+/// `{ ok, rows, csv, path? }`.
+fn op_sheet_to_csv(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let delim = opts
+        .get("delimiter")
+        .and_then(Value::as_str)
+        .and_then(|s| s.chars().next())
+        .unwrap_or(',');
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let cell_text = |c: &Value| -> String {
+        match c.as_f64() {
+            Some(x) if c.is_number() && x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+            _ => cell_to_string(c),
+        }
+    };
+    let needs_quote = |s: &str| s.contains(delim) || s.contains('"') || s.contains(['\n', '\r']);
+    let field = |c: &Value| -> String {
+        let s = cell_text(c);
+        if needs_quote(&s) {
+            format!("\"{}\"", s.replace('"', "\"\""))
+        } else {
+            s
+        }
+    };
+
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|row| {
+            row.as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(field)
+                        .collect::<Vec<_>>()
+                        .join(&delim.to_string())
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+    let csv = format!("{}\n", lines.join("\n"));
+
+    let mut out = json!({ "ok": true, "rows": rows.len(), "csv": csv });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, out["csv"].as_str().unwrap_or(""))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// Split one Markdown table row into trimmed cells, honoring `\|` escapes.
 fn split_md_row(line: &str) -> Vec<String> {
     let t = line.trim();
@@ -12247,6 +12315,7 @@ export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
 export!(office__sheet_to_latex, op_sheet_to_latex);
+export!(office__sheet_to_csv, op_sheet_to_csv);
 export!(office__md_to_sheet, op_md_to_sheet);
 export!(office__sheet_to_html, op_sheet_to_html);
 export!(office__sheet_to_text, op_sheet_to_text);
