@@ -223,6 +223,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/bfill/value, `by` columns, `value` constant |
 | `Office::sheet_interpolate($path, %opts)` | `{ok, path, filled}` | fill internal blanks in numeric columns by linear interpolation (pandas `Series.interpolate`); `by`/`decimals` opts |
 | `Office::sheet_drop_empty($path, $output, %opts)` | `{ok, path, rows_removed, cols_removed}` | drop fully-empty rows and/or columns; `rows`/`cols` opts |
+| `Office::sheet_dropna($path, %opts)` | `{ok, path, kept, removed}` | drop rows blank in specified column(s) (pandas `dropna(subset)`); `by`/`how` (any/all) opts |
 | `Office::sheet_add_header($path, $names, $output, %opts)` | `{ok, path, columns}` | prepend a header row of column names (for headerless data) |
 | `Office::sheet_add_index($path, $output, %opts)` | `{ok, path, rows}` | prepend a sequential row-number column (row IDs); `name`/`start`/`step` opts |
 | `Office::sheet_calc($path, $left, $op, $output, %opts)` | `{ok, path, column}` | append a computed column (`+ - * / %`) between two columns or a column and `value`; `into` required |

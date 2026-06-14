@@ -4442,6 +4442,44 @@ fn sheet_drop_empty_rows_and_cols() {
 }
 
 #[test]
+fn sheet_dropna_subset() {
+    let path = tmp("dropna.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["id","email"],
+                [1,"a@x.com"],
+                [2,""],
+                [3,"c@x.com"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // drop rows missing "email"
+    let out = tmp("dropna_out.xlsx");
+    let r = call(
+        office__sheet_dropna,
+        &format!(r#"{{"path":"{path}","by":"email","output":"{out}"}}"#),
+    );
+    assert_eq!(r["kept"], 2, "two rows with email kept: {r}");
+    assert_eq!(r["removed"], 1, "one removed: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2 rows: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.0, "row 1 kept: {rd}");
+    assert_eq!(
+        rows[2][0].as_f64().unwrap(),
+        3.0,
+        "row 3 kept (row 2 dropped): {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_add_header_prepends() {
     let path = tmp("addhdr.xlsx");
     let w = call(

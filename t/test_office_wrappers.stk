@@ -689,6 +689,15 @@ assert_eq $cob->[0]{rows}[1][2], "alt1", "sheet_coalesce: row1 fallback"
 assert_eq $cob->[0]{rows}[2][2], "main2", "sheet_coalesce: row2 primary"
 unlink $cox
 unlink $coo
+# sheet_dropna: drop rows blank in a column
+val $dnx = "$dir/$tag-dropna.xlsx"
+Office::sheet_write($dnx, [{ name => "D", rows => [["id", "email"], [1, "a\@x"], [2, ""], [3, "c\@x"]] }])
+val $dno2 = "$dir/$tag-dropna-out.xlsx"
+val $dnr = Office::sheet_dropna($dnx, by => "email", output => $dno2)
+assert_eq $dnr->{kept}, 2, "sheet_dropna: two rows kept"
+assert_eq $dnr->{removed}, 1, "sheet_dropna: one row dropped"
+unlink $dnx
+unlink $dno2
 # sheet_recode: remap a column's values via a dict
 val $rcx2 = "$dir/$tag-recode.xlsx"
 Office::sheet_write($rcx2, [{ name => "D", rows => [["flag"], ["Y"], ["N"], ["?"]] }])

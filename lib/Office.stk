@@ -946,6 +946,14 @@ fn Office::sheet_drop_empty ($path, $output, %opts) {
         office__sheet_drop_empty(to_json({ path => $path, output => $output, rows => $opts{rows}, cols => $opts{cols}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Drop rows blank in specified column(s) (pandas dropna(subset)). opts: by
+## (column(s); default all), how (any|all, default any), output (default in place),
+## sheet, header, format. Returns { ok, path, kept, removed }.
+fn Office::sheet_dropna ($path, %opts) {
+    Office::_decode("sheet_dropna",
+        office__sheet_dropna(to_json({ path => $path, by => $opts{by}, how => $opts{how}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Prepend a header row of $names (for headerless data). opts: sheet, format.
 ## Returns { ok, path, columns }.
 fn Office::sheet_add_header ($path, $names, $output, %opts) {

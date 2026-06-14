@@ -8788,6 +8788,88 @@ fn op_sheet_drop_empty(opts: Value) -> Result<Value> {
     )
 }
 
+/// Drop rows that have blank cells in specified column(s) (pandas
+/// `dropna(subset=...)`) — unlike `sheet_drop_empty` (whole-row empty) this keys
+/// off required fields. opts: path, output (default in place), `by` => column
+/// name/index or array to check (default: every column), how => "any" (drop the
+/// row if any checked column is blank, default) | "all" (drop only when all are
+/// blank), sheet, header (default true), format. The header row is kept. Returns
+/// `{ ok, path, kept, removed }`.
+fn op_sheet_dropna(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let all = opts.get("how").and_then(Value::as_str) == Some("all");
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let cols: Vec<usize> = match opts.get("by") {
+        None | Some(Value::Null) => (0..ncols).collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        Some(v) => vec![resolve_col(Some(v), header_row)?],
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let total = rows.len() - data_start;
+    let blank_at = |row: &Value, c: usize| -> bool {
+        sheet_cell_blank(
+            row.as_array()
+                .and_then(|a| a.get(c))
+                .unwrap_or(&Value::Null),
+        )
+    };
+    let mut out_rows: Vec<Value> = Vec::new();
+    if data_start == 1 {
+        out_rows.push(rows[0].clone());
+    }
+    for row in &rows[data_start..] {
+        // "all": drop only if every checked column is blank; "any": drop if one is.
+        let drop = if all {
+            cols.iter().all(|&c| blank_at(row, c))
+        } else {
+            cols.iter().any(|&c| blank_at(row, c))
+        };
+        if !drop {
+            out_rows.push(row.clone());
+        }
+    }
+    let kept = out_rows.len() - data_start;
+    sheets[target]["rows"] = Value::Array(out_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "kept": kept, "removed": total - kept }))
+}
+
 /// Prepend a header row of column names (for headerless data, e.g. a bare CSV).
 /// opts: path, output, names => array of column names (required), sheet, format.
 /// All existing rows become data rows. Returns `{ ok, path, columns }`.
@@ -12591,6 +12673,7 @@ export!(office__sheet_cross, op_sheet_cross);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_interpolate, op_sheet_interpolate);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
+export!(office__sheet_dropna, op_sheet_dropna);
 export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_add_index, op_sheet_add_index);
 export!(office__sheet_calc, op_sheet_calc);

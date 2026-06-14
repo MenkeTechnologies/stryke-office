@@ -103,6 +103,7 @@ exports = [
     "office__sheet_fill",
     "office__sheet_interpolate",
     "office__sheet_drop_empty",
+    "office__sheet_dropna",
     "office__sheet_add_header",
     "office__sheet_add_index",
     "office__sheet_calc",
