@@ -385,6 +385,63 @@ fn sheet_to_text_aligned_table() {
 }
 
 #[test]
+fn sheet_get_set_cell_a1() {
+    let path = tmp("cell.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["x"]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // get existing A1
+    let g = call(
+        office__sheet_get_cell,
+        &format!(r#"{{"path":"{path}","cell":"A1"}}"#),
+    );
+    assert_eq!(g["value"], "x", "A1 value: {g}");
+    assert_eq!(g["row"], 0, "A1 row 0: {g}");
+    assert_eq!(g["col"], 0, "A1 col 0: {g}");
+
+    // set B2 (grows the 1x1 grid to 2x2), in place
+    let s = call(
+        office__sheet_set_cell,
+        &format!(r#"{{"path":"{path}","cell":"B2","value":42}}"#),
+    );
+    assert_eq!(s["ok"], true, "set: {s}");
+
+    // read back: B2 == 42, A1 still "x", grid grew
+    let g2 = call(
+        office__sheet_get_cell,
+        &format!(r#"{{"path":"{path}","cell":"B2"}}"#),
+    );
+    assert_eq!(g2["value"].as_f64().unwrap(), 42.0, "B2 set: {g2}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "grew to 2 rows: {rd}");
+    assert_eq!(rows[0][0], "x", "A1 preserved: {rd}");
+
+    // overwrite A1 with a string
+    call(
+        office__sheet_set_cell,
+        &format!(r#"{{"path":"{path}","cell":"A1","value":"hi"}}"#),
+    );
+    let g3 = call(
+        office__sheet_get_cell,
+        &format!(r#"{{"path":"{path}","cell":"A1"}}"#),
+    );
+    assert_eq!(g3["value"], "hi", "A1 overwritten: {g3}");
+
+    // AA1 parses as column 27 (0-based 26)
+    let g4 = call(
+        office__sheet_get_cell,
+        &format!(r#"{{"path":"{path}","cell":"AA1"}}"#),
+    );
+    assert_eq!(g4["col"], 26, "AA -> col 26: {g4}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

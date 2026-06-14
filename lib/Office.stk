@@ -133,6 +133,20 @@ fn Office::sheet_to_text ($path, %opts) {
         office__sheet_to_text(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, border => $opts{border} })))
 }
 
+## Read a single cell by A1 reference (e.g. "B2"). opts: sheet. Returns
+## { cell, row, col, value }.
+fn Office::sheet_get_cell ($path, $cell, %opts) {
+    Office::_decode("sheet_get_cell",
+        office__sheet_get_cell(to_json({ path => $path, cell => $cell, sheet => $opts{sheet} })))
+}
+
+## Set a single cell by A1 reference, growing the grid as needed. opts: value,
+## output (default in place), sheet, format. Returns { ok, path, cell }.
+fn Office::sheet_set_cell ($path, $cell, %opts) {
+    Office::_decode("sheet_set_cell",
+        office__sheet_set_cell(to_json({ path => $path, cell => $cell, value => $opts{value}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
