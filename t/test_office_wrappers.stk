@@ -599,6 +599,16 @@ val $exb = Office::sheet_read($exo)
 assert_eq $exb->[0]{rows}[1][1], "acme.com", "sheet_extract: domain captured"
 unlink $exx
 unlink $exo
+# sheet_grep: keep rows whose cell matches a regex
+val $sgx = "$dir/$tag-sgrep.xlsx"
+Office::sheet_write($sgx, [{ name => "D", rows => [["name", "code"], ["alpha", "A12"], ["beta", "B7"], ["gamma", "A99"]] }])
+val $sgo = "$dir/$tag-sgrep-out.xlsx"
+val $sgr = Office::sheet_grep($sgx, $sgo, '^A\d\d$', column => "code")
+assert_eq $sgr->{kept}, 2, "sheet_grep: two rows match A\\d\\d"
+val $sgb = Office::sheet_read($sgo)
+assert_eq $sgb->[0]{rows}[1][0], "alpha", "sheet_grep: first match kept"
+unlink $sgx
+unlink $sgo
 # sheet_reverse: flip data-row order, header on top
 val $rvx = "$dir/$tag-reverse.xlsx"
 Office::sheet_write($rvx, [{ name => "D", rows => [["n"], [1], [2], [3]] }])

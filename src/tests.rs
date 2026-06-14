@@ -2595,6 +2595,49 @@ fn sheet_extract_regex() {
 }
 
 #[test]
+fn sheet_grep_regex_rows() {
+    let path = tmp("sgrep.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","code"],
+                ["alpha","A12"],
+                ["beta","B7"],
+                ["gamma","A99"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // codes starting with A followed by two digits -> alpha, gamma
+    let out = tmp("sgrep_out.xlsx");
+    let r = call(
+        office__sheet_grep,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"code","pattern":"^A\\d\\d$"}}"#),
+    );
+    assert_eq!(r["kept"], 2, "two rows match: {r}");
+    assert_eq!(r["removed"], 1, "one removed: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2 rows: {rd}");
+    assert_eq!(rows[1][0], "alpha", "first match: {rd}");
+    assert_eq!(rows[2][0], "gamma", "second match: {rd}");
+
+    // any-cell match (no column) + invert
+    let outi = tmp("sgrep_inv.xlsx");
+    let ri = call(
+        office__sheet_grep,
+        &format!(r#"{{"path":"{path}","output":"{outi}","pattern":"beta","invert":true}}"#),
+    );
+    assert_eq!(ri["kept"], 2, "invert drops the beta row: {ri}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outi).ok();
+}
+
+#[test]
 fn sheet_reverse_data_rows() {
     let path = tmp("reverse.xlsx");
     let w = call(

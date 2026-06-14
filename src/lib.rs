@@ -9547,6 +9547,82 @@ fn op_sheet_extract(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into, "matched": matched }))
 }
 
+/// Keep rows whose cell matches a regular expression (the regex counterpart to
+/// `sheet_filter`'s literal `contains`/`eq`). The pattern is compiled once. opts:
+/// path, output, pattern => regex (required), column => name/index to test
+/// (default: match if ANY cell in the row matches), invert => keep
+/// non-matching rows (default false), ignore_case, sheet, header (default true),
+/// format. The header row is always kept. Returns `{ ok, path, kept, removed }`.
+fn op_sheet_grep(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let pattern = req_str(&opts, "pattern")?;
+    let invert = opts.get("invert").and_then(flag_of).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let re = regex::RegexBuilder::new(pattern)
+        .case_insensitive(ignore_case)
+        .build()
+        .map_err(|e| anyhow!("invalid regex: {e}"))?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    // A specific column, or None to scan every cell in the row.
+    let col: Option<usize> = match opts.get("column") {
+        None | Some(Value::Null) => None,
+        c => Some(resolve_col(c, header_row)?),
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let total = rows.len() - data_start;
+    let row_hits = |row: &Value| -> bool {
+        match col {
+            Some(c) => re.is_match(&cell_to_string(
+                row.as_array()
+                    .and_then(|a| a.get(c))
+                    .unwrap_or(&Value::Null),
+            )),
+            None => row
+                .as_array()
+                .map(|a| a.iter().any(|cell| re.is_match(&cell_to_string(cell))))
+                .unwrap_or(false),
+        }
+    };
+
+    let mut out_rows: Vec<Value> = Vec::new();
+    if data_start == 1 {
+        out_rows.push(rows[0].clone());
+    }
+    for row in &rows[data_start..] {
+        if row_hits(row) != invert {
+            out_rows.push(row.clone());
+        }
+    }
+    let kept = out_rows.len() - data_start;
+    sheets[target]["rows"] = Value::Array(out_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "kept": kept, "removed": total - kept }))
+}
+
 /// Reverse the order of a sheet's data rows (e.g. show newest entries first).
 /// opts: path, output (default in place), sheet, header (default true; the header
 /// row stays on top, only the data rows are reversed), format. Returns
@@ -11793,6 +11869,7 @@ export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_pad, op_sheet_pad);
 export!(office__sheet_substr, op_sheet_substr);
 export!(office__sheet_extract, op_sheet_extract);
+export!(office__sheet_grep, op_sheet_grep);
 export!(office__sheet_reverse, op_sheet_reverse);
 export!(office__sheet_coalesce, op_sheet_coalesce);
 export!(office__sheet_recode, op_sheet_recode);
