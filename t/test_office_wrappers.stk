@@ -316,6 +316,13 @@ Office::slides_add_image($idk, $logo)
 val $ex = Office::extract_images($idk)
 assert_eq $ex->{count}, 1, "slides_add_image: image embedded"
 assert_eq $ex->{images}[0]{width}, 16, "slides_add_image: native width"
+# caption the 16x8 logo image (30px bar -> 16x38 output)
+val $capout = "$dir/$tag-cap.png"
+val $capr = Office::img_caption($logo, $capout, "Hi", height => 30)
+assert_eq $capr->{width}, 16, "img_caption: width unchanged"
+assert_eq $capr->{height}, 38, "img_caption: 8 + 30px bar"
+unlink $capout
+
 # set speaker notes and recover them
 Office::slides_set_notes($idk, "speaker reminder", slide => 1)
 val $nrd = Office::slides_read($idk)

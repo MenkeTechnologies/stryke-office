@@ -1919,6 +1919,54 @@ fn op_img_text_size(opts: Value) -> Result<Value> {
     Ok(json!({"width": w, "height": h}))
 }
 
+/// Add a caption bar with centered text above or below an image (meme/label
+/// style). opts: input, output (required), text (required), position =>
+/// "bottom" (default) | "top", height => bar height in px (default 2×`size`),
+/// size => font px (default 24), color => text color (default black),
+/// background => bar fill (default white), font => optional font file. Returns
+/// `{ ok, path, width, height }` (output canvas size).
+fn op_img_caption(opts: Value) -> Result<Value> {
+    use ab_glyph::{FontRef, PxScale};
+    use imageproc::drawing::{draw_text_mut, text_size};
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let text = req_str(&opts, "text")?;
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(24.0) as f32;
+    let bar_h = opts
+        .get("height")
+        .and_then(Value::as_u64)
+        .unwrap_or((size * 2.0) as u64) as u32;
+    let top = opts.get("position").and_then(Value::as_str) == Some("top");
+    let text_color = parse_color(opts.get("color"));
+    let bg = match opts.get("background") {
+        Some(v) => parse_color(Some(v)),
+        None => image::Rgba([255, 255, 255, 255]),
+    };
+    let font_bytes: Vec<u8> = match opts.get("font").and_then(Value::as_str) {
+        Some(p) => std::fs::read(p).map_err(|e| anyhow!("font {p}: {e}"))?,
+        None => FONT_BYTES.to_vec(),
+    };
+    let font = FontRef::try_from_slice(&font_bytes).map_err(|_| anyhow!("invalid font"))?;
+
+    let src = image::open(input).map_err(|e| anyhow!("open {input}: {e}"))?;
+    let (w, h) = (src.width(), src.height());
+    let mut canvas = image::RgbaImage::from_pixel(w, h + bar_h, bg);
+    let img_y = if top { bar_h as i64 } else { 0 };
+    image::imageops::overlay(&mut canvas, &src.to_rgba8(), 0, img_y);
+
+    let scale = PxScale::from(size);
+    let (tw, th) = text_size(scale, &font, text);
+    let tx = ((w as i32 - tw as i32) / 2).max(0);
+    let bar_y = if top { 0 } else { h as i32 };
+    let ty = bar_y + ((bar_h as i32 - th as i32) / 2).max(0);
+    draw_text_mut(&mut canvas, text_color, tx, ty, scale, &font, text);
+
+    image::DynamicImage::ImageRgba8(canvas)
+        .save(&output)
+        .map_err(|e| anyhow!("save {output}: {e}"))?;
+    Ok(json!({ "ok": true, "path": output, "width": w, "height": h + bar_h }))
+}
+
 /// Mask to the inscribed circle (transparent outside).
 fn op_img_crop_circle(opts: Value) -> Result<Value> {
     let h = req_u64_img(&opts, "handle")?;

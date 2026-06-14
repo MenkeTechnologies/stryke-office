@@ -1876,6 +1876,13 @@ fn Office::img_text_size ($text, %opts) {
     Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))
 }
 
+## Add a caption bar with centered text above/below an image. opts: position
+## (bottom/top), height, size, color, background, font. Returns { ok, path, width, height }.
+fn Office::img_caption ($input, $output, $text, %opts) {
+    Office::_decode("img_caption",
+        office__img_caption(to_json({ input => $input, output => $output, text => $text, position => $opts{position}, height => $opts{height}, size => $opts{size}, color => $opts{color}, background => $opts{background}, font => $opts{font} })))
+}
+
 ## Mask to the inscribed circle (transparent outside).
 fn Office::img_crop_circle ($handle) {
     Office::_decode("img_crop_circle", office__img_crop_circle(to_json({ handle => $handle })))
