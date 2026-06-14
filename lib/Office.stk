@@ -166,6 +166,15 @@ fn Office::sheet_pivot ($path, $rows, $cols, $output, %opts) {
         office__sheet_pivot(to_json({ path => $path, rows => $rows, cols => $cols, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Unpivot (melt) a sheet from wide to long. opts: id_vars => column(s) to keep
+## (name/index or arrayref), value_vars => columns to unpivot (default: all
+## non-id), var_name (default "variable"), value_name (default "value"), sheet,
+## header => 0 if first row is data, format. Returns { ok, path, rows }.
+fn Office::sheet_unpivot ($path, $output, %opts) {
+    Office::_decode("sheet_unpivot",
+        office__sheet_unpivot(to_json({ path => $path, output => $output, id_vars => $opts{id_vars}, value_vars => $opts{value_vars}, var_name => $opts{var_name}, value_name => $opts{value_name}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Project/reorder columns. $columns is an arrayref of column names or 0-based
 ## indices in the desired output order. opts: sheet, header => 0 if first row is
 ## data, format => override. Returns { ok, path, columns }.

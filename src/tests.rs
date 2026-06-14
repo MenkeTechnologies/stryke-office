@@ -589,6 +589,38 @@ fn sheet_join_inner_and_left() {
 }
 
 #[test]
+fn sheet_unpivot_melt() {
+    let path = tmp("melt.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["id","jan","feb"],["A",1,2],["B",3,4]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("melt_out.xlsx");
+    let r = call(
+        office__sheet_unpivot,
+        &format!(
+            r#"{{"path":"{path}","id_vars":["id"],"value_vars":["jan","feb"],"output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["rows"], 4, "2 rows x 2 value cols = 4: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "id", "id col kept: {rd}");
+    assert_eq!(rows[0][1], "variable", "var col: {rd}");
+    assert_eq!(rows[0][2], "value", "value col: {rd}");
+    assert_eq!(rows[1][0], "A", "first melt id: {rd}");
+    assert_eq!(rows[1][1], "jan", "first melt var: {rd}");
+    assert_eq!(rows[1][2], 1.0, "first melt value: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_pivot_matrix() {
     let path = tmp("piv.xlsx");
     let w = call(

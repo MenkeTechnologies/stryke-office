@@ -1866,6 +1866,103 @@ fn op_sheet_pivot(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": n_rows, "cols": n_cols }))
 }
 
+/// Unpivot (melt) a sheet from wide to long. opts: path, output,
+/// id_vars => column(s) to keep as identifiers (name/index or array),
+/// value_vars => columns to unpivot (default: all non-id columns),
+/// var_name (default "variable"), value_name (default "value"), sheet, header
+/// (default true), format. Each value column becomes one row per data row.
+/// Returns `{ ok, path, rows }`.
+fn op_sheet_unpivot(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let var_name = opts
+        .get("var_name")
+        .and_then(Value::as_str)
+        .unwrap_or("variable");
+    let value_name = opts
+        .get("value_name")
+        .and_then(Value::as_str)
+        .unwrap_or("value");
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let names: Vec<String> = (0..ncols)
+        .map(|c| {
+            hr.and_then(|h| h.get(c))
+                .map(cell_to_string)
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| format!("Col{}", c + 1))
+        })
+        .collect();
+
+    let resolve_list = |v: Option<&Value>| -> Result<Vec<usize>> {
+        match v {
+            Some(Value::Array(a)) => a.iter().map(|c| resolve_col(Some(c), hr)).collect(),
+            Some(x) if !x.is_null() => Ok(vec![resolve_col(Some(x), hr)?]),
+            _ => Ok(vec![]),
+        }
+    };
+    let id_cols = resolve_list(opts.get("id_vars"))?;
+    let value_cols = match opts.get("value_vars") {
+        Some(_) => resolve_list(opts.get("value_vars"))?,
+        None => (0..ncols).filter(|c| !id_cols.contains(c)).collect(),
+    };
+
+    let cell = |row: &Value, c: usize| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let mut head: Vec<Value> = id_cols.iter().map(|&c| json!(names[c])).collect();
+    head.push(json!(var_name));
+    head.push(json!(value_name));
+    let mut out_rows = vec![Value::Array(head)];
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    for row in &rows[data_start..] {
+        let id_vals: Vec<Value> = id_cols.iter().map(|&c| cell(row, c)).collect();
+        for &vc in &value_cols {
+            let mut r = id_vals.clone();
+            r.push(json!(names[vc]));
+            r.push(cell(row, vc));
+            out_rows.push(Value::Array(r));
+        }
+    }
+
+    let n = out_rows.len() - 1;
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Melted", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n }))
+}
+
 /// Join two spreadsheets on a key column (SQL JOIN). opts: left, right (paths),
 /// output, on => shared key field name (or left_on + right_on), how =>
 /// "inner" (default) | "left", left_sheet / right_sheet => name/index, format.
@@ -3263,6 +3360,7 @@ export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_pivot, op_sheet_pivot);
+export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_transpose, op_sheet_transpose);
