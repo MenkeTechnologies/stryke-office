@@ -399,6 +399,13 @@ fn Office::sheet_head ($path, $output, %opts) {
         office__sheet_head(to_json({ path => $path, output => $output, n => $opts{n}, tail => $opts{tail}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Randomly sample N data rows (header kept), reproducible via a seed. opts: n
+## (default 10), seed, header, sheet, format. Returns { ok, path, rows }.
+fn Office::sheet_sample ($path, $output, %opts) {
+    Office::_decode("sheet_sample",
+        office__sheet_sample(to_json({ path => $path, output => $output, n => $opts{n}, seed => $opts{seed}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.
