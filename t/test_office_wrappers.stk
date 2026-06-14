@@ -45,6 +45,16 @@ val $gcr = Office::text_cut($gcut, [3, 1], delim => ",")
 assert_eq $gcr->{lines}[0], "c,a", "text_cut: header fields reordered"
 assert_eq $gcr->{lines}[1], "3,1", "text_cut: row fields reordered"
 unlink $gcut
+# wrap: fold a long line to a width
+val $gwx = "$dir/$tag-wrap.txt"
+spew $gwx, "the quick brown fox jumps\n"
+val $gwo = "$dir/$tag-wrap-out.txt"
+val $gwr = Office::text_wrap($gwx, width => 10, output => $gwo)
+assert_ok ($gwr->{lines} >= 3), "text_wrap: long line folded into multiple"
+val $gwt = slurp $gwo
+assert_ok ($gwt =~ /^the quick$/m), "text_wrap: greedy first line"
+unlink $gwx
+unlink $gwo
 unlink $grx
 unlink $grt
 unlink $gso

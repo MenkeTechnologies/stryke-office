@@ -1805,6 +1805,14 @@ fn Office::text_cut ($path, $fields, %opts) {
         office__text_cut(to_json({ path => $path, fields => $fields, delim => $opts{delim}, output_delim => $opts{output_delim}, output => $opts{output} })))
 }
 
+## Wrap long lines to a max width (fmt/fold -s). opts: width (default 80),
+## break_words (hard-split over-long words), output (default in place). Returns
+## { ok, path, lines }.
+fn Office::text_wrap ($path, %opts) {
+    Office::_decode("text_wrap",
+        office__text_wrap(to_json({ path => $path, width => $opts{width}, break_words => $opts{break_words}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

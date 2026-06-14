@@ -10636,6 +10636,53 @@ fn text_cut_fields() {
 }
 
 #[test]
+fn text_wrap_lines() {
+    let path = tmp("wrap.txt");
+    // one long line + a blank line preserved
+    std::fs::write(&path, "the quick brown fox jumps\n\nshort\n").unwrap();
+
+    let out = tmp("wrap_out.txt");
+    let r = call(
+        office__text_wrap,
+        &format!(r#"{{"path":"{path}","output":"{out}","width":10}}"#),
+    );
+    assert_eq!(r["ok"], true, "wrap: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    let lines: Vec<&str> = t.lines().collect();
+    // greedy pack to width 10: "the quick" (9), "brown fox" (9), "jumps"
+    assert_eq!(lines[0], "the quick", "first wrapped line: {t:?}");
+    assert_eq!(lines[1], "brown fox", "second wrapped line: {t:?}");
+    assert_eq!(lines[2], "jumps", "remainder: {t:?}");
+    assert_eq!(lines[3], "", "blank line preserved: {t:?}");
+    assert_eq!(lines[4], "short", "short line kept: {t:?}");
+    // each non-blank wrapped line is within width
+    assert!(
+        lines.iter().all(|l| l.chars().count() <= 10),
+        "all <= width: {t:?}"
+    );
+
+    // break_words: a single over-long token is hard-split
+    let path2 = tmp("wrap2.txt");
+    std::fs::write(&path2, "supercalifragilistic\n").unwrap();
+    let out2 = tmp("wrap2_out.txt");
+    call(
+        office__text_wrap,
+        &format!(r#"{{"path":"{path2}","output":"{out2}","width":8,"break_words":true}}"#),
+    );
+    let t2 = std::fs::read_to_string(&out2).unwrap();
+    assert_eq!(
+        t2.lines().next().unwrap(),
+        "supercal",
+        "hard-broken word: {t2:?}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&path2).ok();
+    std::fs::remove_file(&out2).ok();
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

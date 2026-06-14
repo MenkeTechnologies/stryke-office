@@ -583,3 +583,69 @@ fn op_text_cut(opts: Value) -> Result<Value> {
     }
     Ok(out)
 }
+
+/// Wrap long lines to a maximum width (the `fmt`/`fold -s` analogue). opts: path,
+/// output (default in place), width => target column width (default 80),
+/// break_words => hard-split words longer than `width` (default false: an
+/// over-long word stays on its own line intact). Words are split on whitespace
+/// and greedily packed; blank lines are preserved. Width is measured in chars.
+/// Returns `{ ok, path, lines }` (output line count).
+fn op_text_wrap(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let width = opts
+        .get("width")
+        .and_then(Value::as_u64)
+        .filter(|&w| w >= 1)
+        .unwrap_or(80) as usize;
+    let break_words = opts.get("break_words").and_then(flag_of).unwrap_or(false);
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let mut out: Vec<String> = Vec::new();
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            out.push(String::new());
+            continue;
+        }
+        let mut cur = String::new();
+        for word in line.split_whitespace() {
+            // Hard-break a single word that exceeds the width (when requested).
+            let mut word = word.to_string();
+            if break_words {
+                while word.chars().count() > width {
+                    if !cur.is_empty() {
+                        out.push(std::mem::take(&mut cur));
+                    }
+                    let head: String = word.chars().take(width).collect();
+                    out.push(head);
+                    word = word.chars().skip(width).collect();
+                }
+            }
+            let need = if cur.is_empty() {
+                word.chars().count()
+            } else {
+                cur.chars().count() + 1 + word.chars().count()
+            };
+            if !cur.is_empty() && need > width {
+                out.push(std::mem::take(&mut cur));
+            }
+            if cur.is_empty() {
+                cur = word;
+            } else {
+                cur.push(' ');
+                cur.push_str(&word);
+            }
+        }
+        if !cur.is_empty() {
+            out.push(cur);
+        }
+    }
+
+    let joined = format!("{}\n", out.join("\n"));
+    std::fs::write(&output, joined)?;
+    Ok(json!({ "ok": true, "path": output, "lines": out.len() }))
+}
