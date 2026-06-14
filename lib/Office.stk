@@ -685,6 +685,14 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Insert $insert's pages into the $path PDF after a given page. opts: position
+## => 1-based page after which to insert (0 = before all, default = end).
+## Returns { ok, path, pages }.
+fn Office::pdf_insert ($path, $insert, $output, %opts) {
+    Office::_decode("pdf_insert",
+        office__pdf_insert(to_json({ path => $path, insert => $insert, output => $output, position => $opts{position} })))
+}
+
 ## Stamp an image (logo/signature/watermark) onto PDF pages. opts: x/y =>
 ## lower-left position in points (default 36,36), width/height => size in points
 ## (default: image pixel size), pages => [1-based subset] (default all). Returns

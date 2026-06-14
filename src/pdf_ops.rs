@@ -954,3 +954,54 @@ fn op_pdf_assemble(opts: Value) -> Result<Value> {
     let pages = Document::load(&output).map(|d| d.get_pages().len()).unwrap_or(0);
     Ok(json!({ "ok": true, "path": output, "inputs": inputs.len(), "pages": pages }))
 }
+
+/// Insert one PDF's pages into another after a given page. opts: path => base,
+/// insert => PDF to splice in, output, position => 1-based page after which to
+/// insert (0 = before all, default = end). Returns `{ ok, path, pages }`.
+fn op_pdf_insert(opts: Value) -> Result<Value> {
+    let base = req_str(&opts, "path")?;
+    let insert = req_str(&opts, "insert")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let total = Document::load(base)
+        .map_err(|e| anyhow!("load {base}: {e}"))?
+        .get_pages()
+        .len() as u32;
+    let position = opts
+        .get("position")
+        .and_then(Value::as_u64)
+        .unwrap_or(total as u64)
+        .min(total as u64) as u32;
+
+    let tmpdir = std::env::temp_dir();
+    let pid = std::process::id();
+    let mut parts: Vec<String> = Vec::new();
+    let mut temps: Vec<String> = Vec::new();
+    if position > 0 {
+        let a = tmpdir
+            .join(format!("office-ins-a-{pid}.pdf"))
+            .to_string_lossy()
+            .into_owned();
+        let pages: Vec<u32> = (1..=position).collect();
+        op_pdf_split(json!({ "path": base, "pages": pages, "output": a }))?;
+        parts.push(a.clone());
+        temps.push(a);
+    }
+    parts.push(insert.to_string());
+    if position < total {
+        let b = tmpdir
+            .join(format!("office-ins-b-{pid}.pdf"))
+            .to_string_lossy()
+            .into_owned();
+        let pages: Vec<u32> = (position + 1..=total).collect();
+        op_pdf_split(json!({ "path": base, "pages": pages, "output": b }))?;
+        parts.push(b.clone());
+        temps.push(b);
+    }
+
+    op_pdf_merge(json!({ "inputs": parts, "path": output }))?;
+    for t in &temps {
+        std::fs::remove_file(t).ok();
+    }
+    let pages = Document::load(&output).map(|d| d.get_pages().len()).unwrap_or(0);
+    Ok(json!({ "ok": true, "path": output, "pages": pages }))
+}
