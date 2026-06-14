@@ -13184,6 +13184,29 @@ fn text_comm_set_compare() {
 }
 
 #[test]
+fn text_join_on_key() {
+    let a = tmp("join_a.txt");
+    let b = tmp("join_b.txt");
+    std::fs::write(&a, "1,alice\n2,bob\n3,carol\n").unwrap();
+    std::fs::write(&b, "1,90\n3,75\n4,50\n").unwrap();
+    let out = tmp("join_out.txt");
+    let r = call(
+        office__text_join,
+        &format!(r#"{{"a":"{a}","b":"{b}","field":1,"delim":",","output":"{out}"}}"#),
+    );
+    // ids 1 and 3 match -> 2 joined lines
+    assert_eq!(r["count"].as_u64().unwrap(), 2, "two matched keys: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    let lines: Vec<&str> = t.lines().collect();
+    assert_eq!(lines[0], "1,alice,90", "joined row 1: {t:?}");
+    assert_eq!(lines[1], "3,carol,75", "joined row 3: {t:?}");
+
+    for f in [&a, &b, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

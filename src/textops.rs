@@ -979,3 +979,74 @@ fn op_text_comm(opts: Value) -> Result<Value> {
         "common": both.len(),
     }))
 }
+
+/// Relational inner join of two delimited files on a shared key field (the Unix
+/// `join` analogue). opts: a => first file, b => second file, field => 1-based
+/// key field number (default 1, applied to both files), delim => field separator
+/// (default tab), output => write there. Output lines are `key delim a-rest delim
+/// b-rest` (the join field once, then each file's remaining fields), matching
+/// `join`'s default. Multiple matches on a key produce the cross product; lines
+/// with too few fields are skipped. Returns `{ count, lines, path? }`.
+fn op_text_join(opts: Value) -> Result<Value> {
+    use std::collections::HashMap;
+    let pa = req_str(&opts, "a")?;
+    let pb = req_str(&opts, "b")?;
+    let delim = opts.get("delim").and_then(Value::as_str).unwrap_or("\t");
+    let field = opts.get("field").and_then(Value::as_u64).filter(|&f| f >= 1).unwrap_or(1) as usize;
+    let key_idx = field - 1;
+
+    let read = |p: &str| -> std::io::Result<Vec<String>> {
+        Ok(String::from_utf8_lossy(&std::fs::read(p)?).lines().map(String::from).collect())
+    };
+    let la = read(pa)?;
+    let lb = read(pb)?;
+
+    // Split a line, returning (key, remaining-fields-joined) or None if too short.
+    let parts = |line: &str| -> Option<(String, Vec<String>)> {
+        let fields: Vec<&str> = line.split(delim).collect();
+        let key = fields.get(key_idx)?.to_string();
+        let rest: Vec<String> = fields
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != key_idx)
+            .map(|(_, s)| s.to_string())
+            .collect();
+        Some((key, rest))
+    };
+
+    // Index file b by key (preserving order, allowing duplicates).
+    let mut bmap: HashMap<String, Vec<Vec<String>>> = HashMap::new();
+    for line in &lb {
+        if let Some((k, rest)) = parts(line) {
+            bmap.entry(k).or_default().push(rest);
+        }
+    }
+
+    let mut lines = Vec::new();
+    for line in &la {
+        let Some((k, arest)) = parts(line) else { continue };
+        if let Some(matches) = bmap.get(&k) {
+            for brest in matches {
+                let mut out: Vec<String> = Vec::with_capacity(1 + arest.len() + brest.len());
+                out.push(k.clone());
+                out.extend(arest.iter().cloned());
+                out.extend(brest.iter().cloned());
+                lines.push(out.join(delim));
+            }
+        }
+    }
+
+    let mut out = json!({ "count": lines.len(), "lines": lines });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        let joined = out["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(output, format!("{joined}\n"))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
