@@ -1306,3 +1306,69 @@ fn op_pdf_links(opts: Value) -> Result<Value> {
     let count = links.len();
     Ok(json!({ "links": links, "count": count }))
 }
+
+/// Strip annotations from a PDF (links, comments, highlights, …) to sanitize a
+/// file before sharing. opts: path, output (default in place), subtype => keep
+/// all annotations except this one `/Subtype` (e.g. "Link", "Highlight",
+/// "Text"); omit to remove every annotation. Returns `{ ok, path, removed }`.
+fn op_pdf_remove_annotations(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let subtype = opts.get("subtype").and_then(Value::as_str);
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
+    let mut removed = 0u64;
+    for pid in page_ids {
+        let Some(annots) = doc
+            .get_object(pid)
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"Annots").ok())
+            .and_then(|o| o.as_array().ok())
+            .cloned()
+        else {
+            continue;
+        };
+        // Decide what to keep using immutable reads, then apply one mutation.
+        let kept: Vec<Object> = match subtype {
+            Some(want) => annots
+                .into_iter()
+                .filter(|a| {
+                    let st = match a {
+                        Object::Reference(id) => {
+                            doc.get_object(*id).ok().and_then(|o| o.as_dict().ok())
+                        }
+                        Object::Dictionary(d) => Some(d),
+                        _ => None,
+                    }
+                    .and_then(|d| d.get(b"Subtype").and_then(|o| o.as_name()).ok())
+                    .map(|n| n.to_vec());
+                    let matches = st.as_deref() == Some(want.as_bytes());
+                    if matches {
+                        removed += 1;
+                    }
+                    !matches
+                })
+                .collect(),
+            None => {
+                removed += annots.len() as u64;
+                Vec::new()
+            }
+        };
+        if let Ok(d) = doc.get_object_mut(pid).and_then(|o| o.as_dict_mut()) {
+            if kept.is_empty() {
+                d.remove(b"Annots");
+            } else {
+                d.set("Annots", Object::Array(kept));
+            }
+        }
+    }
+
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "removed": removed }))
+}

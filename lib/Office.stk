@@ -921,6 +921,13 @@ fn Office::pdf_links ($path) {
     Office::_decode("pdf_links", office__pdf_links(to_json({ path => $path })))
 }
 
+## Strip annotations from a PDF to sanitize before sharing. opts: output,
+## subtype (remove only this /Subtype; omit = all). Returns { ok, path, removed }.
+fn Office::pdf_remove_annotations ($path, %opts) {
+    Office::_decode("pdf_remove_annotations",
+        office__pdf_remove_annotations(to_json({ path => $path, output => $opts{output}, subtype => $opts{subtype} })))
+}
+
 ## Add text at a position on PDF pages (labels, stamps, annotations). opts: x/y
 ## => position in points (default 72,72; y from bottom), size (default 12),
 ## color (default black), pages => [1-based subset] (default all). Returns

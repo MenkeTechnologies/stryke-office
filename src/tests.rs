@@ -4697,6 +4697,54 @@ fn pdf_add_link_then_links_round_trip() {
 }
 
 #[test]
+fn pdf_remove_annotations_strips_links() {
+    let src = tmp("prm.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"paragraph","text":"page"}}]}}"#),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+    call(
+        office__pdf_add_link,
+        &format!(r#"{{"path":"{src}","page":1,"url":"https://a.test"}}"#),
+    );
+    assert_eq!(
+        call(office__pdf_links, &format!(r#"{{"path":"{src}"}}"#))["count"],
+        1,
+        "link present before removal"
+    );
+
+    // subtype filter that doesn't match leaves the link intact
+    let keep = tmp("prm_keep.pdf");
+    call(
+        office__pdf_remove_annotations,
+        &format!(r#"{{"path":"{src}","subtype":"Highlight","output":"{keep}"}}"#),
+    );
+    assert_eq!(
+        call(office__pdf_links, &format!(r#"{{"path":"{keep}"}}"#))["count"],
+        1,
+        "non-matching subtype keeps link"
+    );
+
+    // removing all annotations clears the link
+    let out = tmp("prm_out.pdf");
+    let r = call(
+        office__pdf_remove_annotations,
+        &format!(r#"{{"path":"{src}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["removed"], 1, "one annotation removed: {r}");
+    assert_eq!(
+        call(office__pdf_links, &format!(r#"{{"path":"{out}"}}"#))["count"],
+        0,
+        "link gone after removal"
+    );
+
+    for f in [&src, &keep, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");

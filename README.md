@@ -263,6 +263,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_draw_line($path, $lines, $output, %opts)` | `{pages, lines}` | draw lines on pages (dividers/signature lines); `color`/`width`/`pages` |
 | `Office::pdf_add_link($path, $url, %opts)` | `{ok, path, page}` | add a clickable URI link annotation; `page`/`rect` opts |
 | `Office::pdf_links($path)` | `{links, count}` | extract every URI link annotation (`[{page, url, rect}]`) |
+| `Office::pdf_remove_annotations($path, %opts)` | `{ok, path, removed}` | strip annotations (links/comments/highlights) to sanitize; `subtype`/`output` opts |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |

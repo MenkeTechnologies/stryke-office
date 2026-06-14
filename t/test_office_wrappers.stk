@@ -130,6 +130,10 @@ Office::pdf_add_link($plp, "https://stryke.dev", page => 1, rect => [10, 10, 200
 val $plr = Office::pdf_links($plp)
 assert_eq $plr->{count}, 1, "pdf_links: one link"
 assert_eq $plr->{links}[0]{url}, "https://stryke.dev", "pdf_links: url round-trips"
+# strip annotations and confirm the link is gone
+Office::pdf_remove_annotations($plp)
+val $plr2 = Office::pdf_links($plp)
+assert_eq $plr2->{count}, 0, "pdf_remove_annotations: link stripped"
 unlink $plp
 
 # ── xml entity survival across text extraction (regression) ─────────
