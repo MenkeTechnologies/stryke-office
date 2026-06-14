@@ -274,6 +274,31 @@ fn sheet_quantile_arbitrary_percentile() {
 }
 
 #[test]
+fn sheet_agg_scalar() {
+    let path = tmp("agg.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let g = |a: &str| {
+        call(
+            office__sheet_agg,
+            &format!(r#"{{"path":"{path}","column":"v","agg":"{a}"}}"#),
+        )
+    };
+    assert_eq!(g("sum")["value"].as_f64().unwrap(), 60.0, "sum");
+    assert_eq!(g("mean")["value"].as_f64().unwrap(), 20.0, "mean");
+    assert_eq!(g("min")["value"].as_f64().unwrap(), 10.0, "min");
+    assert_eq!(g("max")["value"].as_f64().unwrap(), 30.0, "max");
+    assert_eq!(g("count")["value"].as_u64().unwrap(), 3, "count");
+    assert_eq!(g("median")["value"].as_f64().unwrap(), 20.0, "median");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_corr_pearson_matrix() {
     let path = tmp("corr.xlsx");
     // y = 2x (perfect +), z = -x (perfect -).

@@ -102,6 +102,13 @@ fn Office::sheet_quantile ($path, $column, $q, %opts) {
         office__sheet_quantile(to_json({ path => $path, column => $column, q => $q, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Single-column scalar aggregate. opts: agg (sum/mean/min/max/count/median),
+## sheet, header. Returns { column, agg, value, count }.
+fn Office::sheet_agg ($path, $column, %opts) {
+    Office::_decode("sheet_agg",
+        office__sheet_agg(to_json({ path => $path, column => $column, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Pearson correlation matrix between numeric columns (pandas df.corr()).
 ## opts: sheet, header. Returns { sheet, columns, matrix }.
 fn Office::sheet_corr ($path, %opts) {
