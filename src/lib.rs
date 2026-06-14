@@ -8014,6 +8014,84 @@ fn op_sheet_strip(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "trimmed": trimmed }))
 }
 
+/// Append a column holding the first non-blank value across several columns, in
+/// priority order (SQL `COALESCE`). Distinct from `sheet_fill` (fills within one
+/// column) and `sheet_concat_columns` (joins values together). opts: path,
+/// output, columns => array of column names/indices in priority order
+/// (required), into => new column header (default "coalesce"), default => value
+/// when all listed columns are blank (default: blank), sheet, header, format.
+/// Returns `{ ok, path, column, filled }` (rows that got a non-default value).
+fn op_sheet_coalesce(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let default = opts.get("default").cloned().unwrap_or_else(|| json!(""));
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let cols: Vec<usize> = match opts.get("columns") {
+        Some(Value::Array(a)) if !a.is_empty() => a
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        _ => return Err(anyhow!("missing columns (expected non-empty array)")),
+    };
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .unwrap_or("coalesce")
+        .to_string();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut filled = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let chosen = cols
+                .iter()
+                .filter_map(|&c| cells.get(c))
+                .find(|cell| !sheet_cell_blank(cell))
+                .cloned();
+            match chosen {
+                Some(v) => {
+                    filled += 1;
+                    cells.push(v);
+                }
+                None => cells.push(default.clone()),
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into, "filled": filled }))
+}
+
 /// Top-N rows by a column (sort then take N). opts: path, output, by => column
 /// (required), n => row count (default 10), ascending => bool (default false =
 /// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
@@ -9979,6 +10057,7 @@ export!(office__sheet_sample, op_sheet_sample);
 export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
+export!(office__sheet_coalesce, op_sheet_coalesce);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);

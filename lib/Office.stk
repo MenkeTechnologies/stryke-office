@@ -690,6 +690,14 @@ fn Office::sheet_strip ($path, %opts) {
         office__sheet_strip(to_json({ path => $path, collapse => $opts{collapse}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a column with the first non-blank value across $columns (SQL COALESCE).
+## opts: into (default "coalesce"), default (when all blank), sheet, header,
+## format. Returns { ok, path, column, filled }.
+fn Office::sheet_coalesce ($path, $output, $columns, %opts) {
+    Office::_decode("sheet_coalesce",
+        office__sheet_coalesce(to_json({ path => $path, output => $output, columns => $columns, into => $opts{into}, default => $opts{default}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.
