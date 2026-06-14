@@ -1926,6 +1926,27 @@ fn op_sheet_to_json(opts: Value) -> Result<Value> {
     )
 }
 
+/// Export a sheet as JSON Lines (NDJSON): one compact header-keyed JSON object
+/// per data row, newline-separated — the standard format for data pipelines and
+/// log ingestion. opts: path, output (.jsonl/.ndjson), sheet => name/index.
+/// Returns `{ ok, path, count }`.
+fn op_sheet_to_ndjson(opts: Value) -> Result<Value> {
+    let output = req_str(&opts, "output")?.to_string();
+    let recs = op_sheet_records(opts.clone())?;
+    let records = recs
+        .get("records")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut text = String::new();
+    for rec in &records {
+        text.push_str(&serde_json::to_string(rec)?);
+        text.push('\n');
+    }
+    std::fs::write(&output, text)?;
+    Ok(json!({ "ok": true, "path": output, "count": records.len() }))
+}
+
 /// Import a JSON file (array of objects) into a spreadsheet. opts: input (.json),
 /// output (sheet path), fields => explicit column order, sheet_name, format.
 /// Returns `{ ok, path, rows, fields }` (from records_write).
@@ -5355,6 +5376,7 @@ export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
+export!(office__sheet_to_ndjson, op_sheet_to_ndjson);
 export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);

@@ -159,6 +159,13 @@ fn Office::sheet_to_json ($path, $output, %opts) {
         office__sheet_to_json(to_json({ path => $path, output => $output, sheet => $opts{sheet}, pretty => $opts{pretty} })))
 }
 
+## Export a sheet as JSON Lines (NDJSON): one header-keyed JSON object per data
+## row. opts: sheet. Returns { ok, path, count }.
+fn Office::sheet_to_ndjson ($path, $output, %opts) {
+    Office::_decode("sheet_to_ndjson",
+        office__sheet_to_ndjson(to_json({ path => $path, output => $output, sheet => $opts{sheet} })))
+}
+
 ## Import a JSON file (array of objects) into a spreadsheet. opts: fields =>
 ## explicit column order, sheet_name, format => override. Returns
 ## { ok, path, rows, fields }.

@@ -1849,6 +1849,37 @@ fn sheet_records_round_trip() {
 }
 
 #[test]
+fn sheet_to_ndjson_lines() {
+    let path = tmp("nd.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["a",1],["b",2]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("nd.jsonl");
+    let r = call(
+        office__sheet_to_ndjson,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two records: {r}");
+
+    let text = std::fs::read_to_string(&out).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "one object per data row: {text:?}");
+    // each line is a standalone JSON object keyed by header
+    let o0: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(o0["name"], "a", "line0 name: {text:?}");
+    let o1: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+    assert_eq!(o1["qty"], 2.0, "line1 qty numeric: {text:?}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn ods_write_then_read_round_trips() {
     let path = tmp("rt.ods");
     let w = call(

@@ -26,6 +26,7 @@ exports = [
     "office__sheet_records",
     "office__records_write",
     "office__sheet_to_json",
+    "office__sheet_to_ndjson",
     "office__json_to_sheet",
     "office__sheet_sort",
     "office__sheet_rank",
