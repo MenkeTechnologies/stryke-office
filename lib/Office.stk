@@ -656,6 +656,15 @@ fn Office::sheet_transform ($path, $column, $op, $output, %opts) {
         office__sheet_transform(to_json({ path => $path, column => $column, op => $op, output => $output, digits => $opts{digits}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Type-coerce cells in column(s) — clean imported data. opts: by (column(s);
+## default all), type (number|int|string|bool, default number; `number` parses
+## currency/commas/percent/accounting negatives), sheet, header, format. Returns
+## { ok, path, cast }.
+fn Office::sheet_cast ($path, $output, %opts) {
+    Office::_decode("sheet_cast",
+        office__sheet_cast(to_json({ path => $path, output => $output, by => $opts{by}, type => $opts{type}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.

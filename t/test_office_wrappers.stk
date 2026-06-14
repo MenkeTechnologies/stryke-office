@@ -384,6 +384,17 @@ assert_eq $cmb->[0]{rows}[3][1], 4, "sheet_cumulative: running max reaches 4"
 assert_eq $cmb->[0]{rows}[4][1], 4, "sheet_cumulative: running max holds at 4"
 unlink $cmx
 unlink $cmo
+# sheet_cast: parse messy money strings to numbers
+val $ctx = "$dir/$tag-cast.xlsx"
+Office::sheet_write($ctx, [{ name => "D", rows => [["amt"], ["\$1,234.50"], ["(2,000)"], ["45%"]] }])
+val $cto = "$dir/$tag-cast-out.xlsx"
+val $ctr = Office::sheet_cast($ctx, $cto, by => "amt", type => "number")
+assert_eq $ctr->{cast}, 3, "sheet_cast: three cells cast"
+val $ctb = Office::sheet_read($cto)
+assert_eq $ctb->[0]{rows}[1][0], 1234.5, "sheet_cast: \$1,234.50 -> 1234.5"
+assert_eq $ctb->[0]{rows}[2][0], -2000, "sheet_cast: (2,000) -> -2000"
+unlink $ctx
+unlink $cto
 # sheet_pct_change: row-over-row percentage change
 val $pcx = "$dir/$tag-pctchg.xlsx"
 Office::sheet_write($pcx, [{ name => "D", rows => [["v"], [100], [150], [75]] }])

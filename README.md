@@ -177,6 +177,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_freeze($path, $output, %opts)` | `{ok, path, row, col}` | freeze panes on a sheet (xlsx); `row` (default 1)/`col` opts |
 | `Office::sheet_autofilter($path, $output, %opts)` | `{ok, path, range}` | apply an autofilter over a sheet's range (xlsx); `range` opt (default used range) |
 | `Office::sheet_autosize($path, %opts)` | `{ok, path, sheets}` | auto-size columns to content (xlsx); `sheet` opt limits to one sheet (default all) |
+| `Office::sheet_cast($path, $output, %opts)` | `{ok, path, cast}` | type-coerce column(s) (`number`/`int`/`string`/`bool`); `number` parses currency/commas/percent/accounting negatives; `by` opt |
 | `Office::sheet_round($path, $output, %opts)` | `{ok, path, rounded}` | round every numeric cell to N decimals (`decimals` default 2); `columns` opt restricts which columns; header untouched |
 | `Office::sheet_histogram($path, $column, %opts)` | `{column, count, min, max, bins}` | bucket a numeric column into `bins` (default 10) equal-width intervals; each bin `{lo, hi, count}` |
 | `Office::sheet_bin($path, $output, $column, %opts)` | `{ok, path, column, into, bins}` | append a bin-assignment column (pandas `pd.cut`); `edges`/`bins`/`labels`/`into` opts |
