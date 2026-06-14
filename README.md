@@ -155,6 +155,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_dtypes($path, %opts)` | `{sheet, rows, columns:[{name,type,counts}]}` | infer each column's data type (integer/float/bool/string/mixed/empty; pandas `df.dtypes`) |
 | `Office::sheet_mode($path, %opts)` | `{sheet, rows, columns:[{name,mode,count}]}` | most-frequent value (mode) of each column (text or numeric) |
 | `Office::sheet_nunique($path, %opts)` | `{sheet, rows, columns:[{name,nunique}]}` | count distinct values per column (cardinality; pandas `nunique`); `dropna` opt |
+| `Office::sheet_count($path, %opts)` | `{sheet, rows, columns:[{name,count,blank}]}` | count filled/blank cells per column (completeness; pandas `count`) |
 | `Office::sheet_cov($path, %opts)` | `{sheet, columns, matrix}` | sample covariance matrix between numeric columns (diagonal = sample variance; pandas `df.cov()`) |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |

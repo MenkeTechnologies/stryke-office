@@ -117,6 +117,13 @@ fn Office::sheet_nunique ($path, %opts) {
         office__sheet_nunique(to_json({ path => $path, dropna => $opts{dropna}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Count filled/blank cells per column (completeness; pandas count). opts: sheet,
+## header. Returns { sheet, rows, columns => [{ name, count, blank }] }.
+fn Office::sheet_count ($path, %opts) {
+    Office::_decode("sheet_count",
+        office__sheet_count(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Compute an arbitrary percentile of a numeric column ($q in 0.0..=1.0, e.g.
 ## 0.9 for p90). opts: sheet, header. Returns { column, q, value, count }.
 fn Office::sheet_quantile ($path, $column, $q, %opts) {

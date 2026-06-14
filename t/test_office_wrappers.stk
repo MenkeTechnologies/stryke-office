@@ -178,6 +178,9 @@ assert_eq $mor->{columns}[0]{mode}, "red", "sheet_mode: most frequent value"
 assert_eq $mor->{columns}[0]{count}, 2, "sheet_mode: occurrence count"
 val $nuq = Office::sheet_nunique($mox)
 assert_eq $nuq->{columns}[0]{nunique}, 2, "sheet_nunique: two distinct colors"
+val $cnt = Office::sheet_count($mox)
+assert_eq $cnt->{columns}[0]{count}, 3, "sheet_count: three filled cells"
+assert_eq $cnt->{columns}[0]{blank}, 0, "sheet_count: no blanks"
 unlink $mox
 
 val $qn = Office::sheet_quantile($xl, "Count", 0.5)

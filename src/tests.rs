@@ -320,6 +320,34 @@ fn sheet_nunique_cardinality() {
 }
 
 #[test]
+fn sheet_count_completeness() {
+    let path = tmp("count.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["a","b"],
+                ["x",1],
+                ["",2],
+                ["y",""]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_count, &format!(r#"{{"path":"{path}"}}"#));
+    let cols = r["columns"].as_array().unwrap();
+    // a: x,y filled (one blank) -> 2/1 ; b: 1,2 filled (one blank) -> 2/1
+    assert_eq!(cols[0]["count"], 2, "a filled: {r}");
+    assert_eq!(cols[0]["blank"], 1, "a blank: {r}");
+    assert_eq!(cols[1]["count"], 2, "b filled: {r}");
+    assert_eq!(cols[1]["blank"], 1, "b blank: {r}");
+    assert_eq!(r["rows"], 3, "three data rows: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_quantile_arbitrary_percentile() {
     let path = tmp("quantile.xlsx");
     let w = call(
