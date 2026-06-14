@@ -904,6 +904,14 @@ assert_eq $sfr->{rows}, 5, "sheet_shuffle: all data rows kept"
 val $sfb = Office::sheet_read($sfo)
 assert_eq $sfb->[0]{rows}[0][0], "h", "sheet_shuffle: header stays on top"
 unlink $sfo
+# sheet_train_test_split: 80/20 of 5 rows -> 4/1
+val $ttr = "$dir/$tag-train.xlsx"
+val $tte = "$dir/$tag-test.xlsx"
+val $ttsr = Office::sheet_train_test_split($sx, $ttr, $tte, ratio => 0.8, seed => 7)
+assert_eq $ttsr->{train_rows}, 4, "sheet_train_test_split: 4 train rows"
+assert_eq $ttsr->{test_rows}, 1, "sheet_train_test_split: 1 test row"
+unlink $ttr
+unlink $tte
 unlink $sx
 unlink $so
 

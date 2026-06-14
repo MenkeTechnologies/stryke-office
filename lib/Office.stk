@@ -830,6 +830,14 @@ fn Office::sheet_shuffle ($path, %opts) {
         office__sheet_shuffle(to_json({ path => $path, seed => $opts{seed}, output => $opts{output}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Split data rows into $train and $test files (sklearn train_test_split). opts:
+## ratio (train fraction, default 0.8), shuffle (default 1), seed, sheet, header,
+## format. Returns { ok, train, test, train_rows, test_rows }.
+fn Office::sheet_train_test_split ($path, $train, $test, %opts) {
+    Office::_decode("sheet_train_test_split",
+        office__sheet_train_test_split(to_json({ path => $path, train => $train, test => $test, ratio => $opts{ratio}, shuffle => $opts{shuffle}, seed => $opts{seed}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Apply a named transform to one column: upper/lower/trim/title or
 ## round/floor/ceil/abs/int. opts: digits (for round), into (new column; default
 ## replace), sheet, header, format. Returns { ok, path, transformed }.

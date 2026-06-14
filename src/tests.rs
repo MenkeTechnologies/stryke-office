@@ -2498,11 +2498,62 @@ fn sheet_shuffle_reproducible() {
     // it's a permutation of 1..=7
     let mut sorted = a.clone();
     sorted.sort_unstable();
-    assert_eq!(sorted, vec![1, 2, 3, 4, 5, 6, 7, 8], "all rows present once");
+    assert_eq!(
+        sorted,
+        vec![1, 2, 3, 4, 5, 6, 7, 8],
+        "all rows present once"
+    );
     // a different seed should (very likely) give a different order
     assert_ne!(a, c, "different seed -> different order");
 
     for f in [&path, &pa, &pb, &pc] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
+fn sheet_train_test_split_ratio() {
+    let path = tmp("tts.xlsx");
+    // 10 data rows; 0.7 ratio -> 7 train, 3 test
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let tr = tmp("tts_train.xlsx");
+    let te = tmp("tts_test.xlsx");
+    let r = call(
+        office__sheet_train_test_split,
+        &format!(r#"{{"path":"{path}","train":"{tr}","test":"{te}","ratio":0.7,"seed":7}}"#),
+    );
+    assert_eq!(r["train_rows"], 7, "70% to train: {r}");
+    assert_eq!(r["test_rows"], 3, "30% to test: {r}");
+    // each file keeps the header; partition is disjoint and complete
+    let rdt = call(office__sheet_read, &format!(r#"{{"path":"{tr}"}}"#));
+    let rde = call(office__sheet_read, &format!(r#"{{"path":"{te}"}}"#));
+    let trows = rdt["sheets"][0]["rows"].as_array().unwrap();
+    let erows = rde["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(trows[0][0], "v", "train header: {rdt}");
+    assert_eq!(erows[0][0], "v", "test header: {rde}");
+    assert_eq!(trows.len(), 8, "header + 7 train: {rdt}");
+    assert_eq!(erows.len(), 4, "header + 3 test: {rde}");
+    // union of values is the full 1..=10 set
+    let mut all: Vec<i64> = trows[1..]
+        .iter()
+        .chain(erows[1..].iter())
+        .map(|r| r[0].as_f64().unwrap() as i64)
+        .collect();
+    all.sort_unstable();
+    assert_eq!(
+        all,
+        (1..=10).collect::<Vec<_>>(),
+        "disjoint + complete: {rdt} {rde}"
+    );
+
+    for f in [&path, &tr, &te] {
         std::fs::remove_file(f).ok();
     }
 }
