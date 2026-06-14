@@ -195,6 +195,16 @@ Office::sheet_add_header($gcx, ["c1", "c2"], $aho)
 val $ahr = Office::sheet_get_cell($aho, "A1")
 assert_eq $ahr->{value}, "c1", "sheet_add_header: header prepended"
 unlink $aho
+
+# calc: build a numeric sheet and compute a*2
+val $clx = "$dir/$tag-calc.xlsx"
+Office::sheet_write($clx, [{ name => "D", rows => [["n"], [3], [4]] }])
+val $clo = "$dir/$tag-calc-out.xlsx"
+Office::sheet_calc($clx, "n", "*", $clo, value => 2, into => "double")
+val $clr = Office::sheet_get_cell($clo, "B2")
+assert_eq $clr->{value}, 6, "sheet_calc: n*2"
+unlink $clx
+unlink $clo
 # vlookup on the same file
 val $lk = Office::sheet_lookup($gcx, "g", "y", "v")
 assert_eq $lk->{value}, "c", "sheet_lookup: returns matching value"

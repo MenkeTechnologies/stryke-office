@@ -641,6 +641,14 @@ fn Office::sheet_add_header ($path, $names, $output, %opts) {
         office__sheet_add_header(to_json({ path => $path, names => $names, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Append a computed column from an arithmetic op (+ - * / %) between two columns
+## or a column and a constant. opts: right (column) or value (constant), into,
+## decimals, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_calc ($path, $left, $op, $output, %opts) {
+    Office::_decode("sheet_calc",
+        office__sheet_calc(to_json({ path => $path, left => $left, op => $op, output => $output, right => $opts{right}, value => $opts{value}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns

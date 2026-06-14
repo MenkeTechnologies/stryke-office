@@ -2767,6 +2767,52 @@ fn sheet_add_header_prepends() {
 }
 
 #[test]
+fn sheet_calc_arithmetic_column() {
+    let path = tmp("calc.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["qty","price"],[2,3],[4,5]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // total = qty * price
+    let out = tmp("calc_out.xlsx");
+    let r = call(
+        office__sheet_calc,
+        &format!(
+            r#"{{"path":"{path}","into":"total","left":"qty","op":"*","right":"price","output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["column"], "total", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][2], "total", "header appended: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 6.0, "2*3=6: {rd}");
+    assert_eq!(rows[2][2].as_f64().unwrap(), 20.0, "4*5=20: {rd}");
+
+    // column op constant: qty * 10
+    let outc = tmp("calc_c.xlsx");
+    call(
+        office__sheet_calc,
+        &format!(
+            r#"{{"path":"{path}","into":"x10","left":"qty","op":"*","value":10,"output":"{outc}"}}"#
+        ),
+    );
+    let rdc = call(office__sheet_read, &format!(r#"{{"path":"{outc}"}}"#));
+    assert_eq!(
+        rdc["sheets"][0]["rows"][1][2].as_f64().unwrap(),
+        20.0,
+        "2*10=20: {rdc}"
+    );
+
+    for f in [&path, &out, &outc] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(

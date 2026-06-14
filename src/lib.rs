@@ -5630,6 +5630,112 @@ fn op_sheet_add_header(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "columns": names.len() }))
 }
 
+/// Append a computed column from an arithmetic op between two columns, or a
+/// column and a constant (e.g. `total = qty * price`). opts: path, output, into
+/// => new column header (required), left => column name/index (required), op =>
+/// one of `+ - * / %` (required), and either right => a second column or value =>
+/// a numeric constant (one required), decimals => round, sheet, header (default
+/// true), format. Rows where an operand is non-numeric (or division by zero) get
+/// a blank. Returns `{ ok, path, column }`.
+fn op_sheet_calc(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let into = req_str(&opts, "into")?.to_string();
+    let op = req_str(&opts, "op")?.to_string();
+    if !matches!(op.as_str(), "+" | "-" | "*" | "/" | "%") {
+        return Err(anyhow!("unknown op: {op} (one of + - * / %)"));
+    }
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let left = resolve_col(opts.get("left"), header_row)?;
+    let constant = opts.get("value").and_then(Value::as_f64);
+    let right = if constant.is_some() {
+        None
+    } else {
+        Some(resolve_col(opts.get("right"), header_row)?)
+    };
+    if constant.is_none() && right.is_none() {
+        return Err(anyhow!("need either right (column) or value (constant)"));
+    }
+
+    let apply = |l: f64, r: f64| -> Option<f64> {
+        let v = match op.as_str() {
+            "+" => l + r,
+            "-" => l - r,
+            "*" => l * r,
+            "/" => {
+                if r == 0.0 {
+                    return None;
+                }
+                l / r
+            }
+            _ => {
+                if r == 0.0 {
+                    return None;
+                }
+                l % r
+            }
+        };
+        Some(match decimals {
+            Some(d) => {
+                let f = 10f64.powi(d as i32);
+                (v * f).round() / f
+            }
+            None => v,
+        })
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let l = cells.get(left).and_then(sheet_cell_num);
+            let r = match (constant, right) {
+                (Some(c), _) => Some(c),
+                (None, Some(rc)) => cells.get(rc).and_then(sheet_cell_num),
+                _ => None,
+            };
+            let cell = match (l, r) {
+                (Some(l), Some(r)) => apply(l, r).map_or(json!(""), |v| json!(v)),
+                _ => json!(""),
+            };
+            cells.push(cell);
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -7710,6 +7816,7 @@ export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_add_header, op_sheet_add_header);
+export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
