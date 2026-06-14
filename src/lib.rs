@@ -6103,6 +6103,155 @@ fn op_sheet_totals(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "totals": summed }))
 }
 
+/// Insert group-wise subtotal rows into the data (Excel's Data ▸ Subtotal),
+/// unlike `sheet_aggregate` which returns only the collapsed summary. Operates on
+/// *consecutive* runs of equal group keys, so sort by the group column first.
+/// opts: path, output (default in place), group => column name/index (required),
+/// value => numeric column name/index or array (required), agg =>
+/// sum|mean|min|max|count (default sum), label => suffix on each subtotal's group
+/// cell (default "Total"), grand => append a grand-total row (default true),
+/// sheet, header, format. A subtotal row shows "{key} {label}" in the group
+/// column and the aggregate in each value column; other cells are blank. Returns
+/// `{ ok, path, groups }` (number of subtotal rows inserted).
+fn op_sheet_subtotal(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("sum");
+    if !matches!(agg, "sum" | "mean" | "min" | "max" | "count") {
+        return Err(anyhow!("unknown agg: {agg} (sum|mean|min|max|count)"));
+    }
+    let label = opts.get("label").and_then(Value::as_str).unwrap_or("Total");
+    let grand = opts.get("grand").and_then(flag_of).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let gcol = resolve_col(opts.get("group"), header_row)?;
+    let vcols: Vec<usize> = match opts.get("value") {
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        Some(v) => vec![resolve_col(Some(v), header_row)?],
+        None => return Err(anyhow!("missing value column(s)")),
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    // Aggregate a run of values for one column into a single number.
+    let reduce = |vals: &[f64], rowcount: usize| -> f64 {
+        match agg {
+            "count" => rowcount as f64,
+            "sum" => vals.iter().sum(),
+            "mean" => {
+                if vals.is_empty() {
+                    0.0
+                } else {
+                    vals.iter().sum::<f64>() / vals.len() as f64
+                }
+            }
+            "min" => vals.iter().cloned().fold(f64::INFINITY, f64::min),
+            _ => vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        }
+    };
+    // Build a subtotal row for a group key over its accumulated per-column values.
+    let make_row = |key: &str, per_col: &[(Vec<f64>, usize)]| -> Value {
+        let mut cells = vec![json!(""); ncols.max(gcol + 1)];
+        cells[gcol] = json!(if key.is_empty() {
+            label.to_string()
+        } else {
+            format!("{key} {label}")
+        });
+        for (vc, (vals, rc)) in vcols.iter().zip(per_col) {
+            if *vc < cells.len() && (!vals.is_empty() || agg == "count") {
+                cells[*vc] = json!(reduce(vals, *rc));
+            }
+        }
+        Value::Array(cells)
+    };
+
+    let mut out: Vec<Value> = Vec::new();
+    if data_start == 1 {
+        out.push(rows[0].clone());
+    }
+    // Per-column accumulators for the current run and (for the grand total) all.
+    let new_acc = || -> Vec<(Vec<f64>, usize)> { vcols.iter().map(|_| (Vec::new(), 0)).collect() };
+    let mut run = new_acc();
+    let mut all = new_acc();
+    let mut cur_key: Option<String> = None;
+    let mut groups = 0u64;
+
+    let flush = |key: &str, run: &mut Vec<(Vec<f64>, usize)>, out: &mut Vec<Value>| {
+        out.push(make_row(key, run));
+        *run = new_acc();
+    };
+
+    for row in &rows[data_start..] {
+        let key = row
+            .as_array()
+            .and_then(|a| a.get(gcol))
+            .map(cell_to_string)
+            .unwrap_or_default();
+        if cur_key.as_deref() != Some(key.as_str()) {
+            if let Some(k) = cur_key.take() {
+                flush(&k, &mut run, &mut out);
+                groups += 1;
+            }
+            cur_key = Some(key.clone());
+        }
+        out.push(row.clone());
+        for (i, &vc) in vcols.iter().enumerate() {
+            if let Some(x) = row
+                .as_array()
+                .and_then(|a| a.get(vc))
+                .and_then(sheet_cell_num)
+            {
+                run[i].0.push(x);
+                all[i].0.push(x);
+            }
+            run[i].1 += 1;
+            all[i].1 += 1;
+        }
+    }
+    if let Some(k) = cur_key.take() {
+        flush(&k, &mut run, &mut out);
+        groups += 1;
+    }
+    if grand && groups > 0 {
+        out.push(make_row("Grand", &all));
+    }
+    sheets[target]["rows"] = Value::Array(out);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "groups": groups }))
+}
+
 /// ASCII case-insensitive substring replace (byte-length preserving, so byte
 /// offsets stay valid). Returns (new string, count).
 fn ascii_ci_replace(hay: &str, find: &str, rep: &str) -> (String, usize) {
@@ -9622,6 +9771,7 @@ export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_drop, op_sheet_drop);
 export!(office__sheet_add_column, op_sheet_add_column);
 export!(office__sheet_totals, op_sheet_totals);
+export!(office__sheet_subtotal, op_sheet_subtotal);
 export!(office__sheet_replace, op_sheet_replace);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);

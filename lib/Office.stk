@@ -511,6 +511,16 @@ fn Office::sheet_totals ($path, %opts) {
         office__sheet_totals(to_json({ path => $path, label => $opts{label}, sheet => $opts{sheet}, header => $opts{header}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Insert group-wise subtotal rows (Excel Data>Subtotal). Operates on consecutive
+## runs — sort by the group column first. opts: group (column; required), value
+## (column or arrayref; required), agg (sum|mean|min|max|count, default sum),
+## label (default "Total"), grand (default 1), output, sheet, header, format.
+## Returns { ok, path, groups }.
+fn Office::sheet_subtotal ($path, %opts) {
+    Office::_decode("sheet_subtotal",
+        office__sheet_subtotal(to_json({ path => $path, group => $opts{group}, value => $opts{value}, agg => $opts{agg}, label => $opts{label}, grand => $opts{grand}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Add a derived column to a sheet. $name is the new header. opts: value => a
 ## constant for every data row, or concat => [columns] joined by sep (default
 ## " "); sheet, output (default in place), header => 0 if first row is data,

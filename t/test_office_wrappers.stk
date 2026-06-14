@@ -414,6 +414,18 @@ assert_eq $ctb->[0]{rows}[1][0], 1234.5, "sheet_cast: \$1,234.50 -> 1234.5"
 assert_eq $ctb->[0]{rows}[2][0], -2000, "sheet_cast: (2,000) -> -2000"
 unlink $ctx
 unlink $cto
+# sheet_subtotal: group-wise subtotal rows
+val $stx = "$dir/$tag-subtot.xlsx"
+Office::sheet_write($stx, [{ name => "D", rows => [["region", "amt"], ["east", 10], ["east", 20], ["west", 30]] }])
+val $sto2 = "$dir/$tag-subtot-out.xlsx"
+val $str = Office::sheet_subtotal($stx, group => "region", value => "amt", output => $sto2)
+assert_eq $str->{groups}, 2, "sheet_subtotal: two groups"
+val $stb = Office::sheet_read($sto2)
+assert_eq $stb->[0]{rows}[3][0], "east Total", "sheet_subtotal: east subtotal label"
+assert_eq $stb->[0]{rows}[3][1], 30, "sheet_subtotal: east subtotal sum"
+assert_eq $stb->[0]{rows}[6][1], 60, "sheet_subtotal: grand total sum"
+unlink $stx
+unlink $sto2
 # sheet_pct_change: row-over-row percentage change
 val $pcx = "$dir/$tag-pctchg.xlsx"
 Office::sheet_write($pcx, [{ name => "D", rows => [["v"], [100], [150], [75]] }])

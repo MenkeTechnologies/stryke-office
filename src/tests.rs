@@ -2367,6 +2367,52 @@ fn sheet_totals_row() {
 }
 
 #[test]
+fn sheet_subtotal_by_group() {
+    let path = tmp("subtot.xlsx");
+    // grouped by region (sorted): east(10,20), west(30)
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["east",10],
+                ["east",20],
+                ["west",30]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("subtot_out.xlsx");
+    let r = call(
+        office__sheet_subtotal,
+        &format!(r#"{{"path":"{path}","output":"{out}","group":"region","value":"amt"}}"#),
+    );
+    assert_eq!(r["groups"], 2, "two groups: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // header, east 10, east 20, "east Total" 30, west 30, "west Total" 30, "Grand Total" 60
+    assert_eq!(rows.len(), 7, "rows incl subtotals + grand: {rd}");
+    assert_eq!(rows[3][0], "east Total", "east subtotal label: {rd}");
+    assert_eq!(
+        rows[3][1].as_f64().unwrap(),
+        30.0,
+        "east subtotal sum: {rd}"
+    );
+    assert_eq!(rows[5][0], "west Total", "west subtotal label: {rd}");
+    assert_eq!(
+        rows[5][1].as_f64().unwrap(),
+        30.0,
+        "west subtotal sum: {rd}"
+    );
+    assert_eq!(rows[6][0], "Grand Total", "grand total label: {rd}");
+    assert_eq!(rows[6][1].as_f64().unwrap(), 60.0, "grand total sum: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_add_column_derived() {
     let path = tmp("addcol.xlsx");
     let w = call(
