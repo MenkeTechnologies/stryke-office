@@ -1853,7 +1853,8 @@ fn op_doc_split(opts: Value) -> Result<Value> {
 // ── full-text search (documents + presentations) ──────────────────────────────
 
 /// Search a document's paragraphs (docx/odt/html/md/rtf/txt) or pdf lines.
-/// opts: path, query (required), ignore_case (default false). Returns
+/// opts: path, query (required; literal, or a regex when `regex => true`), regex
+/// (default false), ignore_case (default false). Returns
 /// `{ count, matches: [{ paragraph, count, snippet }] }` with 1-based indexes.
 fn op_doc_find(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
@@ -1865,6 +1866,18 @@ fn op_doc_find(opts: Value) -> Result<Value> {
         .get("ignore_case")
         .and_then(flag_of)
         .unwrap_or(false);
+    let regex_mode = opts.get("regex").and_then(flag_of).unwrap_or(false);
+    // With `regex => 1` the query is a regular expression (compiled once).
+    let re = if regex_mode {
+        Some(
+            regex::RegexBuilder::new(query)
+                .case_insensitive(ignore_case)
+                .build()
+                .map_err(|e| anyhow!("invalid regex: {e}"))?,
+        )
+    } else {
+        None
+    };
     let paras: Vec<String> = match ext_of(path).as_str() {
         "pdf" => {
             let bytes = std::fs::read(path)?;
@@ -1893,19 +1906,31 @@ fn op_doc_find(opts: Value) -> Result<Value> {
     let mut total = 0usize;
     let mut matches = Vec::new();
     for (i, p) in paras.iter().enumerate() {
-        let hay = if ignore_case {
-            p.to_lowercase()
-        } else {
-            p.clone()
+        // (count, first-match byte offset, match length) for this paragraph.
+        let (c, idx, mlen) = match &re {
+            Some(r) => {
+                let cnt = r.find_iter(p).count();
+                let first = r.find(p);
+                (cnt, first.map_or(0, |m| m.start()), first.map_or(needle.len(), |m| m.len()))
+            }
+            None => {
+                let hay = if ignore_case { p.to_lowercase() } else { p.clone() };
+                (hay.matches(&needle).count(), hay.find(&needle).unwrap_or(0), needle.len())
+            }
         };
-        let c = hay.matches(&needle).count();
         if c > 0 {
             total += c;
-            let idx = hay.find(&needle).unwrap_or(0);
+            // Snippet from the lower-cased text only when doing literal matching;
+            // regex matching keeps the original casing.
+            let snip_src = match &re {
+                Some(_) => p.clone(),
+                None if ignore_case => p.to_lowercase(),
+                None => p.clone(),
+            };
             matches.push(json!({
                 "paragraph": i + 1,
                 "count": c,
-                "snippet": pdf_snippet(&hay, idx, needle.len()),
+                "snippet": pdf_snippet(&snip_src, idx, mlen),
             }));
         }
     }

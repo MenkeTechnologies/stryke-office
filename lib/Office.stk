@@ -1282,12 +1282,12 @@ fn Office::doc_readability ($path) {
         office__doc_readability(to_json({ path => $path })))
 }
 
-## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts:
-## ignore_case => 1. Returns { count, matches => [{ paragraph, count, snippet }] }
-## with 1-based paragraph indexes.
+## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts: regex
+## (treat query as a regex), ignore_case => 1. Returns { count, matches =>
+## [{ paragraph, count, snippet }] } with 1-based paragraph indexes.
 fn Office::doc_find ($path, $query, %opts) {
     Office::_decode("doc_find",
-        office__doc_find(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case} })))
+        office__doc_find(to_json({ path => $path, query => $query, regex => $opts{regex}, ignore_case => $opts{ignore_case} })))
 }
 
 ## Search a presentation's slide text and speaker notes (pptx/odp). opts:
