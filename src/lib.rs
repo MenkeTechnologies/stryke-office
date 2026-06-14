@@ -2213,6 +2213,81 @@ fn op_sheet_drop(opts: Value) -> Result<Value> {
     op_sheet_select(sopts)
 }
 
+/// Add a derived column to a sheet. opts: path, output, name => new header
+/// (header row only), then either `value` => a constant for every data row, or
+/// `concat` => [columns] joined by `sep` (default " "). sheet, header (default
+/// true), format. Returns `{ ok, path, column }`.
+fn op_sheet_add_column(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let name = req_str(&opts, "name")?.to_string();
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(n)) => sheets.iter().position(|s| s["name"] == *n),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let concat: Option<Vec<usize>> = match opts.get("concat").and_then(Value::as_array) {
+        Some(a) => Some(
+            a.iter()
+                .map(|c| resolve_col(Some(c), hr))
+                .collect::<Result<_>>()?,
+        ),
+        None => None,
+    };
+    let sep = opts.get("sep").and_then(Value::as_str).unwrap_or(" ");
+    let constant = opts.get("value").cloned().unwrap_or(Value::Null);
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    let mut new_rows = Vec::with_capacity(rows.len());
+    for (i, row) in rows.iter().enumerate() {
+        let mut arr = row.as_array().cloned().unwrap_or_default();
+        if i < data_start {
+            arr.push(json!(name));
+        } else if let Some(cols) = &concat {
+            let parts: Vec<String> = cols
+                .iter()
+                .map(|&c| cell_to_string(arr.get(c).unwrap_or(&Value::Null)))
+                .collect();
+            arr.push(json!(parts.join(sep)));
+        } else {
+            arr.push(constant.clone());
+        }
+        new_rows.push(Value::Array(arr));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": name }))
+}
+
 /// ASCII case-insensitive substring replace (byte-length preserving, so byte
 /// offsets stay valid). Returns (new string, count).
 fn ascii_ci_replace(hay: &str, find: &str, rep: &str) -> (String, usize) {
@@ -3995,6 +4070,7 @@ export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);
 export!(office__sheet_select, op_sheet_select);
 export!(office__sheet_drop, op_sheet_drop);
+export!(office__sheet_add_column, op_sheet_add_column);
 export!(office__sheet_replace, op_sheet_replace);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
