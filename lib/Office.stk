@@ -203,6 +203,14 @@ fn Office::sheet_replace ($path, $find, %opts) {
         office__sheet_replace(to_json({ path => $path, find => $find, replace => $opts{replace}, ignore_case => $opts{ignore_case}, whole => $opts{whole}, column => $opts{column}, sheet => $opts{sheet}, output => $opts{output}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a totals row summing each numeric column. opts: label => first-cell
+## text (default "Total"), sheet, header => 0 if first row is data, output
+## (default in place), format. Returns { ok, path, totals }.
+fn Office::sheet_totals ($path, %opts) {
+    Office::_decode("sheet_totals",
+        office__sheet_totals(to_json({ path => $path, label => $opts{label}, sheet => $opts{sheet}, header => $opts{header}, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Add a derived column to a sheet. $name is the new header. opts: value => a
 ## constant for every data row, or concat => [columns] joined by sep (default
 ## " "); sheet, output (default in place), header => 0 if first row is data,
