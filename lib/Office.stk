@@ -750,6 +750,12 @@ fn Office::sheet_autosize ($path, %opts) {
         office__sheet_autosize(to_json({ path => $path, sheet => $opts{sheet}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Extract cell comments / notes from an xlsx. Returns
+## { comments => [{ cell, author, text }], count }.
+fn Office::sheet_comments ($path) {
+    Office::_decode("sheet_comments", office__sheet_comments(to_json({ path => $path })))
+}
+
 ## Round every numeric cell (or selected columns) to N decimals. opts: decimals
 ## (default 2), columns, sheet, header, format. Returns { ok, path, rounded }.
 fn Office::sheet_round ($path, $output, %opts) {
