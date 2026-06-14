@@ -1583,6 +1583,45 @@ fn sheet_add_new() {
 }
 
 #[test]
+fn sheet_copy_duplicates_worksheet() {
+    let path = tmp("scopy.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"Tmpl","rows":[["x"],[1],[2]]}},{{"name":"Other","rows":[["y"],[9]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // copy Tmpl → "Tmpl 2", inserted right after the source (index 1)
+    let out = tmp("scopy_out.xlsx");
+    let r = call(
+        office__sheet_copy,
+        &format!(r#"{{"path":"{path}","sheet":"Tmpl","name":"Tmpl 2","output":"{out}"}}"#),
+    );
+    assert_eq!(r["sheets"], 3, "three sheets: {r}");
+    assert_eq!(r["name"], "Tmpl 2", "copy name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(rd["sheets"][0]["name"], "Tmpl", "source kept: {rd}");
+    assert_eq!(rd["sheets"][1]["name"], "Tmpl 2", "copy after source: {rd}");
+    assert_eq!(rd["sheets"][2]["name"], "Other", "Other pushed down: {rd}");
+    // copy carries the source data
+    assert_eq!(rd["sheets"][1]["rows"][1][0], 1.0, "copy row1: {rd}");
+    assert_eq!(rd["sheets"][1]["rows"][2][0], 2.0, "copy row2: {rd}");
+
+    // name collision is rejected
+    let dup = call(
+        office__sheet_copy,
+        &format!(r#"{{"path":"{path}","sheet":"Tmpl","name":"Other","output":"{out}"}}"#),
+    );
+    assert!(dup["error"].is_string(), "duplicate name rejected: {dup}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_rename_one() {
     let path = tmp("ren.xlsx");
     let w = call(

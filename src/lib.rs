@@ -7264,6 +7264,62 @@ fn op_sheet_add(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sheets": n }))
 }
 
+/// Duplicate a worksheet within a workbook (e.g. copy a template tab). opts:
+/// path, output (default in place), sheet => source sheet (name or index;
+/// required), name => the copy's name (default "{source} (copy)"; must not
+/// collide with an existing sheet), position => 0-based insert index (default:
+/// right after the source), format. Returns `{ ok, path, name, sheets }`.
+fn op_sheet_copy(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let idx = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => return Err(anyhow!("missing sheet to copy (name or index)")),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let src_name = sheets[idx]["name"].as_str().unwrap_or("").to_string();
+    let new_name = opts
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{src_name} (copy)"));
+    if sheets.iter().any(|s| s["name"] == json!(new_name)) {
+        return Err(anyhow!("a sheet named '{new_name}' already exists"));
+    }
+
+    let mut copy = sheets[idx].clone();
+    copy["name"] = json!(new_name);
+    let pos = opts
+        .get("position")
+        .and_then(Value::as_u64)
+        .map(|i| i as usize)
+        .filter(|&p| p <= sheets.len())
+        .unwrap_or(idx + 1);
+    sheets.insert(pos, copy);
+
+    let n = sheets.len();
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "name": new_name, "sheets": n }))
+}
+
 /// Remove a sheet from a workbook. opts: path, output (default in place),
 /// sheet => the sheet to remove (name or index; required), format. Errors if it
 /// would remove the only sheet. Returns `{ ok, path, removed, sheets }`.
@@ -9005,6 +9061,7 @@ export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
+export!(office__sheet_copy, op_sheet_copy);
 export!(office__sheet_remove, op_sheet_remove);
 export!(office__sheet_reorder, op_sheet_reorder);
 export!(office__sheet_diff, op_sheet_diff);

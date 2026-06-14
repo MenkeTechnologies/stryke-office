@@ -576,6 +576,15 @@ fn Office::sheet_add ($path, $name, %opts) {
         office__sheet_add(to_json({ path => $path, name => $name, rows => $opts{rows}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Duplicate a worksheet within a workbook. opts: sheet (source name/index;
+## required), name (the copy's name; default "{source} (copy)"), position
+## (default after source), output (default in place), format. Returns
+## { ok, path, name, sheets }.
+fn Office::sheet_copy ($path, %opts) {
+    Office::_decode("sheet_copy",
+        office__sheet_copy(to_json({ path => $path, sheet => $opts{sheet}, name => $opts{name}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Reorder (and/or subset) the sheets of a workbook. $order is an arrayref of
 ## sheet names/indices in the desired order; omitted sheets are dropped. opts:
 ## output (default in place), format. Returns { ok, path, sheets }.
