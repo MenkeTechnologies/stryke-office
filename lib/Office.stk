@@ -783,12 +783,13 @@ fn Office::sheet_select ($path, $columns, $output, %opts) {
 
 ## Find/replace text in a sheet's cells (works on any format, incl. csv; only
 ## string cells are touched). opts: replace => "" default, ignore_case => 1,
-## whole => 1 (replace whole cell vs substring), column => restrict, sheet,
+## whole => 1 (replace whole cell vs substring), regex => 1 ($find is a regex,
+## $replace supports $1/${name} captures), column => restrict, sheet,
 ## output (default in place), header => 0 if first row is data, format. Returns
 ## { ok, path, replaced }.
 fn Office::sheet_replace ($path, $find, %opts) {
     Office::_decode("sheet_replace",
-        office__sheet_replace(to_json({ path => $path, find => $find, replace => $opts{replace}, ignore_case => $opts{ignore_case}, whole => $opts{whole}, column => $opts{column}, sheet => $opts{sheet}, output => $opts{output}, header => $opts{header}, format => $opts{format} })))
+        office__sheet_replace(to_json({ path => $path, find => $find, replace => $opts{replace}, ignore_case => $opts{ignore_case}, whole => $opts{whole}, regex => $opts{regex}, column => $opts{column}, sheet => $opts{sheet}, output => $opts{output}, header => $opts{header}, format => $opts{format} })))
 }
 
 ## Append a totals row summing each numeric column. opts: label => first-cell
