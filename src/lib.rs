@@ -174,6 +174,25 @@ fn resolve_zip_path(base_dir: &str, target: &str) -> String {
 /// Extract the text of each paragraph-level element. `para_tags` are the
 /// fully-qualified element names that delimit a paragraph (e.g. `w:p`,
 /// `text:p`, `a:p`); all text nodes nested inside one are concatenated.
+/// Resolve a quick-xml entity reference (`Event::GeneralRef`) to its character:
+/// numeric char refs (`&#N;`/`&#xN;`) and the five predefined XML entities.
+/// quick-xml emits these as standalone events (not inside `Text`), so every text
+/// extractor must handle them or `&`/`<`/`>`/`"`/`'` in content silently vanish.
+fn xml_ref_char(e: &quick_xml::events::BytesRef) -> Option<char> {
+    if let Ok(Some(c)) = e.resolve_char_ref() {
+        return Some(c);
+    }
+    let name: &[u8] = e;
+    match name {
+        b"amp" => Some('&'),
+        b"lt" => Some('<'),
+        b"gt" => Some('>'),
+        b"quot" => Some('"'),
+        b"apos" => Some('\''),
+        _ => None,
+    }
+}
+
 fn extract_paragraphs(xml: &[u8], para_tags: &[&str]) -> Vec<String> {
     use quick_xml::events::Event;
     let mut reader = quick_xml::Reader::from_reader(xml);
@@ -201,6 +220,13 @@ fn extract_paragraphs(xml: &[u8], para_tags: &[&str]) -> Vec<String> {
                 if depth > 0 {
                     if let Ok(t) = e.xml10_content() {
                         cur.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if depth > 0 {
+                    if let Some(c) = xml_ref_char(&e) {
+                        cur.push(c);
                     }
                 }
             }

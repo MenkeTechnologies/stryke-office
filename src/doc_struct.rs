@@ -75,6 +75,13 @@ fn extract_tables(xml: &[u8], t: TableTags) -> Vec<Value> {
                     }
                 }
             }
+            Ok(Event::GeneralRef(e)) => {
+                if capturing {
+                    if let Some(c) = xml_ref_char(&e) {
+                        cell.push(c);
+                    }
+                }
+            }
             Ok(Event::End(e)) => {
                 let n = e.name();
                 let n = n.as_ref();
@@ -310,6 +317,17 @@ fn extract_blocks_docx(xml: &[u8]) -> Vec<Value> {
                     }
                 }
             }
+            Ok(Event::GeneralRef(e)) => {
+                if let Some(c) = xml_ref_char(&e) {
+                    if table_depth >= 1 {
+                        if capturing_cell {
+                            cell.push(c);
+                        }
+                    } else if in_para {
+                        para_text.push(c);
+                    }
+                }
+            }
             Ok(Event::End(e)) => {
                 let name = e.name();
                 let n = name.as_ref();
@@ -407,6 +425,17 @@ fn extract_blocks_odt(xml: &[u8]) -> Vec<Value> {
                         }
                     } else if in_para {
                         para_text.push_str(&txt);
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if let Some(c) = xml_ref_char(&e) {
+                    if table_depth >= 1 {
+                        if capturing_cell {
+                            cell.push(c);
+                        }
+                    } else if in_para {
+                        para_text.push(c);
                     }
                 }
             }
@@ -545,6 +574,17 @@ fn parse_html_blocks(xml: &[u8]) -> Vec<Value> {
                         item.push_str(&t);
                     } else if in_block {
                         cur.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if let Some(c) = xml_ref_char(&e) {
+                    if in_cell {
+                        cell.push(c);
+                    } else if in_li {
+                        item.push(c);
+                    } else if in_block {
+                        cur.push(c);
                     }
                 }
             }
@@ -1704,6 +1744,13 @@ fn extract_links_docx(doc_xml: &[u8], rels_xml: &[u8]) -> Vec<Value> {
                     }
                 }
             }
+            Ok(Event::GeneralRef(e)) => {
+                if depth > 0 {
+                    if let Some(c) = xml_ref_char(&e) {
+                        text.push(c);
+                    }
+                }
+            }
             Ok(Event::End(e)) if e.name().as_ref() == b"w:hyperlink" => {
                 depth -= 1;
                 if depth == 0 {
@@ -1752,6 +1799,13 @@ fn extract_links_odt(xml: &[u8]) -> Vec<Value> {
                 if depth > 0 {
                     if let Ok(t) = e.xml10_content() {
                         text.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if depth > 0 {
+                    if let Some(c) = xml_ref_char(&e) {
+                        text.push(c);
                     }
                 }
             }

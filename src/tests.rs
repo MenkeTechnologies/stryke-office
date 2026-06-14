@@ -2417,6 +2417,57 @@ fn slides_to_html_sections() {
 }
 
 #[test]
+fn xml_entities_survive_text_extraction() {
+    // Regression: quick-xml emits `&amp;` etc. as standalone GeneralRef events,
+    // not inside Text, so the readers must resolve them or `&`/`<`/`>` vanish.
+
+    // pptx slide text (extract_paragraphs path)
+    let px = tmp("ent.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{px}","slides":[{{"title":"R&D <ok>","body":["a & b"]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "slides write: {w}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{px}"}}"#));
+    let joined = rd["slides"][0]["text"].to_string();
+    assert!(joined.contains("R&D"), "title amp survives: {joined}");
+    assert!(
+        joined.contains("<ok>"),
+        "title angle brackets survive: {joined}"
+    );
+    assert!(joined.contains("a & b"), "body amp survives: {joined}");
+    std::fs::remove_file(&px).ok();
+
+    // docx paragraph + table cell (extract_paragraphs + extract_tables paths)
+    let dx = tmp("ent.docx");
+    let w2 = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"para","text":"Tom & Jerry"}},
+                {{"kind":"table","rows":[["A & B","x < y"]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w2["ok"], true, "doc write: {w2}");
+    let dr = call(office__doc_read, &format!(r#"{{"path":"{dx}"}}"#));
+    assert!(
+        dr["paragraphs"].to_string().contains("Tom & Jerry"),
+        "docx para amp survives: {dr}"
+    );
+    let tb = call(office__doc_tables, &format!(r#"{{"path":"{dx}"}}"#));
+    assert_eq!(
+        tb["tables"][0]["rows"][0][0], "A & B",
+        "table cell amp: {tb}"
+    );
+    assert_eq!(
+        tb["tables"][0]["rows"][0][1], "x < y",
+        "table cell lt: {tb}"
+    );
+    std::fs::remove_file(&dx).ok();
+}
+
+#[test]
 fn md_to_slides_from_outline() {
     // Preamble before the first heading is dropped; bullets and plain lines
     // become body items.
