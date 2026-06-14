@@ -4718,8 +4718,8 @@ fn docx_para(v: &Value) -> docx_rs::Paragraph {
 fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
     use docx_rs::{
         AbstractNumbering, BreakType, Docx, Footer, Header, Hyperlink, HyperlinkType, IndentLevel,
-        Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Paragraph, Pic, Run,
-        Shading, Start, Table, TableCell, TableRow, VAlignType, WidthType,
+        Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, PageNum, Paragraph, Pic,
+        Run, Shading, Start, Table, TableCell, TableRow, VAlignType, WidthType,
     };
     let mut docx = Docx::new();
     if let Some(ps) = opts.get("page_size").and_then(Value::as_array) {
@@ -4756,9 +4756,21 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
         docx = docx
             .header(Header::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h))));
     }
-    if let Some(f) = opts.get("footer").and_then(Value::as_str) {
-        docx = docx
-            .footer(Footer::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(f))));
+    // Footer: optional text and/or an automatic page-number field.
+    let page_numbers = opts
+        .get("page_numbers")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let footer_text = opts.get("footer").and_then(Value::as_str);
+    if footer_text.is_some() || page_numbers {
+        let mut fpara = Paragraph::new();
+        if let Some(f) = footer_text {
+            fpara = fpara.add_run(Run::new().add_text(f));
+        }
+        if page_numbers {
+            fpara = fpara.add_page_num(PageNum::new());
+        }
+        docx = docx.footer(Footer::new().add_paragraph(fpara));
     }
     for b in blocks {
         match b.get("kind").and_then(Value::as_str).unwrap_or("para") {

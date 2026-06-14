@@ -2943,6 +2943,46 @@ fn doc_to_pdf_renders_blocks() {
 }
 
 #[test]
+fn doc_write_footer_page_numbers() {
+    use std::io::Read as _;
+    let dx = tmp("pgnum.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[{{"kind":"para","text":"body"}}],"footer":"Confidential","page_numbers":true}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "doc write: {w}");
+
+    // inspect the generated footer part for the footer text + PAGE field
+    let bytes = std::fs::read(&dx).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut footer = String::new();
+    // footer part name is footer1.xml / footer2.xml depending on writer
+    let names: Vec<String> = (0..zip.len())
+        .map(|i| zip.by_index(i).unwrap().name().to_string())
+        .collect();
+    let fname = names
+        .iter()
+        .find(|n| n.starts_with("word/footer") && n.ends_with(".xml"))
+        .expect("a footer part exists");
+    zip.by_name(fname)
+        .unwrap()
+        .read_to_string(&mut footer)
+        .unwrap();
+    assert!(
+        footer.contains("Confidential"),
+        "footer text present: {footer}"
+    );
+    assert!(
+        footer.contains("PAGE"),
+        "page-number field present: {footer}"
+    );
+
+    std::fs::remove_file(&dx).ok();
+}
+
+#[test]
 fn doc_to_html_structured() {
     let dx = tmp("tohtml.docx");
     let w = call(

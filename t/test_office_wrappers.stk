@@ -157,6 +157,12 @@ assert_ok scalar(grep { /speaker reminder/ } @{ $nrd->[0]{notes} }), "slides_set
 unlink $idk
 unlink $logo
 
+# ── doc_write footer page numbers ───────────────────────────────────
+val $pgn = "$dir/$tag-pgnum.docx"
+val $pgr = Office::doc_write($pgn, [{ kind => "para", text => "body" }], footer => "Conf", page_numbers => 1)
+assert_ok $pgr->{ok}, "doc_write: page_numbers opt accepted"
+unlink $pgn
+
 # ── document -> pdf ─────────────────────────────────────────────────
 val $d2p = "$dir/$tag-d2p.docx"
 Office::doc_write($d2p, [
