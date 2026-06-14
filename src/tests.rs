@@ -5336,6 +5336,40 @@ fn pdf_remove_annotations_strips_links() {
 }
 
 #[test]
+fn pdf_highlight_adds_annotation() {
+    let src = tmp("phl.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"paragraph","text":"highlight me"}}]}}"#),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let r = call(
+        office__pdf_highlight,
+        &format!(r#"{{"path":"{src}","page":1,"rect":[72,700,300,720],"color":[255,0,0]}}"#),
+    );
+    assert_eq!(r["ok"], true, "highlight: {r}");
+
+    // removing a different subtype leaves it; removing Highlight clears exactly one
+    let keep = tmp("phl_keep.pdf");
+    let rk = call(
+        office__pdf_remove_annotations,
+        &format!(r#"{{"path":"{src}","subtype":"Link","output":"{keep}"}}"#),
+    );
+    assert_eq!(rk["removed"], 0, "no links to remove: {rk}");
+    let out = tmp("phl_out.pdf");
+    let rr = call(
+        office__pdf_remove_annotations,
+        &format!(r#"{{"path":"{src}","subtype":"Highlight","output":"{out}"}}"#),
+    );
+    assert_eq!(rr["removed"], 1, "one highlight removed: {rr}");
+
+    for f in [&src, &keep, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");

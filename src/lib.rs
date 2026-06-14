@@ -6888,6 +6888,7 @@ export!(office__pdf_draw_line, op_pdf_draw_line);
 export!(office__pdf_add_link, op_pdf_add_link);
 export!(office__pdf_links, op_pdf_links);
 export!(office__pdf_remove_annotations, op_pdf_remove_annotations);
+export!(office__pdf_highlight, op_pdf_highlight);
 
 // PDF file attachments (embedded files): embed + list/extract
 include!("pdf_attach.rs");

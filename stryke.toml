@@ -121,6 +121,7 @@ exports = [
     "office__pdf_add_link",
     "office__pdf_links",
     "office__pdf_remove_annotations",
+    "office__pdf_highlight",
     "office__pdf_attach",
     "office__pdf_attachments",
     "office__pdf_form_fields",

@@ -1372,3 +1372,66 @@ fn op_pdf_remove_annotations(opts: Value) -> Result<Value> {
     doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
     Ok(json!({ "ok": true, "path": out, "removed": removed }))
 }
+
+/// Add a highlight annotation over a rectangle on a PDF page. opts: path, output
+/// (default in place), page => 1-based page number (default 1), rect =>
+/// `[x0,y0,x1,y1]` in PDF points (required), color => `[r,g,b]` 0–255 (default
+/// yellow), opacity => 0..1 (default 1.0). Returns `{ ok, path, page }`.
+fn op_pdf_highlight(opts: Value) -> Result<Value> {
+    use lopdf::Dictionary;
+    let path = req_str(&opts, "path")?;
+    let out = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let page = opts.get("page").and_then(Value::as_u64).unwrap_or(1) as u32;
+    let rect = four_floats(
+        opts.get("rect")
+            .ok_or_else(|| anyhow!("missing rect [x0,y0,x1,y1]"))?,
+    )
+    .ok_or_else(|| anyhow!("rect must be [x0,y0,x1,y1]"))?;
+    let (r, g, b) = pdf_color01(opts.get("color"), [255, 255, 0]);
+    let opacity = opts.get("opacity").and_then(Value::as_f64).unwrap_or(1.0);
+    let [x0, y0, x1, y1] = rect;
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages = doc.get_pages();
+    let pid = *pages
+        .get(&page)
+        .ok_or_else(|| anyhow!("page {page} out of range (1..={})", pages.len()))?;
+
+    let real = |f: f64| Object::Real(f as f32);
+    let mut annot = Dictionary::new();
+    annot.set("Type", Object::Name(b"Annot".to_vec()));
+    annot.set("Subtype", Object::Name(b"Highlight".to_vec()));
+    annot.set("Rect", Object::Array(vec![real(x0), real(y0), real(x1), real(y1)]));
+    // QuadPoints: UL, UR, LL, LR of the highlighted quad.
+    annot.set(
+        "QuadPoints",
+        Object::Array(vec![
+            real(x0), real(y1), real(x1), real(y1), real(x0), real(y0), real(x1), real(y0),
+        ]),
+    );
+    annot.set("C", Object::Array(vec![real(r), real(g), real(b)]));
+    annot.set("CA", real(opacity));
+    let annot_id = doc.add_object(Object::Dictionary(annot));
+
+    let page_dict = doc
+        .get_object_mut(pid)
+        .and_then(|o| o.as_dict_mut())
+        .map_err(|e| anyhow!("page dict: {e}"))?;
+    match page_dict.get(b"Annots").ok().and_then(|o| o.as_array().ok()) {
+        Some(existing) => {
+            let mut a = existing.clone();
+            a.push(Object::Reference(annot_id));
+            page_dict.set("Annots", Object::Array(a));
+        }
+        None => {
+            page_dict.set("Annots", Object::Array(vec![Object::Reference(annot_id)]));
+        }
+    }
+
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "page": page }))
+}

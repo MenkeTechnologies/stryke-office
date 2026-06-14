@@ -1063,6 +1063,13 @@ fn Office::pdf_remove_annotations ($path, %opts) {
         office__pdf_remove_annotations(to_json({ path => $path, output => $opts{output}, subtype => $opts{subtype} })))
 }
 
+## Add a highlight annotation over a rectangle. opts: page (1-based), color
+## ([r,g,b] 0-255), opacity, output. Returns { ok, path, page }.
+fn Office::pdf_highlight ($path, $rect, %opts) {
+    Office::_decode("pdf_highlight",
+        office__pdf_highlight(to_json({ path => $path, rect => $rect, page => $opts{page}, color => $opts{color}, opacity => $opts{opacity}, output => $opts{output} })))
+}
+
 ## Add text at a position on PDF pages (labels, stamps, annotations). opts: x/y
 ## => position in points (default 72,72; y from bottom), size (default 12),
 ## color (default black), pages => [1-based subset] (default all). Returns
