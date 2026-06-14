@@ -1767,6 +1767,13 @@ fn Office::pdf_delete ($path, $pages, $output) {
         office__pdf_delete(to_json({ path => $path, pages => $pages, output => $output })))
 }
 
+## Remove pages whose extracted text is empty (clean blank/scanned spacers).
+## Never empties the document. Returns { ok, path, removed, pages }.
+fn Office::pdf_remove_blank ($path, $output) {
+    Office::_decode("pdf_remove_blank",
+        office__pdf_remove_blank(to_json({ path => $path, output => $output })))
+}
+
 ## Reorder (and/or subset) a PDF's pages. $order is an arrayref of 1-based page
 ## numbers in the desired output order; omitted pages are dropped and a page may
 ## repeat. Returns { ok, path, pages }.
