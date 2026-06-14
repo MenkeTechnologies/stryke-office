@@ -537,6 +537,13 @@ fn Office::pdf_to_doc ($path, $output, %opts) {
         office__pdf_to_doc(to_json({ path => $path, output => $output, format => $opts{format} })))
 }
 
+## Convert a PDF into a deck, one slide per page (first line -> title, rest ->
+## body). opts: format. Returns { ok, path, slides }.
+fn Office::pdf_to_slides ($path, $output, %opts) {
+    Office::_decode("pdf_to_slides",
+        office__pdf_to_slides(to_json({ path => $path, output => $output, format => $opts{format} })))
+}
+
 ## Convert a document into a presentation: each heading at $opts{level} (default
 ## 1) becomes a slide title, following content becomes body bullets. $output is
 ## a pptx/odp path. opts: level, format => override. Returns { ok, path, slides }.

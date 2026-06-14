@@ -804,6 +804,48 @@ fn op_pdf_to_doc(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "pages": pages.len(), "paragraphs": paragraphs }))
 }
 
+/// Convert a PDF into a presentation, one slide per page. opts: path (pdf),
+/// output (pptx/odp), format => override. Each page's first non-blank line
+/// becomes the slide title (or "Page N" if blank) and the remaining non-blank
+/// lines the body. Returns `{ ok, path, slides }`.
+fn op_pdf_to_slides(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_pdf_read(json!({ "path": path }))?;
+    let pages = read
+        .get("pages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let slides: Vec<Value> = pages
+        .iter()
+        .enumerate()
+        .map(|(i, page)| {
+            let lines: Vec<String> = page
+                .as_str()
+                .unwrap_or("")
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.trim().to_string())
+                .collect();
+            let (title, body) = match lines.split_first() {
+                Some((h, rest)) => (h.clone(), rest.to_vec()),
+                None => (format!("Page {}", i + 1), Vec::new()),
+            };
+            json!({ "title": title, "body": body })
+        })
+        .collect();
+
+    let n = slides.len();
+    let mut wopts = json!({ "path": output, "slides": slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": n }))
+}
+
 /// Flatten a block into slide body lines (paragraph text, list items, or a
 /// table's rows joined by " | ").
 fn block_to_lines(b: &Value) -> Vec<String> {
