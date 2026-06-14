@@ -1855,6 +1855,27 @@ fn slides_to_doc_round() {
 }
 
 #[test]
+fn slides_outline_lists_titles() {
+    let px = tmp("soutline.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[{{"title":"Intro","body":["x"]}},{{"title":"Details","body":["y","z"]}},{{"title":"End","body":[]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let o = call(office__slides_outline, &format!(r#"{{"path":"{px}"}}"#));
+    assert_eq!(o["count"], 3, "three slides: {o}");
+    assert_eq!(o["outline"][0]["slide"], 1, "1-based: {o}");
+    assert_eq!(o["outline"][0]["title"], "Intro", "first title: {o}");
+    assert_eq!(o["outline"][1]["title"], "Details", "second title: {o}");
+    assert_eq!(o["outline"][2]["title"], "End", "third title: {o}");
+
+    std::fs::remove_file(&px).ok();
+}
+
+#[test]
 fn doc_to_slides_from_headings() {
     let dx = tmp("d2s.docx");
     let w = call(

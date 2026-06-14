@@ -822,6 +822,33 @@ fn op_slides_to_pdf(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": slides.len() }))
 }
 
+/// Extract a presentation's slide titles as an outline (the deck analogue of
+/// `doc_outline`). opts: path (pptx/odp). Returns `{ count, outline: [{ slide,
+/// title }] }` (title = each slide's first text line).
+fn op_slides_outline(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let outline: Vec<Value> = slides
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let title = s
+                .get("text")
+                .and_then(Value::as_array)
+                .and_then(|a| a.first())
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            json!({ "slide": i + 1, "title": title })
+        })
+        .collect();
+    Ok(json!({ "count": outline.len(), "outline": outline }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via
