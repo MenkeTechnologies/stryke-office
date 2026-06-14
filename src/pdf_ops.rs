@@ -823,3 +823,29 @@ fn op_pdf_split_ranges(opts: Value) -> Result<Value> {
     }
     Ok(json!({ "count": files.len(), "files": files }))
 }
+
+/// Extract a PDF's text. opts: path; then either `dir` => write one
+/// `page-{n}.txt` per page (returns `{ count, files }`), or `output` => write
+/// the whole text joined by `separator` (default "\n\n") to one file (returns
+/// `{ ok, path, pages, chars }`).
+fn op_pdf_to_text(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let bytes = std::fs::read(path)?;
+    let pages = lo_core::extract_pages_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
+
+    if let Some(dir) = opts.get("dir").and_then(Value::as_str) {
+        let mut files = Vec::new();
+        for (i, p) in pages.iter().enumerate() {
+            let out = format!("{dir}/page-{}.txt", i + 1);
+            std::fs::write(&out, p)?;
+            files.push(out);
+        }
+        return Ok(json!({ "ok": true, "count": files.len(), "files": files }));
+    }
+
+    let output = req_str(&opts, "output")?.to_string();
+    let sep = opts.get("separator").and_then(Value::as_str).unwrap_or("\n\n");
+    let text = pages.join(sep);
+    std::fs::write(&output, &text)?;
+    Ok(json!({ "ok": true, "path": output, "pages": pages.len(), "chars": text.chars().count() }))
+}

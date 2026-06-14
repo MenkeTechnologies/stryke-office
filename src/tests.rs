@@ -2899,6 +2899,50 @@ fn pdf_split_ranges_extracts() {
 }
 
 #[test]
+fn pdf_to_text_file_and_pages() {
+    let src = tmp("p2t.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"heading","level":1,"text":"Alpha"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Bravo"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // whole-document text
+    let out = tmp("p2t.txt");
+    let r = call(
+        office__pdf_to_text,
+        &format!(r#"{{"path":"{src}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["pages"], 2, "two pages: {r}");
+    let txt = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        txt.contains("Alpha") && txt.contains("Bravo"),
+        "joined text: {txt:?}"
+    );
+
+    // per-page files
+    let dir = tmp("p2t_dir");
+    std::fs::create_dir_all(&dir).unwrap();
+    let rp = call(
+        office__pdf_to_text,
+        &format!(r#"{{"path":"{src}","dir":"{dir}"}}"#),
+    );
+    assert_eq!(rp["count"], 2, "two page files: {rp}");
+    let p2 = std::fs::read_to_string(format!("{dir}/page-2.txt")).unwrap();
+    assert!(p2.contains("Bravo"), "page 2 text: {p2:?}");
+
+    std::fs::remove_file(&src).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(

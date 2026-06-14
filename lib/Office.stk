@@ -560,6 +560,15 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Extract a PDF's text to a file. Pass either dir => write one page-{n}.txt per
+## page (returns { count, files }), or output => write the whole text (pages
+## joined by opts{separator}, default "\n\n") to one file (returns { ok, path,
+## pages, chars }).
+fn Office::pdf_to_text ($path, %opts) {
+    Office::_decode("pdf_to_text",
+        office__pdf_to_text(to_json({ path => $path, output => $opts{output}, dir => $opts{dir}, separator => $opts{separator} })))
+}
+
 ## Split a PDF into one file per page range. $ranges is an arrayref of
 ## [start, end] pairs (1-based, inclusive), written to $dir as {prefix}-{n}.pdf.
 ## opts: prefix => filename stem (default: the source's stem). Returns
