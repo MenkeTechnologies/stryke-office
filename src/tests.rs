@@ -2397,6 +2397,26 @@ fn slides_to_md_outline() {
 }
 
 #[test]
+fn slides_to_html_sections() {
+    let px = tmp("s2html.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{px}","slides":[{{"title":"Intro","body":["alpha","beta"]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__slides_to_html, &format!(r#"{{"path":"{px}"}}"#));
+    assert_eq!(r["slides"], 1, "one slide: {r}");
+    let html = r["html"].as_str().unwrap();
+    assert!(html.contains("<section>"), "section wrapper: {html}");
+    assert!(html.contains("<h2>Intro</h2>"), "title h2: {html}");
+    assert!(html.contains("<li>alpha</li>"), "first bullet: {html}");
+    assert!(html.contains("<li>beta</li>"), "second bullet: {html}");
+
+    std::fs::remove_file(&px).ok();
+}
+
+#[test]
 fn md_to_slides_from_outline() {
     // Preamble before the first heading is dropped; bullets and plain lines
     // become body items.
