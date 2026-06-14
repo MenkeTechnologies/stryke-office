@@ -1387,6 +1387,47 @@ fn op_slides_to_text(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Extract a presentation into a spreadsheet — one row per slide with its number,
+/// title (first text line), and body text. The reverse of `sheet_to_slides`.
+/// opts: path (pptx/odp), output (xlsx/ods/csv, required), sep => join for body
+/// lines (default " "), format => override. Returns `{ ok, path, slides }`.
+fn op_slides_to_sheet(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let sep = opts.get("sep").and_then(Value::as_str).unwrap_or(" ");
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut rows: Vec<Value> = vec![json!(["slide", "title", "text"])];
+    for (i, s) in slides.iter().enumerate() {
+        let lines: Vec<String> = s
+            .get("text")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (title, body) = lines
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.join(sep)))
+            .unwrap_or_default();
+        rows.push(json!([i + 1, title, body]));
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Slides", "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": slides.len() }))
+}
+
 /// Parse a Markdown outline into a presentation (the inverse of `slides_to_md`).
 /// opts: markdown => outline text, or path => a `.md` file; output (required) =>
 /// pptx/odp; format => override. Each heading line (`#`..`######`) starts a new

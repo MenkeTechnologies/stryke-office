@@ -139,7 +139,12 @@ val $shtml = Office::slides_to_html($pptx)
 assert_ok ($shtml->{html} =~ /<h2>Intro<\/h2>/), "slides_to_html: title section"
 val $stxt = Office::slides_to_text($pptx)
 assert_ok ($stxt->{text} =~ /Intro/), "slides_to_text: text extracted"
+val $s2sh = "$dir/$tag-s2sheet.xlsx"
+Office::slides_to_sheet($pptx, $s2sh)
+val $s2shr = Office::sheet_get_cell($s2sh, "B2")
+assert_eq $s2shr->{value}, "Intro", "slides_to_sheet: title row"
 unlink $pptx
+unlink $s2sh
 
 # ── pdf text statistics ─────────────────────────────────────────────
 val $ps = "$dir/$tag-s.pdf"

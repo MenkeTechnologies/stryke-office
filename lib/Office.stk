@@ -782,6 +782,13 @@ fn Office::slides_to_text ($path, %opts) {
         office__slides_to_text(to_json({ path => $path, output => $opts{output}, notes => $opts{notes}, sep => $opts{sep} })))
 }
 
+## Extract a deck into a spreadsheet (one row per slide: number, title, text).
+## Reverse of sheet_to_slides. opts: sep, format. Returns { ok, path, slides }.
+fn Office::slides_to_sheet ($path, $output, %opts) {
+    Office::_decode("slides_to_sheet",
+        office__slides_to_sheet(to_json({ path => $path, output => $output, sep => $opts{sep}, format => $opts{format} })))
+}
+
 ## Parse a Markdown outline into a presentation (inverse of slides_to_md).
 ## opts: markdown (text) or path (.md file), format. Returns { ok, path, slides }.
 fn Office::md_to_slides ($output, %opts) {
