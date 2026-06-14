@@ -231,6 +231,14 @@ fn Office::sheet_diff ($left, $right, %opts) {
         office__sheet_diff(to_json({ left => $left, right => $right, sheet => $opts{sheet}, left_sheet => $opts{left_sheet}, right_sheet => $opts{right_sheet} })))
 }
 
+## Keep only the first (or last) N data rows of a sheet. opts: n => row count
+## (default 10), tail => 1 to take the last N, header => 0 to drop the header,
+## sheet, format => override. Returns { ok, path, rows }.
+fn Office::sheet_head ($path, $output, %opts) {
+    Office::_decode("sheet_head",
+        office__sheet_head(to_json({ path => $path, output => $output, n => $opts{n}, tail => $opts{tail}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.
