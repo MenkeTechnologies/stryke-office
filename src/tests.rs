@@ -2107,6 +2107,51 @@ fn sheet_strip_whitespace() {
 }
 
 #[test]
+fn sheet_coalesce_first_nonblank() {
+    let path = tmp("coalesce.xlsx");
+    // primary blank in row1, present in row2; secondary fallback used in row1.
+    let w = call(
+        office__sheet_write,
+        &serde_json::json!({
+            "path": path,
+            "sheets": [{
+                "name": "D",
+                "rows": [
+                    ["primary", "fallback", "keep"],
+                    ["", "alt1", "k1"],
+                    ["main2", "alt2", "k2"],
+                    ["", "", "k3"]
+                ]
+            }]
+        })
+        .to_string(),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("coalesce_out.xlsx");
+    let r = call(
+        office__sheet_coalesce,
+        &serde_json::json!({
+            "path": path, "output": out,
+            "columns": ["primary", "fallback"], "into": "best", "default": "N/A"
+        })
+        .to_string(),
+    );
+    assert_eq!(r["column"], "best", "new column name: {r}");
+    assert_eq!(r["filled"], 2, "two rows had a non-blank: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // "best" is appended after the three source columns -> index 3
+    assert_eq!(rows[0][3], "best", "header appended: {rd}");
+    assert_eq!(rows[1][3], "alt1", "row1 falls back to secondary: {rd}");
+    assert_eq!(rows[2][3], "main2", "row2 uses primary: {rd}");
+    assert_eq!(rows[3][3], "N/A", "all-blank row gets default: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(

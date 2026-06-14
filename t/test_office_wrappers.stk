@@ -434,6 +434,17 @@ assert_eq $spb->[0]{rows}[0][0], "name", "sheet_strip: header trimmed"
 assert_eq $spb->[0]{rows}[1][0], "apple", "sheet_strip: cell trimmed"
 unlink $spx
 unlink $spo
+# sheet_coalesce: first non-blank across columns
+val $cox = "$dir/$tag-coalesce.xlsx"
+Office::sheet_write($cox, [{ name => "D", rows => [["primary", "fallback"], ["", "alt1"], ["main2", "alt2"]] }])
+val $coo = "$dir/$tag-coalesce-out.xlsx"
+val $cor = Office::sheet_coalesce($cox, $coo, ["primary", "fallback"], into => "best")
+assert_eq $cor->{column}, "best", "sheet_coalesce: new column name"
+val $cob = Office::sheet_read($coo)
+assert_eq $cob->[0]{rows}[1][2], "alt1", "sheet_coalesce: row1 fallback"
+assert_eq $cob->[0]{rows}[2][2], "main2", "sheet_coalesce: row2 primary"
+unlink $cox
+unlink $coo
 # sheet_subtotal: group-wise subtotal rows
 val $stx = "$dir/$tag-subtot.xlsx"
 Office::sheet_write($stx, [{ name => "D", rows => [["region", "amt"], ["east", 10], ["east", 20], ["west", 30]] }])
