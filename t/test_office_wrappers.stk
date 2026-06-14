@@ -307,6 +307,13 @@ val $pr2 = Office::sheet_get_cell("$pdir/y.xlsx", "A2")
 assert_eq $pr2->{value}, "y", "sheet_partition: group file written"
 unlink "$pdir/x.xlsx"
 unlink "$pdir/y.xlsx"
+# split_by: one tab per distinct g, single workbook
+val $sbo = "$dir/$tag-splitby-out.xlsx"
+val $sbr = Office::sheet_split_by($gcx, $sbo, "g")
+assert_eq $sbr->{sheets}, 2, "sheet_split_by: two tabs"
+val $sbb = Office::sheet_read($sbo)
+assert_eq scalar(@{$sbb}), 2, "sheet_split_by: workbook has two sheets"
+unlink $sbo
 # multisort by g desc
 val $mso = "$dir/$tag-msort-out.xlsx"
 Office::sheet_multisort($gcx, [{ column => "g", descending => 1 }], $mso)

@@ -48,6 +48,7 @@ exports = [
     "office__sheet_explode",
     "office__sheet_map",
     "office__sheet_partition",
+    "office__sheet_split_by",
     "office__sheet_multisort",
     "office__sheet_find",
     "office__sheet_records",

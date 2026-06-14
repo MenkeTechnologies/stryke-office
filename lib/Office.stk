@@ -315,6 +315,14 @@ fn Office::sheet_partition ($path, $column, $dir, %opts) {
         office__sheet_partition(to_json({ path => $path, column => $column, dir => $dir, prefix => $opts{prefix}, format => $opts{format}, header => $opts{header}, sheet => $opts{sheet} })))
 }
 
+## Split a sheet into one tab per distinct value of $column, in a single output
+## workbook (single-file counterpart to sheet_partition). opts: header, sheet,
+## format. Returns { ok, path, sheets, groups }.
+fn Office::sheet_split_by ($path, $output, $column, %opts) {
+    Office::_decode("sheet_split_by",
+        office__sheet_split_by(to_json({ path => $path, output => $output, column => $column, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Sort by multiple columns. $keys is an arrayref of { column, descending? } in
 ## priority order. opts: sheet, header, format. Returns { ok, path, sorted }.
 fn Office::sheet_multisort ($path, $keys, $output, %opts) {

@@ -4273,6 +4273,97 @@ fn op_sheet_partition(opts: Value) -> Result<Value> {
     Ok(json!({ "count": files.len(), "files": files }))
 }
 
+/// Split a sheet into one worksheet (tab) per distinct value of a column, all in
+/// a single output workbook — the single-file counterpart to `sheet_partition`
+/// (which writes one file per group). opts: path, output => workbook path
+/// (required), column => name/index (required), header => repeat the header row
+/// in each tab (default true), sheet => source selector, format. Tab names are
+/// the group values truncated to Excel's 31-char limit; groups appear in
+/// first-seen order. Returns `{ ok, path, sheets, groups }`.
+fn op_sheet_split_by(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let keep_header = opts.get("header").and_then(flag_of).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header_row = if keep_header { rows.first() } else { None };
+    let col = resolve_col(
+        opts.get("column"),
+        header_row.and_then(Value::as_array).map(|v| v.as_slice()),
+    )?;
+
+    let data_start = if keep_header && !rows.is_empty() {
+        1
+    } else {
+        0
+    };
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
+    for row in &rows[data_start..] {
+        let key = row
+            .as_array()
+            .and_then(|a| a.get(col))
+            .map(cell_to_string)
+            .unwrap_or_default();
+        groups.entry(key.clone()).or_insert_with(|| {
+            order.push(key.clone());
+            Vec::new()
+        });
+        groups.get_mut(&key).unwrap().push(row.clone());
+    }
+
+    // Excel caps sheet names at 31 chars; de-duplicate after truncation.
+    let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out_sheets: Vec<Value> = Vec::new();
+    let mut names: Vec<String> = Vec::new();
+    for key in &order {
+        let mut name: String = key.chars().take(31).collect();
+        if name.trim().is_empty() {
+            name = "blank".to_string();
+        }
+        let mut candidate = name.clone();
+        let mut k = 2;
+        while used.contains(&candidate) {
+            let suffix = format!("_{k}");
+            let keep = 31usize.saturating_sub(suffix.len());
+            candidate = format!("{}{}", name.chars().take(keep).collect::<String>(), suffix);
+            k += 1;
+        }
+        used.insert(candidate.clone());
+
+        let mut out_rows: Vec<Value> = Vec::new();
+        if let Some(h) = header_row {
+            out_rows.push(h.clone());
+        }
+        out_rows.extend(groups.remove(key).unwrap_or_default());
+        out_sheets.push(json!({ "name": candidate, "rows": out_rows }));
+        names.push(candidate);
+    }
+
+    let n = out_sheets.len();
+    let mut wopts = json!({ "path": output, "sheets": out_sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sheets": n, "groups": names }))
+}
+
 /// Sort data rows by multiple columns (the multi-key analogue of `sheet_sort`).
 /// opts: path, output, keys => array of `{ column => name/index, descending? }`
 /// in priority order (required), sheet, header (default true), format. Cells
@@ -10377,6 +10468,7 @@ export!(office__sheet_rename_columns, op_sheet_rename_columns);
 export!(office__sheet_explode, op_sheet_explode);
 export!(office__sheet_map, op_sheet_map);
 export!(office__sheet_partition, op_sheet_partition);
+export!(office__sheet_split_by, op_sheet_split_by);
 export!(office__sheet_multisort, op_sheet_multisort);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
