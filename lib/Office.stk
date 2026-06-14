@@ -130,6 +130,14 @@ fn Office::sheet_sparkline ($path, $column, %opts) {
         office__sheet_sparkline(to_json({ path => $path, column => $column, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Locate the row of a column's max/min (pandas idxmax/idxmin). opts: min (find
+## minimum), label (column identifying the row), sheet, header. Returns
+## { column, row, value, label? } (row is the 0-based data index).
+fn Office::sheet_argmax ($path, $column, %opts) {
+    Office::_decode("sheet_argmax",
+        office__sheet_argmax(to_json({ path => $path, column => $column, min => $opts{min}, label => $opts{label}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Pearson correlation matrix between numeric columns (pandas df.corr()).
 ## opts: sheet, header. Returns { sheet, columns, matrix }.
 fn Office::sheet_corr ($path, %opts) {
