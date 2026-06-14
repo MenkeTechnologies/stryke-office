@@ -2856,6 +2856,52 @@ fn op_sheet_remove(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "removed": removed, "sheets": n }))
 }
 
+/// Reorder (and/or subset) the sheets of a workbook. opts: path, output
+/// (default in place), order => array of sheet names/indices in the desired
+/// order (sheets omitted are dropped), format. Returns `{ ok, path, sheets }`.
+fn op_sheet_reorder(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let order = opts
+        .get("order")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing order (array of sheet names/indices)"))?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut out_sheets: Vec<Value> = Vec::new();
+    for o in order {
+        let idx = match o {
+            Value::String(name) => sheets.iter().position(|s| s["name"] == *name),
+            Value::Number(n) => n.as_u64().map(|i| i as usize),
+            _ => None,
+        }
+        .filter(|&i| i < sheets.len());
+        if let Some(i) = idx {
+            out_sheets.push(sheets[i].clone());
+        }
+    }
+    if out_sheets.is_empty() {
+        return Err(anyhow!("order referenced no existing sheets"));
+    }
+
+    let n = out_sheets.len();
+    let mut wopts = json!({ "path": output, "sheets": out_sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sheets": n }))
+}
+
 /// Read one sheet's rows from a file, selected by name/index (default first).
 fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3874,6 +3920,7 @@ export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
 export!(office__sheet_remove, op_sheet_remove);
+export!(office__sheet_reorder, op_sheet_reorder);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);

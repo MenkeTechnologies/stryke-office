@@ -257,6 +257,14 @@ fn Office::sheet_add ($path, $name, %opts) {
         office__sheet_add(to_json({ path => $path, name => $name, rows => $opts{rows}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Reorder (and/or subset) the sheets of a workbook. $order is an arrayref of
+## sheet names/indices in the desired order; omitted sheets are dropped. opts:
+## output (default in place), format. Returns { ok, path, sheets }.
+fn Office::sheet_reorder ($path, $order, %opts) {
+    Office::_decode("sheet_reorder",
+        office__sheet_reorder(to_json({ path => $path, order => $order, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Remove a sheet from a workbook. $sheet selects which (name or index). opts:
 ## output (default in place), format. Errors if it would remove the only sheet.
 ## Returns { ok, path, removed, sheets }.

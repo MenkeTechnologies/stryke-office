@@ -338,6 +338,37 @@ fn sheet_diff_cells() {
 }
 
 #[test]
+fn sheet_reorder_workbook() {
+    let path = tmp("reord.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"A","rows":[["x"]]}},{{"name":"B","rows":[["y"]]}},{{"name":"C","rows":[["z"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("reord_out.xlsx");
+    let r = call(
+        office__sheet_reorder,
+        &format!(r#"{{"path":"{path}","order":["C","A","B"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["sheets"], 3, "three sheets: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let names: Vec<&str> = rd["sheets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["C", "A", "B"], "reordered: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_remove_one() {
     let path = tmp("rm.xlsx");
     let w = call(
