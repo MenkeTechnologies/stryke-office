@@ -139,8 +139,8 @@ fn add_outline_nodes(
             .map(|p| (p as u32).clamp(1, npages.max(1)))
             .unwrap_or(1);
         let page_id = pages.get(&page).copied().unwrap_or((0, 0));
-        let bold = node.get("bold").and_then(Value::as_bool).unwrap_or(false);
-        let italic = node.get("italic").and_then(Value::as_bool).unwrap_or(false);
+        let bold = node.get("bold").and_then(flag_of).unwrap_or(false);
+        let italic = node.get("italic").and_then(flag_of).unwrap_or(false);
         let format = (bold as u32) << 1 | (italic as u32);
         let color = node
             .get("color")

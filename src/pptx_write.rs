@@ -86,8 +86,8 @@ fn pptx_para(item: &Value, default_pt: u32) -> String {
     let (text, bold, italic, size_pt, color) = match item {
         Value::Object(o) => (
             cell_to_string(o.get("text").unwrap_or(&Value::Null)),
-            o.get("bold").and_then(Value::as_bool).unwrap_or(false),
-            o.get("italic").and_then(Value::as_bool).unwrap_or(false),
+            o.get("bold").and_then(flag_of).unwrap_or(false),
+            o.get("italic").and_then(flag_of).unwrap_or(false),
             o.get("size").and_then(Value::as_f64).map(|s| s as u32).unwrap_or(default_pt),
             o.get("color").and_then(Value::as_str).map(|c| c.trim_start_matches('#').to_string()),
         ),

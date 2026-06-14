@@ -355,4 +355,15 @@ assert_ok ($d2pr->{text} =~ /Chapter/), "doc_to_pdf: heading renders into pdf"
 unlink $d2p
 unlink $d2ppdf
 
+# ── lenient boolean flags: a false-default flag passed as 1 must take effect ──
+# (regression for stryke 1/0 booleans vs JSON true/false)
+val $flx = "$dir/$tag-flag.xlsx"
+Office::sheet_write($flx, [{ name => "D", rows => [["h"], [1], [2], [3]] }])
+val $flo = "$dir/$tag-flag-out.xlsx"
+Office::sheet_head($flx, $flo, n => 1, tail => 1)
+val $flr = Office::sheet_get_cell($flo, "A2")
+assert_eq $flr->{value}, 3, "tail => 1 honored (lenient bool): last row kept"
+unlink $flx
+unlink $flo
+
 test_run

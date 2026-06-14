@@ -71,16 +71,23 @@ fn cell_to_string(v: &Value) -> String {
     }
 }
 
-/// Read a boolean option leniently. stryke has no distinct boolean type (Perl
-/// heritage), so callers pass `1`/`0` which serialize as JSON integers, not
-/// `true`/`false`. Accept JSON bools, non-zero numbers, and "true"/"1"/"yes"/"on".
-fn opt_flag(opts: &Value, key: &str) -> Option<bool> {
-    opts.get(key).map(|v| match v {
+/// Lenient boolean reader, drop-in for `Value::as_bool` in `.and_then(...)`.
+/// stryke has no distinct boolean type (Perl heritage), so callers pass `1`/`0`
+/// which serialize as JSON integers, not `true`/`false`; treat any non-zero
+/// number and "true"/"1"/"yes"/"on" as true so flags work from idiomatic stryke.
+fn flag_of(v: &Value) -> Option<bool> {
+    Some(match v {
         Value::Bool(b) => *b,
         Value::Number(n) => n.as_f64().is_some_and(|x| x != 0.0),
         Value::String(s) => matches!(s.to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"),
+        Value::Null => return None,
         _ => false,
     })
+}
+
+/// Read a boolean option leniently from a container by key (see `flag_of`).
+fn opt_flag(opts: &Value, key: &str) -> Option<bool> {
+    opts.get(key).and_then(flag_of)
 }
 
 // ── zip + xml helpers (OOXML / ODF readers) ──────────────────────────────────
@@ -396,10 +403,7 @@ fn op_sheet_read(opts: Value) -> Result<Value> {
         "tsv" => return read_csv(path, delim.unwrap_or('\t')),
         _ => {}
     }
-    let want_formulas = opts
-        .get("formulas")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let want_formulas = opts.get("formulas").and_then(flag_of).unwrap_or(false);
     let mut wb = open_workbook_auto(path)?;
     let names = wb.sheet_names().to_owned();
     let mut sheets = Vec::new();
@@ -493,15 +497,15 @@ fn xlsx_format(o: &serde_json::Map<String, Value>) -> Option<rust_xlsxwriter::Fo
     use rust_xlsxwriter::{Format, FormatAlign, FormatBorder};
     let mut f = Format::new();
     let mut used = false;
-    if o.get("bold").and_then(Value::as_bool) == Some(true) {
+    if o.get("bold").and_then(flag_of) == Some(true) {
         f = f.set_bold();
         used = true;
     }
-    if o.get("italic").and_then(Value::as_bool) == Some(true) {
+    if o.get("italic").and_then(flag_of) == Some(true) {
         f = f.set_italic();
         used = true;
     }
-    if o.get("underline").and_then(Value::as_bool) == Some(true) {
+    if o.get("underline").and_then(flag_of) == Some(true) {
         f = f.set_underline(rust_xlsxwriter::FormatUnderline::Single);
         used = true;
     }
@@ -535,7 +539,7 @@ fn xlsx_format(o: &serde_json::Map<String, Value>) -> Option<rust_xlsxwriter::Fo
         f = f.set_num_format(nf);
         used = true;
     }
-    if o.get("border").and_then(Value::as_bool) == Some(true) {
+    if o.get("border").and_then(flag_of) == Some(true) {
         f = f.set_border(FormatBorder::Thin);
         used = true;
     }
@@ -727,7 +731,7 @@ fn write_xlsx(path: &str, sheets: &[Value], opts: &Value) -> Result<()> {
 ///    notes:[{row,col,text,author?}], images:[{row,col,path}]`.
 fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value) -> Result<()> {
     use rust_xlsxwriter::{Image, Note};
-    if s.get("protect").and_then(Value::as_bool) == Some(true) {
+    if s.get("protect").and_then(flag_of) == Some(true) {
         ws.protect();
     }
     if let Some(c) = s.get("tab_color").and_then(Value::as_str) {
@@ -736,13 +740,13 @@ fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value)
     if let Some(z) = s.get("zoom").and_then(Value::as_u64) {
         ws.set_zoom(z as u16);
     }
-    if s.get("landscape").and_then(Value::as_bool) == Some(true) {
+    if s.get("landscape").and_then(flag_of) == Some(true) {
         ws.set_landscape();
     }
     if let Some(p) = s.get("paper").and_then(Value::as_u64) {
         ws.set_paper_size(p as u8);
     }
-    if s.get("print_gridlines").and_then(Value::as_bool) == Some(true) {
+    if s.get("print_gridlines").and_then(flag_of) == Some(true) {
         ws.set_print_gridlines(true);
     }
     if let Some(h) = s.get("header").and_then(Value::as_str) {
@@ -823,7 +827,7 @@ fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value)
             ws.set_column_hidden(c as u16)?;
         }
     }
-    if s.get("autofit").and_then(Value::as_bool) == Some(true) {
+    if s.get("autofit").and_then(flag_of) == Some(true) {
         ws.autofit();
     }
     Ok(())
@@ -862,13 +866,13 @@ fn write_xlsx_sparklines(
         let mut spark = Sparkline::new()
             .set_range((sheet, rng[0], rng[1] as u16, rng[2], rng[3] as u16))
             .set_type(stype);
-        if sp.get("markers").and_then(Value::as_bool) == Some(true) {
+        if sp.get("markers").and_then(flag_of) == Some(true) {
             spark = spark.show_markers(true);
         }
-        if sp.get("high").and_then(Value::as_bool) == Some(true) {
+        if sp.get("high").and_then(flag_of) == Some(true) {
             spark = spark.show_high_point(true);
         }
-        if sp.get("low").and_then(Value::as_bool) == Some(true) {
+        if sp.get("low").and_then(flag_of) == Some(true) {
             spark = spark.show_low_point(true);
         }
         ws.add_sparkline(at.0 as u32, at.1 as u16, &spark)?;
@@ -1234,7 +1238,7 @@ fn op_sheet_stats(opts: Value) -> Result<Value> {
     let name = sheet["name"].as_str().unwrap_or("").to_string();
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let ncols = rows
         .iter()
         .map(|r| r.as_array().map_or(0, |a| a.len()))
@@ -1327,7 +1331,7 @@ fn op_sheet_describe(opts: Value) -> Result<Value> {
     let name = sheet["name"].as_str().unwrap_or("").to_string();
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let ncols = rows
         .iter()
         .map(|r| r.as_array().map_or(0, |a| a.len()))
@@ -1426,7 +1430,7 @@ fn op_sheet_corr(opts: Value) -> Result<Value> {
     let name = sheet["name"].as_str().unwrap_or("").to_string();
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let ncols = rows
         .iter()
         .map(|r| r.as_array().map_or(0, |a| a.len()))
@@ -1516,7 +1520,7 @@ fn op_sheet_to_md(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let ncols = rows
         .iter()
         .map(|r| r.as_array().map_or(0, |a| a.len()))
@@ -1682,8 +1686,8 @@ fn op_sheet_to_html(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
-    let full = opts.get("full").and_then(Value::as_bool).unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let full = opts.get("full").and_then(flag_of).unwrap_or(false);
     let ncols = rows
         .iter()
         .map(|r| r.as_array().map_or(0, |a| a.len()))
@@ -1769,8 +1773,8 @@ fn op_sheet_to_text(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
-    let border = opts.get("border").and_then(Value::as_bool).unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let border = opts.get("border").and_then(flag_of).unwrap_or(false);
     let ncols = rows
         .iter()
         .map(|r| r.as_array().map_or(0, |a| a.len()))
@@ -2201,7 +2205,7 @@ fn op_sheet_insert_column(opts: Value) -> Result<Value> {
         .unwrap_or(path)
         .to_string();
     let at = opts.get("at").and_then(Value::as_u64).unwrap_or(1).max(1) as usize - 1;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let name = opts.get("name").and_then(Value::as_str).unwrap_or("");
     let fill = opts.get("value").cloned().unwrap_or(Value::Null);
 
@@ -2260,7 +2264,7 @@ fn op_sheet_cumsum(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2325,7 +2329,7 @@ fn op_sheet_pct(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2418,7 +2422,7 @@ fn op_sheet_normalize(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2542,7 +2546,7 @@ fn op_sheet_movavg(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2632,7 +2636,7 @@ fn op_sheet_delta(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2722,7 +2726,7 @@ fn op_sheet_clamp(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2848,7 +2852,7 @@ fn op_sheet_explode(opts: Value) -> Result<Value> {
     if sep.is_empty() {
         return Err(anyhow!("sep must be non-empty"));
     }
-    let trim = opts.get("trim").and_then(Value::as_bool).unwrap_or(true);
+    let trim = opts.get("trim").and_then(flag_of).unwrap_or(true);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -2857,7 +2861,7 @@ fn op_sheet_explode(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -2938,7 +2942,7 @@ fn op_sheet_map(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -3017,7 +3021,7 @@ fn op_sheet_partition(opts: Value) -> Result<Value> {
         .and_then(Value::as_str)
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or_else(|| ext_of(path));
-    let keep_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let keep_header = opts.get("header").and_then(flag_of).unwrap_or(true);
     std::fs::create_dir_all(dir)?;
 
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3110,7 +3114,7 @@ fn op_sheet_multisort(opts: Value) -> Result<Value> {
         .cloned()
         .unwrap_or_default();
     let target = sheet_target_index(&opts, &mut sheets)?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -3198,11 +3202,8 @@ fn col_letters(mut c: usize) -> String {
 fn op_sheet_find(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let query = req_str(&opts, "query")?;
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let whole = opts.get("whole").and_then(Value::as_bool).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let whole = opts.get("whole").and_then(flag_of).unwrap_or(false);
     let restrict = opts.get("sheet").and_then(Value::as_str);
     let needle = if ignore_case {
         query.to_lowercase()
@@ -3358,7 +3359,7 @@ fn op_sheet_to_json(opts: Value) -> Result<Value> {
     let output = req_str(&opts, "output")?.to_string();
     let recs = op_sheet_records(opts.clone())?;
     let records = recs.get("records").cloned().unwrap_or_else(|| json!([]));
-    let pretty = opts.get("pretty").and_then(Value::as_bool).unwrap_or(true);
+    let pretty = opts.get("pretty").and_then(flag_of).unwrap_or(true);
     let text = if pretty {
         serde_json::to_string_pretty(&records)?
     } else {
@@ -3471,15 +3472,9 @@ fn op_sheet_sort(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
-    let descending = opts
-        .get("descending")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let descending = opts.get("descending").and_then(flag_of).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
 
     let rows = sheets[target]["rows"]
         .as_array()
@@ -3506,7 +3501,7 @@ fn op_sheet_sort(opts: Value) -> Result<Value> {
             .cloned()
             .unwrap_or(Value::Null)
     };
-    let numeric = match opts.get("numeric").and_then(Value::as_bool) {
+    let numeric = match opts.get("numeric").and_then(flag_of) {
         Some(b) => b,
         None => data
             .iter()
@@ -3574,12 +3569,9 @@ fn op_sheet_rank(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
-    let ascending = opts
-        .get("ascending")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let dense = opts.get("dense").and_then(Value::as_bool).unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ascending = opts.get("ascending").and_then(flag_of).unwrap_or(false);
+    let dense = opts.get("dense").and_then(flag_of).unwrap_or(false);
     let name = opts.get("name").and_then(Value::as_str).unwrap_or("rank");
 
     let rows = sheets[target]["rows"]
@@ -3706,10 +3698,7 @@ fn op_sheet_filter(opts: Value) -> Result<Value> {
     let output = req_str(&opts, "output")?.to_string();
     let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
     let value = opts.get("value").cloned().unwrap_or(Value::Null);
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -3725,7 +3714,7 @@ fn op_sheet_filter(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -3817,7 +3806,7 @@ fn op_sheet_aggregate(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -3906,10 +3895,7 @@ fn op_sheet_group_concat(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
     let sep = opts.get("sep").and_then(Value::as_str).unwrap_or(", ");
-    let distinct = opts
-        .get("distinct")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let distinct = opts.get("distinct").and_then(flag_of).unwrap_or(false);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let sheets = read
@@ -3926,7 +3912,7 @@ fn op_sheet_group_concat(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -3992,10 +3978,7 @@ fn op_sheet_lookup(opts: Value) -> Result<Value> {
         .get("key")
         .map(cell_to_string)
         .ok_or_else(|| anyhow!("missing key"))?;
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let sheets = read
@@ -4012,7 +3995,7 @@ fn op_sheet_lookup(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -4054,10 +4037,7 @@ fn op_sheet_countif(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
     let value = opts.get("value").cloned().unwrap_or(Value::Null);
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let sheets = read
@@ -4073,7 +4053,7 @@ fn op_sheet_countif(opts: Value) -> Result<Value> {
     .ok_or_else(|| anyhow!("sheet not found"))?;
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -4103,10 +4083,7 @@ fn op_sheet_sumif(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
     let value = opts.get("value").cloned().unwrap_or(Value::Null);
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let sheets = read
@@ -4122,7 +4099,7 @@ fn op_sheet_sumif(opts: Value) -> Result<Value> {
     .ok_or_else(|| anyhow!("sheet not found"))?;
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -4173,11 +4150,8 @@ fn op_sheet_freq(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -4263,8 +4237,8 @@ fn op_sheet_split_column(opts: Value) -> Result<Value> {
     if delimiter.is_empty() {
         return Err(anyhow!("delimiter must be non-empty"));
     }
-    let trim = opts.get("trim").and_then(Value::as_bool).unwrap_or(true);
-    let keep = opts.get("keep").and_then(Value::as_bool).unwrap_or(false);
+    let trim = opts.get("trim").and_then(flag_of).unwrap_or(true);
+    let keep = opts.get("keep").and_then(flag_of).unwrap_or(false);
     let max = opts.get("max").and_then(Value::as_u64).map(|n| n as usize);
 
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -4281,7 +4255,7 @@ fn op_sheet_split_column(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -4387,11 +4361,8 @@ fn op_sheet_concat_columns(opts: Value) -> Result<Value> {
     let output = req_str(&opts, "output")?.to_string();
     let separator = opts.get("separator").and_then(Value::as_str).unwrap_or(" ");
     let into = opts.get("into").and_then(Value::as_str).unwrap_or("merged");
-    let skip_blanks = opts
-        .get("skip_blanks")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let keep = opts.get("keep").and_then(Value::as_bool).unwrap_or(false);
+    let skip_blanks = opts.get("skip_blanks").and_then(flag_of).unwrap_or(false);
+    let keep = opts.get("keep").and_then(flag_of).unwrap_or(false);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -4407,7 +4378,7 @@ fn op_sheet_concat_columns(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -4514,7 +4485,7 @@ fn op_sheet_pivot(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let header_row = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -4634,7 +4605,7 @@ fn op_sheet_unpivot(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let hr = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -4830,7 +4801,7 @@ fn op_sheet_select(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -4871,7 +4842,7 @@ fn op_sheet_select(opts: Value) -> Result<Value> {
 /// format. Returns `{ ok, path, columns }` (kept column count).
 fn op_sheet_drop(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = select_sheet_rows(path, opts.get("sheet"))?;
     let hr = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
@@ -4914,7 +4885,7 @@ fn op_sheet_add_column(opts: Value) -> Result<Value> {
         .unwrap_or(path)
         .to_string();
     let name = req_str(&opts, "name")?.to_string();
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -4989,7 +4960,7 @@ fn op_sheet_totals(opts: Value) -> Result<Value> {
         .unwrap_or(path)
         .to_string();
     let label = opts.get("label").and_then(Value::as_str).unwrap_or("Total");
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -5085,12 +5056,9 @@ fn op_sheet_replace(opts: Value) -> Result<Value> {
         return Err(anyhow!("empty find"));
     }
     let replace = opts.get("replace").and_then(Value::as_str).unwrap_or("");
-    let ignore_case = opts
-        .get("ignore_case")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let whole = opts.get("whole").and_then(Value::as_bool).unwrap_or(false);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let whole = opts.get("whole").and_then(flag_of).unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
 
     let read = op_sheet_read(json!({ "path": path }))?;
     let mut sheets = read
@@ -5243,7 +5211,7 @@ fn op_sheet_dedupe(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -5413,7 +5381,7 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let mut rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -5554,7 +5522,7 @@ fn op_sheet_chunk(opts: Value) -> Result<Value> {
                 .unwrap_or("chunk")
                 .to_string()
         });
-    let repeat_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let repeat_header = opts.get("header").and_then(flag_of).unwrap_or(true);
 
     let rows = select_sheet_rows(path, opts.get("sheet"))?;
     let (header, data) = if repeat_header && !rows.is_empty() {
@@ -5587,8 +5555,8 @@ fn op_sheet_head(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
     let n = opts.get("n").and_then(Value::as_u64).unwrap_or(10) as usize;
-    let tail = opts.get("tail").and_then(Value::as_bool).unwrap_or(false);
-    let keep_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let tail = opts.get("tail").and_then(flag_of).unwrap_or(false);
+    let keep_header = opts.get("header").and_then(flag_of).unwrap_or(true);
 
     let rows = select_sheet_rows(path, opts.get("sheet"))?;
     let (header, data) = if keep_header && !rows.is_empty() {
@@ -5640,7 +5608,7 @@ fn op_sheet_sample(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
     let n = opts.get("n").and_then(Value::as_u64).unwrap_or(10) as usize;
-    let keep_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let keep_header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let seed = opts
         .get("seed")
         .and_then(Value::as_u64)
@@ -5730,7 +5698,7 @@ fn op_sheet_transform(opts: Value) -> Result<Value> {
     .filter(|&i| i < sheets.len())
     .ok_or_else(|| anyhow!("sheet not found"))?;
 
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let rows = sheets[target]["rows"]
         .as_array()
         .cloned()
@@ -5818,10 +5786,7 @@ fn op_sheet_top(opts: Value) -> Result<Value> {
         .get("by")
         .cloned()
         .ok_or_else(|| anyhow!("missing by (column name or index)"))?;
-    let ascending = opts
-        .get("ascending")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let ascending = opts.get("ascending").and_then(flag_of).unwrap_or(false);
 
     // Sort base -> output, then keep the first N rows of output in place.
     let mut sopts = json!({ "path": path, "by": by, "output": output, "descending": !ascending });
@@ -6216,7 +6181,7 @@ fn op_sheet_validate(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let hr = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {
@@ -6347,16 +6312,16 @@ fn block_plain_text(b: &Value) -> String {
 fn docx_run(j: &Value) -> docx_rs::Run {
     use docx_rs::{Run, RunFonts};
     let mut run = Run::new().add_text(j.get("text").and_then(Value::as_str).unwrap_or(""));
-    if j.get("bold").and_then(Value::as_bool) == Some(true) {
+    if j.get("bold").and_then(flag_of) == Some(true) {
         run = run.bold();
     }
-    if j.get("italic").and_then(Value::as_bool) == Some(true) {
+    if j.get("italic").and_then(flag_of) == Some(true) {
         run = run.italic();
     }
-    if j.get("strike").and_then(Value::as_bool) == Some(true) {
+    if j.get("strike").and_then(flag_of) == Some(true) {
         run = run.strike();
     }
-    if j.get("underline").and_then(Value::as_bool) == Some(true) {
+    if j.get("underline").and_then(flag_of) == Some(true) {
         run = run.underline("single");
     }
     if let Some(sz) = j.get("size").and_then(Value::as_f64) {
@@ -6455,10 +6420,7 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
             .header(Header::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h))));
     }
     // Footer: optional text and/or an automatic page-number field.
-    let page_numbers = opts
-        .get("page_numbers")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let page_numbers = opts.get("page_numbers").and_then(flag_of).unwrap_or(false);
     let footer_text = opts.get("footer").and_then(Value::as_str);
     if footer_text.is_some() || page_numbers {
         let mut fpara = Paragraph::new();
@@ -6473,7 +6435,7 @@ fn write_docx(path: &str, blocks: &[Value], opts: &Value) -> Result<()> {
     for b in blocks {
         match b.get("kind").and_then(Value::as_str).unwrap_or("para") {
             "list" => {
-                let ordered = b.get("ordered").and_then(Value::as_bool).unwrap_or(false);
+                let ordered = b.get("ordered").and_then(flag_of).unwrap_or(false);
                 let num_id = if ordered { 1 } else { 2 };
                 if let Some(items) = b.get("items").and_then(Value::as_array) {
                     for it in items {

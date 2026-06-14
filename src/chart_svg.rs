@@ -28,7 +28,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         .map(|a| a.iter().map(cell_to_string).collect())
         .unwrap_or_default();
     let title = opts.get("title").and_then(Value::as_str).unwrap_or("");
-    let smooth = opts.get("smooth").and_then(Value::as_bool).unwrap_or(false);
+    let smooth = opts.get("smooth").and_then(flag_of).unwrap_or(false);
     set_palette(opts);
     let bg = opts.get("background").and_then(Value::as_str).unwrap_or("#ffffff");
 
@@ -47,7 +47,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         );
     }
 
-    let labels = opts.get("labels").and_then(Value::as_bool).unwrap_or(false);
+    let labels = opts.get("labels").and_then(flag_of).unwrap_or(false);
     let needs_series = !matches!(kind, "sankey" | "gauge" | "heatmap" | "sunburst" | "calendar");
     if needs_series && opts.get("series").and_then(Value::as_array).is_none() {
         return Err(anyhow!("missing series (expected array)"));
@@ -153,7 +153,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         if scatter && (!xmin.is_finite() || (xmax - xmin).abs() < f64::EPSILON) {
             xmax = xmin + 1.0;
         }
-        let logy = opts.get("log_y").and_then(Value::as_bool) == Some(true) && ymin > 0.0;
+        let logy = opts.get("log_y").and_then(flag_of) == Some(true) && ymin > 0.0;
         let lmin = ymin.max(1e-9).log10();
         let lspan = (ymax.max(1e-9).log10() - lmin).max(1e-9);
         let yp = |v: f64| {
@@ -201,7 +201,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
             _ => svg_bars(&mut s, series, &cats, l, pw, &yp, false, labels),
         }
         // markers on line-family points
-        if opts.get("markers").and_then(Value::as_bool) == Some(true)
+        if opts.get("markers").and_then(flag_of) == Some(true)
             && matches!(kind, "line" | "area" | "step" | "stacked_area")
         {
             for (si, ser) in series.iter().enumerate() {
@@ -224,7 +224,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
             }
         }
         // optional least-squares trendline over scatter points
-        if scatter && opts.get("trendline").and_then(Value::as_bool) == Some(true) {
+        if scatter && opts.get("trendline").and_then(flag_of) == Some(true) {
             for (si, ser) in series.iter().enumerate() {
                 if let Some((m, c)) = linfit(&series_points(ser)) {
                     let col = svg_palette(si);
@@ -287,7 +287,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
     }
 
     // shared legend
-    if opts.get("legend").and_then(Value::as_bool) != Some(false) {
+    if opts.get("legend").and_then(flag_of) != Some(false) {
         svg_legend(&mut s, kind, series, &cats, w, t);
     }
 

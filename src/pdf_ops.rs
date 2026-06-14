@@ -474,7 +474,7 @@ fn op_pdf_encrypt(opts: Value) -> Result<Value> {
         .get("user_password")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let aes = opts.get("aes").and_then(Value::as_bool).unwrap_or(false);
+    let aes = opts.get("aes").and_then(flag_of).unwrap_or(false);
     let key_length = opts
         .get("key_length")
         .and_then(Value::as_u64)
@@ -663,7 +663,7 @@ fn op_pdf_search(opts: Value) -> Result<Value> {
     }
     let ignore_case = opts
         .get("ignore_case")
-        .and_then(Value::as_bool)
+        .and_then(flag_of)
         .unwrap_or(false);
     let bytes = std::fs::read(path)?;
     let pages = lo_core::extract_pages_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
@@ -1058,7 +1058,7 @@ fn op_pdf_draw_rect(opts: Value) -> Result<Value> {
         return Err(anyhow!("no valid rects"));
     }
     let (r, g, b) = pdf_color01(opts.get("color"), [0, 0, 0]);
-    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let fill = opts.get("fill").and_then(flag_of).unwrap_or(true);
     let subset: Option<std::collections::BTreeSet<u32>> = opts
         .get("pages")
         .and_then(Value::as_array)
