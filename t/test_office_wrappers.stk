@@ -38,6 +38,13 @@ val $gurg = Office::text_uniq($guq, output => $guo, global => 1)
 assert_eq $gurg->{lines}, 3, "text_uniq: global dedupe keeps 3"
 unlink $guq
 unlink $guo
+# cut: extract reordered fields
+val $gcut = "$dir/$tag-cut.csv"
+spew $gcut, "a,b,c\n1,2,3\n"
+val $gcr = Office::text_cut($gcut, [3, 1], delim => ",")
+assert_eq $gcr->{lines}[0], "c,a", "text_cut: header fields reordered"
+assert_eq $gcr->{lines}[1], "3,1", "text_cut: row fields reordered"
+unlink $gcut
 unlink $grx
 unlink $grt
 unlink $gso
