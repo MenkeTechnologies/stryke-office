@@ -872,6 +872,55 @@ fn sheet_explode_delimited_column() {
 }
 
 #[test]
+fn sheet_map_recodes_values() {
+    let path = tmp("smap.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["sex"],["M"],["F"],["M"],["?"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // recode M/F, leave "?" unchanged (no default)
+    let out = tmp("smap_out.xlsx");
+    let r = call(
+        office__sheet_map,
+        &serde_json::json!({
+            "path": path, "column": "sex",
+            "mapping": {"M": "Male", "F": "Female"}, "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["mapped"], 3, "three cells recoded: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "Male", "M -> Male: {rd}");
+    assert_eq!(rows[2][0], "Female", "F -> Female: {rd}");
+    assert_eq!(rows[4][0], "?", "unmapped kept: {rd}");
+
+    // with default: unmapped -> "Other"
+    let outd = tmp("smap_d.xlsx");
+    call(
+        office__sheet_map,
+        &serde_json::json!({
+            "path": path, "column": "sex",
+            "mapping": {"M": "Male"}, "default": "Other", "output": outd
+        })
+        .to_string(),
+    );
+    let rdd = call(office__sheet_read, &format!(r#"{{"path":"{outd}"}}"#));
+    assert_eq!(
+        rdd["sheets"][0]["rows"][2][0], "Other",
+        "F -> default Other: {rdd}"
+    );
+
+    for f in [&path, &out, &outd] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

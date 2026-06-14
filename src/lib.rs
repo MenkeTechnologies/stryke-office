@@ -2901,6 +2901,95 @@ fn op_sheet_explode(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": emitted }))
 }
 
+/// Recode a column's values via a lookup map (e.g. {"M":"Male","F":"Female"}).
+/// opts: path, output, column => name or 0-based index (required), mapping =>
+/// object of `{ old => new }` (required; keys matched against the cell as text),
+/// default => value for unmapped cells (omit to leave them unchanged), into =>
+/// write to a new column with this header (default: recode in place), sheet,
+/// header (default true), format. Returns `{ ok, path, mapped }` (count of cells
+/// changed).
+fn op_sheet_map(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let mapping = opts
+        .get("mapping")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("missing mapping (expected object of old => new)"))?
+        .clone();
+    let default = opts.get("default").cloned();
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut mapped = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).cloned().unwrap_or(Value::Null);
+            let key = cell_to_string(&src);
+            let result = match mapping.get(&key) {
+                Some(v) => {
+                    mapped += 1;
+                    v.clone()
+                }
+                None => match &default {
+                    Some(d) => {
+                        mapped += 1;
+                        d.clone()
+                    }
+                    None => src.clone(),
+                },
+            };
+            match &into {
+                Some(_) => cells.push(result),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = result;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = result;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "mapped": mapped }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -7193,6 +7282,7 @@ export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_explode, op_sheet_explode);
+export!(office__sheet_map, op_sheet_map);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
