@@ -1383,6 +1383,14 @@ fn Office::pdf_merge ($inputs, $path) {
     Office::_decode("pdf_merge", office__pdf_merge(to_json({ inputs => $inputs, path => $path })))
 }
 
+## Generate a blank PDF with N empty pages. opts: pages (default 1), size
+## (a4|letter|legal|a3|a5, default a4), width/height (points; override size).
+## Returns { ok, path, pages, width, height }.
+fn Office::pdf_blank ($output, %opts) {
+    Office::_decode("pdf_blank",
+        office__pdf_blank(to_json({ output => $output, pages => $opts{pages}, size => $opts{size}, width => $opts{width}, height => $opts{height} })))
+}
+
 ## Extract a subset of pages (1-based, original order) into a new PDF.
 fn Office::pdf_split ($path, $pages, $output) {
     die "Office::pdf_split: pages must be arrayref" unless ref($pages) eq "ARRAY"

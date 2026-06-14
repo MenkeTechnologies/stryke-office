@@ -143,6 +143,7 @@ exports = [
     "office__images_to_pdf",
     "office__sheet_to_pdf",
     "office__pdf_merge",
+    "office__pdf_blank",
     "office__pdf_split",
     "office__pdf_rotate",
     "office__pdf_info",

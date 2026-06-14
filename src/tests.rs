@@ -7250,6 +7250,41 @@ fn pdf_merge_split_rotate_info() {
 }
 
 #[test]
+fn pdf_blank_generates_pages() {
+    // 3-page A4 blank
+    let out = tmp("blank.pdf");
+    let r = call(
+        office__pdf_blank,
+        &format!(r#"{{"output":"{out}","pages":3}}"#),
+    );
+    assert_eq!(r["pages"], 3, "three pages: {r}");
+    assert!(
+        (r["width"].as_f64().unwrap() - 595.0).abs() < 1e-6,
+        "A4 width: {r}"
+    );
+    // re-load and confirm page count + page size
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 3, "info confirms 3 pages: {info}");
+
+    // letter size, single page
+    let outl = tmp("blank_letter.pdf");
+    let rl = call(
+        office__pdf_blank,
+        &format!(r#"{{"output":"{outl}","size":"letter"}}"#),
+    );
+    assert_eq!(rl["pages"], 1, "default 1 page: {rl}");
+    assert!(
+        (rl["width"].as_f64().unwrap() - 612.0).abs() < 1e-6,
+        "letter width: {rl}"
+    );
+    let il = call(office__pdf_info, &format!(r#"{{"path":"{outl}"}}"#));
+    assert_eq!(il["pages"], 1, "letter info 1 page: {il}");
+
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outl).ok();
+}
+
+#[test]
 fn pdf_encrypt_decrypt_compress() {
     // a 2-page source PDF
     let src = tmp("sec.pdf");

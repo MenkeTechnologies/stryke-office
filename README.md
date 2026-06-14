@@ -318,6 +318,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::images_to_pdf($images, $output, %opts)` | `{pages}` | combine image files into a PDF, one per page, fit-to-page; `page_size`/`margin` |
 | `Office::sheet_to_pdf($path, $output, %opts)` | `{pages, bytes}` | render a spreadsheet as a bordered PDF table; `title`/`header`/`landscape` opts |
 | `Office::pdf_merge($inputs, $path)` | `{pages, merged}` | concatenate PDFs (input order) |
+| `Office::pdf_blank($output, %opts)` | `{ok, path, pages, width, height}` | generate a blank N-page PDF; `pages`/`size` (a4/letter/legal/a3/a5)/`width`/`height` opts |
 | `Office::pdf_split($path, $pages, $output)` | `{pages}` | extract 1-based page subset to a new PDF |
 | `Office::pdf_rotate($path, $angle, $output, %opts)` | `{rotated, angle}` | rotate pages 90°-multiples; `pages` subset |
 | `Office::pdf_info($path)` | `{pages, version, width, height, mediabox, cropbox?, title?, …}` | page count, first-page geometry + document metadata |
