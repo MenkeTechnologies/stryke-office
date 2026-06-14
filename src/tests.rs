@@ -5292,6 +5292,50 @@ fn doc_diff_paragraph_lcs() {
 }
 
 #[test]
+fn doc_comments_extracted_from_docx() {
+    // doc_write doesn't emit comments, so hand-build a minimal docx zip with a
+    // word/comments.xml part.
+    let comments_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:comment w:id="1" w:author="Jane Doe" w:date="2026-01-01T00:00:00Z" w:initials="JD">
+    <w:p><w:r><w:t>Please revise this paragraph.</w:t></w:r></w:p>
+  </w:comment>
+  <w:comment w:id="2" w:author="Bob" w:date="2026-01-02T00:00:00Z" w:initials="B">
+    <w:p><w:r><w:t>Looks good.</w:t></w:r></w:p>
+  </w:comment>
+</w:comments>"#;
+    let zip = write_zip_entries(&[(
+        "word/comments.xml".to_string(),
+        comments_xml.as_bytes().to_vec(),
+    )])
+    .unwrap();
+    let path = tmp("comments.docx");
+    std::fs::write(&path, &zip).unwrap();
+
+    let r = call(office__doc_comments, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "two comments: {r}");
+    let c = r["comments"].as_array().unwrap();
+    assert_eq!(c[0]["author"], "Jane Doe", "author: {r}");
+    assert_eq!(c[0]["id"], "1", "id: {r}");
+    assert_eq!(c[0]["initials"], "JD", "initials: {r}");
+    assert_eq!(c[0]["text"], "Please revise this paragraph.", "text: {r}");
+    assert_eq!(c[1]["author"], "Bob", "second author: {r}");
+
+    // a docx with no comments part returns an empty list, not an error
+    let plain = tmp("nocomments.docx");
+    let w = call(
+        office__doc_write,
+        &format!(r#"{{"path":"{plain}","blocks":[{{"kind":"para","text":"hi"}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "plain write: {w}");
+    let r2 = call(office__doc_comments, &format!(r#"{{"path":"{plain}"}}"#));
+    assert_eq!(r2["count"], 0, "no comments: {r2}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&plain).ok();
+}
+
+#[test]
 fn doc_to_md_structured() {
     let dx = tmp("tomd.docx");
     let w = call(

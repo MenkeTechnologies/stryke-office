@@ -856,6 +856,12 @@ fn Office::doc_links ($path) {
     Office::_decode("doc_links", office__doc_links(to_json({ path => $path })))
 }
 
+## Extract review comments from a docx (word/comments.xml). Returns
+## { comments => [{ id, author, date, initials, text }], count }.
+fn Office::doc_comments ($path) {
+    Office::_decode("doc_comments", office__doc_comments(to_json({ path => $path })))
+}
+
 ## Word-count statistics for any readable document (docx/odt/html/md/rtf/txt/
 ## pdf). Returns { words, characters, characters_no_spaces, lines, paragraphs,
 ## pages? } — pages only for pdf. Mirrors Word's "Word Count".

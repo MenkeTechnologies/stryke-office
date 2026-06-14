@@ -2278,6 +2278,85 @@ fn op_doc_links(opts: Value) -> Result<Value> {
     Ok(json!({ "links": links, "count": links.len() }))
 }
 
+/// Extract review comments from a docx `word/comments.xml`: each
+/// `<w:comment w:id w:author w:date w:initials>` carries `<w:t>` text runs.
+/// Returns `[{ id, author, date, initials, text }]` in document order.
+fn extract_comments_docx(xml: &[u8]) -> Vec<Value> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut in_comment = false;
+    let mut id = String::new();
+    let mut author = String::new();
+    let mut date = String::new();
+    let mut initials = String::new();
+    let mut text = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) if e.name().as_ref() == b"w:comment" => {
+                in_comment = true;
+                id = attr(&e, b"w:id").unwrap_or_default();
+                author = attr(&e, b"w:author").unwrap_or_default();
+                date = attr(&e, b"w:date").unwrap_or_default();
+                initials = attr(&e, b"w:initials").unwrap_or_default();
+                text.clear();
+            }
+            Ok(Event::Text(e)) => {
+                if in_comment {
+                    if let Ok(t) = e.xml10_content() {
+                        text.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if in_comment {
+                    if let Some(c) = xml_ref_char(&e) {
+                        text.push(c);
+                    }
+                }
+            }
+            // Paragraph breaks inside a multi-paragraph comment become spaces.
+            Ok(Event::End(e)) if e.name().as_ref() == b"w:p" && in_comment => {
+                if !text.is_empty() && !text.ends_with(' ') {
+                    text.push(' ');
+                }
+            }
+            Ok(Event::End(e)) if e.name().as_ref() == b"w:comment" => {
+                in_comment = false;
+                out.push(json!({
+                    "id": std::mem::take(&mut id),
+                    "author": std::mem::take(&mut author),
+                    "date": std::mem::take(&mut date),
+                    "initials": std::mem::take(&mut initials),
+                    "text": text.trim().to_string(),
+                }));
+                text.clear();
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// Extract review comments from a docx. opts: path. Returns
+/// `{ comments: [{id, author, date, initials, text}], count }` (empty when the
+/// document has no `word/comments.xml` part).
+fn op_doc_comments(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let bytes = std::fs::read(path)?;
+    let comments = match ext_of(path).as_str() {
+        "docx" => match read_zip_entry(&bytes, "word/comments.xml") {
+            Ok(xml) => extract_comments_docx(&xml),
+            Err(_) => Vec::new(),
+        },
+        other => return Err(anyhow!("unsupported document comment format: {other}")),
+    };
+    Ok(json!({ "comments": comments, "count": comments.len() }))
+}
+
 /// Ordered structural read of a docx/odt: `{ blocks: [{kind:"heading",level,
 /// text} | {kind:"para",text} | {kind:"table",rows}], count }`, in document
 /// order. The read-side mirror of `doc_write`'s block model.
