@@ -849,3 +849,47 @@ fn op_pdf_to_text(opts: Value) -> Result<Value> {
     std::fs::write(&output, &text)?;
     Ok(json!({ "ok": true, "path": output, "pages": pages.len(), "chars": text.chars().count() }))
 }
+
+/// Assemble one PDF from a mix of inputs in order: image files (png/jpg/gif/bmp/
+/// webp/tiff) become fit-to-page pages, existing PDFs are merged in. opts:
+/// inputs => [paths], output => path. Returns `{ ok, path, inputs, pages }`.
+fn op_pdf_assemble(opts: Value) -> Result<Value> {
+    let inputs = opts
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing inputs (expected array of paths)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+    let is_image = |e: &str| {
+        matches!(e, "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "tif" | "tiff")
+    };
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut temps: Vec<String> = Vec::new();
+    let tmpdir = std::env::temp_dir();
+    for (i, inp) in inputs.iter().enumerate() {
+        let p = inp
+            .as_str()
+            .ok_or_else(|| anyhow!("input path must be a string"))?;
+        let ext = ext_of(p);
+        if ext == "pdf" {
+            parts.push(p.to_string());
+        } else if is_image(&ext) {
+            let tmp = tmpdir
+                .join(format!("office-assemble-{}-{i}.pdf", std::process::id()))
+                .to_string_lossy()
+                .into_owned();
+            op_images_to_pdf(json!({ "images": [p], "output": tmp }))?;
+            parts.push(tmp.clone());
+            temps.push(tmp);
+        } else {
+            return Err(anyhow!("unsupported input for assemble: {ext}"));
+        }
+    }
+
+    op_pdf_merge(json!({ "inputs": parts, "path": output }))?;
+    for t in &temps {
+        std::fs::remove_file(t).ok();
+    }
+    let pages = Document::load(&output).map(|d| d.get_pages().len()).unwrap_or(0);
+    Ok(json!({ "ok": true, "path": output, "inputs": inputs.len(), "pages": pages }))
+}

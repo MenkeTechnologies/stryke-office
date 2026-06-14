@@ -3090,6 +3090,43 @@ fn pdf_to_text_file_and_pages() {
 }
 
 #[test]
+fn pdf_assemble_mixed_inputs() {
+    // one image and one 1-page pdf
+    let img = tmp("asm.png");
+    let h = call(
+        office__img_new,
+        r#"{"width":40,"height":40,"color":[10,20,30,255]}"#,
+    );
+    call(
+        office__img_save,
+        &format!(
+            r#"{{"handle":{},"path":"{img}"}}"#,
+            h["handle"].as_u64().unwrap()
+        ),
+    );
+    let doc = tmp("asm.pdf");
+    call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{doc}","elements":[{{"type":"heading","level":1,"text":"Doc"}}]}}"#),
+    );
+
+    // image, pdf, image -> 3 pages
+    let out = tmp("asm_out.pdf");
+    let r = call(
+        office__pdf_assemble,
+        &format!(r#"{{"inputs":["{img}","{doc}","{img}"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "assemble: {r}");
+    assert_eq!(r["pages"], 3, "3 pages from 3 inputs: {r}");
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 3, "info confirms 3 pages: {info}");
+
+    for f in [&img, &doc, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(
