@@ -3339,6 +3339,51 @@ fn pdf_assemble_mixed_inputs() {
 }
 
 #[test]
+fn pdf_stamp_image_onto_pages() {
+    // a 2-page PDF and a logo image
+    let src = tmp("stamp.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[{{"type":"heading","level":1,"text":"A"}},{{"type":"pagebreak"}},{{"type":"heading","level":1,"text":"B"}}]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+    let logo = tmp("logo.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":32,"height":32,"color":[255,0,0,255]}"#,
+    );
+    call(
+        office__img_save,
+        &format!(
+            r#"{{"handle":{},"path":"{logo}"}}"#,
+            n["handle"].as_u64().unwrap()
+        ),
+    );
+    call(
+        office__img_close,
+        &format!(r#"{{"handle":{}}}"#, n["handle"].as_u64().unwrap()),
+    );
+
+    let out = tmp("stamp_out.pdf");
+    let r = call(
+        office__pdf_stamp_image,
+        &format!(
+            r#"{{"path":"{src}","image":"{logo}","output":"{out}","x":20,"y":20,"width":48,"height":48}}"#
+        ),
+    );
+    assert_eq!(r["stamped"], 2, "stamped both pages: {r}");
+    // output is still a valid 2-page PDF
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 2, "pages preserved: {info}");
+
+    for f in [&src, &logo, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(

@@ -651,6 +651,15 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Stamp an image (logo/signature/watermark) onto PDF pages. opts: x/y =>
+## lower-left position in points (default 36,36), width/height => size in points
+## (default: image pixel size), pages => [1-based subset] (default all). Returns
+## { ok, path, stamped }.
+fn Office::pdf_stamp_image ($path, $image, $output, %opts) {
+    Office::_decode("pdf_stamp_image",
+        office__pdf_stamp_image(to_json({ path => $path, image => $image, output => $output, x => $opts{x}, y => $opts{y}, width => $opts{width}, height => $opts{height}, pages => $opts{pages} })))
+}
+
 ## Assemble one PDF from a mix of inputs in order — image files become
 ## fit-to-page pages, existing PDFs are merged in. $inputs is an arrayref of
 ## paths. Returns { ok, path, inputs, pages }.

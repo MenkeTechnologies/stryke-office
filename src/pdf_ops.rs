@@ -850,6 +850,67 @@ fn op_pdf_to_text(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "pages": pages.len(), "chars": text.chars().count() }))
 }
 
+/// Build a JPEG image XObject `Stream` (DeviceRGB / DCTDecode) from raw JPEG
+/// bytes and dimensions. `with_compression(false)` so the writer doesn't deflate
+/// the already-compressed JPEG.
+fn jpeg_xobject(jpeg: Vec<u8>, w: u32, h: u32) -> lopdf::Stream {
+    let mut dict = lopdf::Dictionary::new();
+    dict.set("Type", "XObject");
+    dict.set("Subtype", "Image");
+    dict.set("Width", w as i64);
+    dict.set("Height", h as i64);
+    dict.set("ColorSpace", "DeviceRGB");
+    dict.set("BitsPerComponent", 8i64);
+    dict.set("Filter", "DCTDecode");
+    lopdf::Stream::new(dict, jpeg).with_compression(false)
+}
+
+/// Stamp an image (logo/signature/watermark) onto PDF pages. opts: path =>
+/// input, output, image => path, x/y => lower-left position in points
+/// (default 36,36), width/height => size in points (default: the image's pixel
+/// dimensions), pages => [1-based subset] (default all). Returns
+/// `{ ok, path, stamped }`.
+fn op_pdf_stamp_image(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let image_path = req_str(&opts, "image")?;
+
+    let dynimg = image::open(image_path).map_err(|e| anyhow!("image {image_path}: {e}"))?;
+    let (iw, ih) = (dynimg.width(), dynimg.height());
+    let mut buf = std::io::Cursor::new(Vec::new());
+    dynimg
+        .to_rgb8()
+        .write_to(&mut buf, image::ImageFormat::Jpeg)
+        .map_err(|e| anyhow!("encode jpeg: {e}"))?;
+    let jpeg = buf.into_inner();
+
+    let x = opts.get("x").and_then(Value::as_f64).unwrap_or(36.0) as f32;
+    let y = opts.get("y").and_then(Value::as_f64).unwrap_or(36.0) as f32;
+    let w = opts.get("width").and_then(Value::as_f64).unwrap_or(iw as f64) as f32;
+    let h = opts.get("height").and_then(Value::as_f64).unwrap_or(ih as f64) as f32;
+    let subset: Option<std::collections::BTreeSet<u32>> = opts
+        .get("pages")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect());
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages = doc.get_pages();
+    let mut stamped = 0usize;
+    for (num, pid) in pages {
+        if let Some(set) = &subset {
+            if !set.contains(&num) {
+                continue;
+            }
+        }
+        let stream = jpeg_xobject(jpeg.clone(), iw, ih);
+        doc.insert_image(pid, stream, (x, y), (w, h))
+            .map_err(|e| anyhow!("stamp page {num}: {e}"))?;
+        stamped += 1;
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "stamped": stamped }))
+}
+
 /// Assemble one PDF from a mix of inputs in order: image files (png/jpg/gif/bmp/
 /// webp/tiff) become fit-to-page pages, existing PDFs are merged in. opts:
 /// inputs => [paths], output => path. Returns `{ ok, path, inputs, pages }`.
