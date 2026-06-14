@@ -284,6 +284,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_links($path)` | `{links, count}` | extract every URI link annotation (`[{page, url, rect}]`) |
 | `Office::pdf_remove_annotations($path, %opts)` | `{ok, path, removed}` | strip annotations (links/comments/highlights) to sanitize; `subtype`/`output` opts |
 | `Office::pdf_highlight($path, $rect, %opts)` | `{ok, path, page}` | add a highlight annotation over a rectangle; `page`/`color`/`opacity` opts |
+| `Office::pdf_annotations($path)` | `{annotations, count}` | list every annotation (`[{page, subtype, rect, contents?, uri?}]`) |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |

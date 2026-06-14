@@ -1070,6 +1070,12 @@ fn Office::pdf_highlight ($path, $rect, %opts) {
         office__pdf_highlight(to_json({ path => $path, rect => $rect, page => $opts{page}, color => $opts{color}, opacity => $opts{opacity}, output => $opts{output} })))
 }
 
+## List every annotation in a PDF (highlights, comments, links, ...).
+## Returns { annotations => [{ page, subtype, rect, contents?, uri? }], count }.
+fn Office::pdf_annotations ($path) {
+    Office::_decode("pdf_annotations", office__pdf_annotations(to_json({ path => $path })))
+}
+
 ## Add text at a position on PDF pages (labels, stamps, annotations). opts: x/y
 ## => position in points (default 72,72; y from bottom), size (default 12),
 ## color (default black), pages => [1-based subset] (default all). Returns

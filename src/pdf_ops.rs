@@ -1307,6 +1307,68 @@ fn op_pdf_links(opts: Value) -> Result<Value> {
     Ok(json!({ "links": links, "count": count }))
 }
 
+/// List every annotation in a PDF (the generalization of `pdf_links` — covers
+/// highlights, text/comment notes, links, …). opts: path. Returns
+/// `{ annotations: [{ page, subtype, rect, contents?, uri? }], count }` with
+/// 1-based page numbers; `contents` is the markup text when present and `uri` the
+/// target for link annotations.
+fn op_pdf_annotations(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let mut annots = Vec::new();
+    for (num, pid) in doc.get_pages() {
+        let Some(list) = doc
+            .get_object(pid)
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"Annots").ok())
+            .and_then(|o| o.as_array().ok())
+        else {
+            continue;
+        };
+        for a in list {
+            let dict = match a {
+                Object::Reference(id) => doc.get_object(*id).ok().and_then(|o| o.as_dict().ok()),
+                Object::Dictionary(d) => Some(d),
+                _ => None,
+            };
+            let Some(dict) = dict else { continue };
+            let subtype = dict
+                .get(b"Subtype")
+                .and_then(|o| o.as_name())
+                .ok()
+                .map(|n| String::from_utf8_lossy(n).into_owned())
+                .unwrap_or_default();
+            let rect: Vec<f64> = dict
+                .get(b"Rect")
+                .ok()
+                .and_then(|o| o.as_array().ok())
+                .map(|a| a.iter().filter_map(obj_num).collect())
+                .unwrap_or_default();
+            let mut entry = json!({ "page": num, "subtype": subtype, "rect": rect });
+            if let Some(c) = pdf_dict_str(dict, b"Contents") {
+                if !c.is_empty() {
+                    entry["contents"] = json!(c);
+                }
+            }
+            // Link annotations carry their target in /A /URI.
+            let action = match dict.get(b"A").ok() {
+                Some(Object::Reference(id)) => {
+                    doc.get_object(*id).ok().and_then(|o| o.as_dict().ok())
+                }
+                Some(Object::Dictionary(d)) => Some(d),
+                _ => None,
+            };
+            if let Some(uri) = action.and_then(|act| pdf_dict_str(act, b"URI")) {
+                entry["uri"] = json!(uri);
+            }
+            annots.push(entry);
+        }
+    }
+    let count = annots.len();
+    Ok(json!({ "annotations": annots, "count": count }))
+}
+
 /// Strip annotations from a PDF (links, comments, highlights, …) to sanitize a
 /// file before sharing. opts: path, output (default in place), subtype => keep
 /// all annotations except this one `/Subtype` (e.g. "Link", "Highlight",
