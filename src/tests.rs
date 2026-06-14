@@ -8058,6 +8058,14 @@ fn pdf_search_finds_text_per_page() {
     assert_eq!(c["matched_pages"], 1, "one page: {c}");
     assert_eq!(c["pages"][0]["page"], 2, "page 2: {c}");
 
+    // regex mode: words starting with capital C -> Cherry on page 2
+    let rx = call(
+        office__pdf_search,
+        &format!(r#"{{"path":"{src}","query":"C\\w+","regex":true}}"#),
+    );
+    assert_eq!(rx["matched_pages"], 1, "regex matches Cherry page: {rx}");
+    assert_eq!(rx["pages"][0]["page"], 2, "regex page 2: {rx}");
+
     std::fs::remove_file(&src).ok();
 }
 

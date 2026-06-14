@@ -1556,12 +1556,12 @@ fn Office::pdf_compress ($path, $output) {
         office__pdf_compress(to_json({ path => $path, output => $output })))
 }
 
-## Search a PDF's text page by page. opts: ignore_case => 1. Returns
-## { count, matched_pages, pages => [{ page, count, snippet }] } — count is the
-## total number of occurrences; page numbers are 1-based.
+## Search a PDF's text page by page. opts: regex (treat query as a regex),
+## ignore_case => 1. Returns { count, matched_pages, pages => [{ page, count,
+## snippet }] } — count is the total number of occurrences; page numbers 1-based.
 fn Office::pdf_search ($path, $query, %opts) {
     Office::_decode("pdf_search",
-        office__pdf_search(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case} })))
+        office__pdf_search(to_json({ path => $path, query => $query, regex => $opts{regex}, ignore_case => $opts{ignore_case} })))
 }
 
 ## Set the crop box (visible region) on pages. Pass either box => [x0,y0,x1,y1]

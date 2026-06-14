@@ -851,6 +851,9 @@ Office::pdf_set_outline($bmp, [{ title => "A", page => 1 }, { title => "B", page
 val $bmdir = "$dir/$tag-bm-out"
 val $bmr = Office::pdf_split_bookmarks($bmp, $bmdir, prefix => "ch")
 assert_eq $bmr->{count}, 2, "pdf_split_bookmarks: one file per bookmark"
+# pdf_search regex mode over the same pdf
+val $psr = Office::pdf_search($bmp, 'p\d', regex => 1)
+assert_ok ($psr->{count} >= 2), "pdf_search: regex matches p1 and p2"
 unlink $bmp
 
 # ── xml entity survival across text extraction (regression) ─────────
