@@ -808,6 +808,13 @@ assert_eq $rsr->{buckets}, 2, "sheet_resample: two month buckets"
 val $rsb = Office::sheet_read($rso)
 assert_eq $rsb->[0]{rows}[1][0], "2026-01", "sheet_resample: first bucket key"
 assert_eq $rsb->[0]{rows}[1][1], 30, "sheet_resample: Jan sum 30"
+# sheet_date_part: extract month from a date column
+val $dpo = "$dir/$tag-datepart-out.xlsx"
+val $dpr = Office::sheet_date_part($rsx, $dpo, "date", part => "month", into => "mo")
+assert_eq $dpr->{column}, "mo", "sheet_date_part: new column name"
+val $dpb = Office::sheet_read($dpo)
+assert_eq $dpb->[0]{rows}[1][2], 1, "sheet_date_part: 2026-01-05 -> month 1"
+unlink $dpo
 unlink $rsx
 unlink $rso
 # sheet_running: group-wise running total

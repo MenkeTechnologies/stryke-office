@@ -6611,6 +6611,99 @@ fn op_sheet_resample(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "buckets": n }))
 }
 
+/// Extract a calendar part from an ISO-date column (`2026-06-14`) into a new
+/// column — date feature engineering, the per-row companion to `sheet_resample`.
+/// Pure substring slicing, so no date library is needed. opts: path, output,
+/// column => date column name/index (required), part => year | month | day | ym
+/// (`YYYY-MM`) (default year), into => new column header (default
+/// "{column}_{part}"), sheet, header, format. Cells too short for the requested
+/// part get a blank. year/month/day are emitted as integers, ym as text. Returns
+/// `{ ok, path, column }`.
+fn op_sheet_date_part(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let part = opts.get("part").and_then(Value::as_str).unwrap_or("year");
+    if !matches!(part, "year" | "month" | "day" | "ym") {
+        return Err(anyhow!("unknown part: {part} (year|month|day|ym)"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_{part}"));
+
+    // Slice the ISO string (chars) and emit the requested part.
+    let extract = |s: &str| -> Value {
+        let c: Vec<char> = s.chars().collect();
+        let slice = |a: usize, b: usize| -> Option<String> {
+            if c.len() >= b {
+                Some(c[a..b].iter().collect())
+            } else {
+                None
+            }
+        };
+        match part {
+            "year" => slice(0, 4)
+                .and_then(|s| s.parse::<i64>().ok())
+                .map_or(json!(""), |y| json!(y)),
+            "month" => slice(5, 7)
+                .and_then(|s| s.parse::<i64>().ok())
+                .map_or(json!(""), |m| json!(m)),
+            "day" => slice(8, 10)
+                .and_then(|s| s.parse::<i64>().ok())
+                .map_or(json!(""), |d| json!(d)),
+            _ => slice(0, 7).map_or(json!(""), |ym| json!(ym)),
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let src = cells.get(col).map(cell_to_string).unwrap_or_default();
+                cells.push(extract(&src));
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Group rows by one column and concatenate another column's values per group
 /// (SQL `GROUP_CONCAT`). opts: path, output, group_by => grouping column,
 /// value => column whose values are joined (both name or 0-based index,
@@ -12892,6 +12985,7 @@ export!(office__sheet_flag, op_sheet_flag);
 export!(office__sheet_onehot, op_sheet_onehot);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_resample, op_sheet_resample);
+export!(office__sheet_date_part, op_sheet_date_part);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);
