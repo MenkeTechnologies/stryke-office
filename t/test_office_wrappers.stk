@@ -108,10 +108,16 @@ val $nmo = "$dir/$tag-norm-out.xlsx"
 Office::sheet_normalize($csx, "amt", $nmo)
 val $nmr = Office::sheet_get_cell($nmo, "B2")
 assert_eq $nmr->{value}, 0, "sheet_normalize: min maps to 0"
+# moving average (window 2 over [10,20] -> 15 at row 3)
+val $mao = "$dir/$tag-ma-out.xlsx"
+Office::sheet_movavg($csx, "amt", 2, $mao)
+val $mar = Office::sheet_get_cell($mao, "B3")
+assert_eq $mar->{value}, 15, "sheet_movavg: rolling mean"
 unlink $csx
 unlink $cso
 unlink $pco
 unlink $nmo
+unlink $mao
 
 # ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"
