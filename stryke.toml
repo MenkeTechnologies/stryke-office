@@ -44,6 +44,7 @@ exports = [
     "office__sheet_reorder",
     "office__sheet_diff",
     "office__sheet_info",
+    "office__info",
     "office__sheet_to_slides",
     "office__sheet_validate",
     "office__doc_read",

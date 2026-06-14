@@ -2986,6 +2986,53 @@ fn op_sheet_info(opts: Value) -> Result<Value> {
     Ok(json!({ "count": info.len(), "sheets": info }))
 }
 
+/// Universal file inspector: identify any office/image file by extension and
+/// return a type-appropriate summary. opts: path. Returns `{ type, format,
+/// path, … }` where the extra fields come from the matching `*_info`/`*_stats`
+/// op (pdf → pages/geometry; spreadsheet → sheets; document → word counts;
+/// presentation → slide stats; image → width/height).
+fn op_info(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let ext = ext_of(path);
+    let mut out = match ext.as_str() {
+        "pdf" => {
+            let mut r = op_pdf_info(json!({ "path": path }))?;
+            r["type"] = json!("pdf");
+            r
+        }
+        "xlsx" | "ods" | "xls" | "csv" | "tsv" => {
+            let mut r = op_sheet_info(json!({ "path": path }))?;
+            r["type"] = json!("spreadsheet");
+            r
+        }
+        "docx" | "odt" | "rtf" | "md" | "markdown" | "html" | "htm" | "txt" => {
+            let mut r = op_doc_stats(json!({ "path": path }))?;
+            r["type"] = json!("document");
+            r
+        }
+        "pptx" | "odp" => {
+            let mut r = op_slides_stats(json!({ "path": path }))?;
+            r["type"] = json!("presentation");
+            r
+        }
+        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "tif" | "tiff" | "avif" | "ico" => {
+            let mut r = op_img_open(json!({ "path": path }))?;
+            if let Some(h) = r.get("handle").and_then(Value::as_u64) {
+                let _ = op_img_close(json!({ "handle": h }));
+            }
+            if let Some(o) = r.as_object_mut() {
+                o.remove("handle");
+            }
+            r["type"] = json!("image");
+            r
+        }
+        other => return Err(anyhow!("unsupported file type: {other}")),
+    };
+    out["format"] = json!(ext);
+    out["path"] = json!(path);
+    Ok(out)
+}
+
 /// Compare two sheets cell by cell. opts: left, right (paths), sheet (selector
 /// for both), left_sheet / right_sheet (override per side). Returns
 /// `{ count, changed: [{ ref, row, col, left, right }], left_rows, right_rows }`
@@ -3962,6 +4009,7 @@ export!(office__sheet_remove, op_sheet_remove);
 export!(office__sheet_reorder, op_sheet_reorder);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
+export!(office__info, op_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);
 export!(office__sheet_validate, op_sheet_validate);
 export!(office__doc_read, op_doc_read);
