@@ -184,6 +184,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::html_to_doc($input, $output, %opts)` | `{blocks}` | convert HTML (h1-6/p/lists/tables) to docx/odt/pdf/md by output ext |
 | `Office::doc_to_md($path, $output)` | `{blocks}` | convert a docx/odt to structured Markdown (headings + tables); inverse of md_to_doc |
 | `Office::doc_to_html($path, $output)` | `{blocks}` | convert a docx/odt to structured HTML; inverse of html_to_doc |
+| `Office::doc_to_text($path, $output)` | `{chars}` | extract any readable document's plain text to a file (incl. pdf) |
 | `Office::doc_to_slides($path, $output, %opts)` | `{slides}` | turn a document into a deck — headings become slide titles, content becomes bullets |
 | `Office::slides_to_doc($path, $output, %opts)` | `{slides}` | turn a deck into a document (slides → headings + paragraphs); `notes` opt |
 | `Office::slides_to_pdf($path, $output, %opts)` | `{slides}` | render a deck to a PDF handout, one slide per page; `notes` opt |

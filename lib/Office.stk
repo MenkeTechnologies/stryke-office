@@ -364,6 +364,13 @@ fn Office::doc_to_html ($path, $output) {
         office__doc_to_html(to_json({ path => $path, output => $output })))
 }
 
+## Extract any readable document's plain text to a file (docx/odt/html/md/rtf/
+## txt/pdf). Returns { ok, path, chars }.
+fn Office::doc_to_text ($path, $output) {
+    Office::_decode("doc_to_text",
+        office__doc_to_text(to_json({ path => $path, output => $output })))
+}
+
 ## Convert a document into a presentation: each heading at $opts{level} (default
 ## 1) becomes a slide title, following content becomes body bullets. $output is
 ## a pptx/odp path. opts: level, format => override. Returns { ok, path, slides }.
