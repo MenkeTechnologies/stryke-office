@@ -679,7 +679,9 @@ grid resolution), `violin` (ggplot2 `geom_violin` — width-normalized mirrored
 KDE per series with a median tick, shared value axis), `ecdf` (ggplot2
 `stat_ecdf` — right-continuous empirical-CDF step curve per series, y from 0→1),
 `qq`/`qqplot` (ggplot2 `stat_qq` + `geom_qq_line` — sample vs theoretical
-standard-normal quantiles with a quartile reference line).
+standard-normal quantiles with a quartile reference line), `ribbon` (ggplot2
+`geom_ribbon` — continuous filled band between `[[lo,hi],…]` per x, distinct
+from `range`'s discrete floating bars).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,

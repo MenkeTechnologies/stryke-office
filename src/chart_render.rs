@@ -343,7 +343,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
                 let col: f64 = series.iter().map(|s| series_nums(s).get(ci).copied().unwrap_or(0.0)).sum();
                 ymax = ymax.max(col);
             }
-        } else if matches!(kind.as_str(), "range" | "range_bar" | "range_column") {
+        } else if matches!(kind.as_str(), "range" | "range_bar" | "range_column" | "ribbon") {
             for s in series {
                 for (lo, hi) in series_pairs(s) {
                     ymin = ymin.min(lo);
@@ -408,6 +408,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             "stacked_area" => render_stacked_area(&mut img, series, l, r, b, ymin, ymax),
             "streamgraph" => render_streamgraph(&mut img, series, l, r, b, ymin, ymax),
             "range" | "range_bar" | "range_column" => render_range(&mut img, series, l, pw, &yp),
+            "ribbon" => render_ribbon(&mut img, series, l, pw, &yp),
             "percent_stacked" => render_percent_stacked(&mut img, series, l, pw, b, &yp),
             "step" => render_step(&mut img, series, l, r, b, ymin, ymax),
             "scatter" => render_scatter(&mut img, series, l as f64, pw, xmin, xmax, yp),
@@ -2170,6 +2171,44 @@ fn render_range(img: &mut RgbaImage, series: &[Value], l: i32, pw: f64, yp: &dyn
             let x = l as f64 + ci as f64 * slot + slot * 0.1 + si as f64 * barw;
             let (y0, y1) = (yp(hi), yp(lo));
             draw_filled_rect_mut(img, Rect::at(x as i32, y0 as i32).of_size(barw as u32, (y1 - y0).max(1.0) as u32), color);
+        }
+    }
+}
+
+/// Ribbon plot (ggplot2 `geom_ribbon`) — a continuous filled band between the
+/// lower and upper bound at each x, per series (`data => [[lo,hi],…]` over
+/// evenly spaced x). Unlike `range` (discrete floating bars), the band is one
+/// smooth polygon; both edges get an outline. Pairs with a line drawn on top for
+/// confidence-interval visuals.
+fn render_ribbon(img: &mut RgbaImage, series: &[Value], l: i32, pw: f64, yp: &dyn Fn(f64) -> f32) {
+    for (si, s) in series.iter().enumerate() {
+        let pairs = series_pairs(s);
+        let n = pairs.len();
+        if n == 0 {
+            continue;
+        }
+        let color = series_color(s, si);
+        let xat = |i: usize| l as f64 + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 };
+        // Upper edge left→right, then lower edge right→left = closed band.
+        let mut poly: Vec<Point<i32>> = Vec::with_capacity(n * 2);
+        for (i, &(_, hi)) in pairs.iter().enumerate() {
+            poly.push(Point::new(xat(i) as i32, yp(hi) as i32));
+        }
+        for (i, &(lo, _)) in pairs.iter().enumerate().rev() {
+            poly.push(Point::new(xat(i) as i32, yp(lo) as i32));
+        }
+        poly.dedup();
+        if poly.len() >= 3 && poly.first() != poly.last() {
+            let mut fillc = color;
+            fillc.0[3] = 90;
+            draw_polygon_mut(img, &poly, fillc);
+        }
+        // edge outlines
+        for (i, pair) in pairs.windows(2).enumerate() {
+            let (lo0, hi0) = pair[0];
+            let (lo1, hi1) = pair[1];
+            draw_line_segment_mut(img, (xat(i) as f32, yp(hi0)), (xat(i + 1) as f32, yp(hi1)), color);
+            draw_line_segment_mut(img, (xat(i) as f32, yp(lo0)), (xat(i + 1) as f32, yp(lo1)), color);
         }
     }
 }

@@ -123,7 +123,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
                 let col: f64 = series.iter().map(|x| series_nums(x).get(ci).copied().unwrap_or(0.0)).sum();
                 ymax = ymax.max(col);
             }
-        } else if matches!(kind, "range" | "range_bar" | "range_column") {
+        } else if matches!(kind, "range" | "range_bar" | "range_column" | "ribbon") {
             for ser in series {
                 for (lo, hi) in series_pairs(ser) {
                     ymin = ymin.min(lo);
@@ -189,6 +189,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
             "stacked_area" => svg_stacked_area(&mut s, series, l, pw, &yp),
             "streamgraph" => svg_streamgraph(&mut s, series, l, pw, &yp, ymin, ymax),
             "range" | "range_bar" | "range_column" => svg_range(&mut s, series, l, pw, &yp),
+            "ribbon" => svg_ribbon(&mut s, series, l, pw, &yp),
             "percent_stacked" => svg_percent_stacked(&mut s, series, l, pw, &yp),
             "step" => svg_step(&mut s, series, l, pw, &yp),
             "scatter" => svg_scatter(&mut s, series, l, pw, xmin, xmax, &yp),
@@ -828,6 +829,29 @@ fn svg_range(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64)
             let (y, height) = (yp(hi), (yp(lo) - yp(hi)).max(1.0));
             let _ = write!(s, r##"<rect x="{x:.1}" y="{y:.1}" width="{bw:.1}" height="{height:.1}" fill="{col}"/>"##);
         }
+    }
+}
+
+/// Ribbon plot (vector; ggplot2 `geom_ribbon`). A continuous filled band between
+/// the lower/upper bound per x (`data => [[lo,hi],…]`), one polygon per series.
+fn svg_ribbon(s: &mut String, series: &[Value], l: f64, pw: f64, yp: &dyn Fn(f64) -> f64) {
+    for (si, ser) in series.iter().enumerate() {
+        let pairs = series_pairs(ser);
+        let n = pairs.len();
+        if n == 0 {
+            continue;
+        }
+        let col = svg_palette(si);
+        let xat = |i: usize| l + if n > 1 { i as f64 / (n - 1) as f64 * pw } else { pw / 2.0 };
+        let mut path = String::new();
+        for (i, &(_, hi)) in pairs.iter().enumerate() {
+            let _ = write!(path, "{} {:.1},{:.1} ", if i == 0 { "M" } else { "L" }, xat(i), yp(hi));
+        }
+        for (i, &(lo, _)) in pairs.iter().enumerate().rev() {
+            let _ = write!(path, "L {:.1},{:.1} ", xat(i), yp(lo));
+        }
+        path.push('Z');
+        let _ = write!(s, r##"<path d="{path}" fill="{col}" fill-opacity="0.35" stroke="{col}" stroke-width="1.5"/>"##);
     }
 }
 
