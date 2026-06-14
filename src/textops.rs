@@ -1050,3 +1050,34 @@ fn op_text_join(opts: Value) -> Result<Value> {
     }
     Ok(out)
 }
+
+/// Reproducibly shuffle a file's lines (seeded Fisher–Yates, the `shuf` analogue
+/// and file counterpart of `sheet_shuffle`). opts: path => input file, output =>
+/// write there (default in place), seed => PRNG seed (default a fixed constant
+/// for deterministic output). A trailing blank line is not treated as data.
+/// Returns `{ ok, path, lines }`.
+fn op_text_shuf(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts.get("output").and_then(Value::as_str).unwrap_or(path).to_string();
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .filter(|&s| s != 0)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let mut lines: Vec<&str> = text.lines().collect();
+    let mut state = seed;
+    // Fisher–Yates using the shared xorshift64 PRNG.
+    for i in (1..lines.len()).rev() {
+        let j = (xorshift64(&mut state) % (i as u64 + 1)) as usize;
+        lines.swap(i, j);
+    }
+    let joined = if lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", lines.join("\n"))
+    };
+    std::fs::write(&output, joined)?;
+    Ok(json!({ "ok": true, "path": output, "lines": lines.len() }))
+}

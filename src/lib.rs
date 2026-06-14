@@ -14598,6 +14598,7 @@ export!(office__text_tr, op_text_tr);
 export!(office__text_paste, op_text_paste);
 export!(office__text_comm, op_text_comm);
 export!(office__text_join, op_text_join);
+export!(office__text_shuf, op_text_shuf);
 export!(office__text_wrap, op_text_wrap);
 export!(office__text_head, op_text_head);
 

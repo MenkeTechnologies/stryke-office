@@ -13348,6 +13348,43 @@ fn text_join_on_key() {
 }
 
 #[test]
+fn text_shuf_reproducible() {
+    let path = tmp("shuf.txt");
+    std::fs::write(&path, "a\nb\nc\nd\ne\n").unwrap();
+    let out = tmp("shuf_out.txt");
+    let r = call(
+        office__text_shuf,
+        &format!(r#"{{"path":"{path}","output":"{out}","seed":7}}"#),
+    );
+    assert_eq!(r["lines"].as_u64().unwrap(), 5, "all lines kept: {r}");
+    let t1 = std::fs::read_to_string(&out).unwrap();
+    // same set of lines (permutation, none lost/added)
+    let mut got: Vec<&str> = t1.lines().collect();
+    got.sort_unstable();
+    assert_eq!(
+        got,
+        vec!["a", "b", "c", "d", "e"],
+        "permutation preserves set"
+    );
+
+    // same seed -> identical output (reproducible)
+    let out2 = tmp("shuf_out2.txt");
+    call(
+        office__text_shuf,
+        &format!(r#"{{"path":"{path}","output":"{out2}","seed":7}}"#),
+    );
+    assert_eq!(
+        t1,
+        std::fs::read_to_string(&out2).unwrap(),
+        "seeded shuffle reproducible"
+    );
+
+    for f in [&path, &out, &out2] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

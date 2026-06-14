@@ -2149,6 +2149,13 @@ fn Office::text_join ($a, $b, %opts) {
         office__text_join(to_json({ a => $a, b => $b, field => $opts{field}, delim => $opts{delim}, output => $opts{output} })))
 }
 
+## Reproducibly shuffle a file's lines (seeded Fisher-Yates, Unix shuf). opts:
+## output (default in place), seed. Returns { ok, path, lines }.
+fn Office::text_shuf ($path, %opts) {
+    Office::_decode("text_shuf",
+        office__text_shuf(to_json({ path => $path, output => $opts{output}, seed => $opts{seed} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

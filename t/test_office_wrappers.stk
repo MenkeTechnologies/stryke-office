@@ -104,10 +104,18 @@ spew $gjb, "1,90\n3,75\n4,50\n"
 val $gjr = Office::text_join($gja, $gjb, field => 1, delim => ",")
 assert_eq $gjr->{count}, 2, "text_join: two matched keys"
 assert_eq $gjr->{lines}[0], "1,alice,90", "text_join: joined first row"
-unlink $gpa
-unlink $gpb
 unlink $gja
 unlink $gjb
+# text_shuf: reproducible line shuffle
+val $gsx = "$dir/$tag-shuf.txt"
+spew $gsx, "a\nb\nc\nd\ne\n"
+val $gso2 = "$dir/$tag-shuf-out.txt"
+val $gsr = Office::text_shuf($gsx, output => $gso2, seed => 7)
+assert_eq $gsr->{lines}, 5, "text_shuf: all lines kept"
+unlink $gpa
+unlink $gpb
+unlink $gsx
+unlink $gso2
 unlink $grx
 unlink $grt
 unlink $gso
