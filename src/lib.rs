@@ -7752,6 +7752,7 @@ export!(office__pdf_merge, op_pdf_merge);
 export!(office__pdf_split, op_pdf_split);
 export!(office__pdf_rotate, op_pdf_rotate);
 export!(office__pdf_info, op_pdf_info);
+export!(office__pdf_page_sizes, op_pdf_page_sizes);
 export!(office__pdf_watermark, op_pdf_watermark);
 export!(office__pdf_page_numbers, op_pdf_page_numbers);
 export!(office__pdf_encrypt, op_pdf_encrypt);

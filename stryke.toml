@@ -110,6 +110,7 @@ exports = [
     "office__pdf_split",
     "office__pdf_rotate",
     "office__pdf_info",
+    "office__pdf_page_sizes",
     "office__pdf_watermark",
     "office__pdf_page_numbers",
     "office__pdf_encrypt",
