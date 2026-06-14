@@ -1204,6 +1204,47 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn doc_to_slides_from_headings() {
+    let dx = tmp("d2s.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Slide One"}},
+                {{"kind":"para","text":"point a"}},
+                {{"kind":"para","text":"point b"}},
+                {{"kind":"heading","level":1,"text":"Slide Two"}},
+                {{"kind":"para","text":"point c"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("d2s.pptx");
+    let r = call(
+        office__doc_to_slides,
+        &format!(r#"{{"path":"{dx}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read 2 slides: {rd}");
+    let s0 = slides[0]["text"].to_string();
+    assert!(
+        s0.contains("Slide One") && s0.contains("point a") && s0.contains("point b"),
+        "slide0: {s0}"
+    );
+    let s1 = slides[1]["text"].to_string();
+    assert!(
+        s1.contains("Slide Two") && s1.contains("point c"),
+        "slide1: {s1}"
+    );
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_html_structured() {
     let dx = tmp("tohtml.docx");
     let w = call(

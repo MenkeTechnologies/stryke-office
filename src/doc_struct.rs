@@ -651,6 +651,80 @@ fn op_doc_to_html(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "blocks": n }))
 }
 
+/// Flatten a block into slide body lines (paragraph text, list items, or a
+/// table's rows joined by " | ").
+fn block_to_lines(b: &Value) -> Vec<String> {
+    match b.get("kind").and_then(Value::as_str) {
+        Some("list") => b
+            .get("items")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().map(cell_to_string).collect())
+            .unwrap_or_default(),
+        Some("table") => b
+            .get("rows")
+            .and_then(Value::as_array)
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| {
+                        r.as_array()
+                            .map(|cs| cs.iter().map(cell_to_string).collect::<Vec<_>>().join(" | "))
+                            .unwrap_or_default()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => {
+            let t = block_plain_text(b);
+            if t.is_empty() {
+                vec![]
+            } else {
+                vec![t]
+            }
+        }
+    }
+}
+
+/// Convert a document into a presentation: each heading at `level` starts a new
+/// slide (its text is the title), and following paragraphs/lists/tables become
+/// body lines. opts: path, output (pptx/odp), level (default 1), format. Any
+/// content before the first heading becomes an untitled lead slide. Returns
+/// `{ ok, path, slides }`.
+fn op_doc_to_slides(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let level = opts.get("level").and_then(Value::as_u64).unwrap_or(1);
+    let blocks = doc_blocks_or_paras(path)?;
+
+    let mut slides: Vec<Value> = Vec::new();
+    let mut title = String::new();
+    let mut body: Vec<String> = Vec::new();
+    let mut started = false;
+    for b in &blocks {
+        let is_head = b.get("kind").and_then(Value::as_str) == Some("heading")
+            && b.get("level").and_then(Value::as_u64) == Some(level);
+        if is_head {
+            if started || !body.is_empty() {
+                slides.push(json!({ "title": std::mem::take(&mut title), "body": std::mem::take(&mut body) }));
+            }
+            title = b.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+            started = true;
+        } else {
+            body.extend(block_to_lines(b));
+        }
+    }
+    if started || !body.is_empty() {
+        slides.push(json!({ "title": title, "body": body }));
+    }
+
+    let mut wopts = json!({ "path": output, "slides": slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    let n = wopts["slides"].as_array().map_or(0, Vec::len);
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": n }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via
