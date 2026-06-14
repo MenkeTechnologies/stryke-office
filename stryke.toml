@@ -78,6 +78,7 @@ exports = [
     "office__sheet_replace",
     "office__sheet_transpose",
     "office__sheet_dedupe",
+    "office__sheet_duplicates",
     "office__sheet_append",
     "office__sheet_fill",
     "office__sheet_interpolate",

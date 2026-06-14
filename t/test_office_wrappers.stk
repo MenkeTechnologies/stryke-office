@@ -445,6 +445,15 @@ assert_eq $cob->[0]{rows}[1][2], "alt1", "sheet_coalesce: row1 fallback"
 assert_eq $cob->[0]{rows}[2][2], "main2", "sheet_coalesce: row2 primary"
 unlink $cox
 unlink $coo
+# sheet_duplicates: report duplicate rows by key
+val $dux = "$dir/$tag-dups.xlsx"
+Office::sheet_write($dux, [{ name => "D", rows => [["name", "qty"], ["a", 1], ["b", 2], ["a", 1], ["a", 3]] }])
+val $dur = Office::sheet_duplicates($dux, by => "name")
+assert_eq $dur->{duplicates}, 2, "sheet_duplicates: two redundant rows"
+assert_eq scalar(@{$dur->{groups}}), 1, "sheet_duplicates: one duplicated key"
+assert_eq $dur->{groups}[0]{key}, "a", "sheet_duplicates: duplicated key"
+assert_eq $dur->{groups}[0]{count}, 3, "sheet_duplicates: three occurrences"
+unlink $dux
 # sheet_subtotal: group-wise subtotal rows
 val $stx = "$dir/$tag-subtot.xlsx"
 Office::sheet_write($stx, [{ name => "D", rows => [["region", "amt"], ["east", 10], ["east", 20], ["west", 30]] }])
