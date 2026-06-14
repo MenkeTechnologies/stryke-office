@@ -289,6 +289,12 @@ val $afo = "$dir/$tag-af-out.xlsx"
 val $afr = Office::sheet_autofilter($gcx, $afo)
 assert_ok $afr->{ok}, "sheet_autofilter: ok"
 unlink $afo
+# autosize all columns to content
+val $aso = "$dir/$tag-autosize-out.xlsx"
+val $asr = Office::sheet_autosize($gcx, output => $aso)
+assert_ok $asr->{ok}, "sheet_autosize: ok"
+assert_ok ($asr->{sheets} >= 1), "sheet_autosize: at least one sheet autofit"
+unlink $aso
 # sheet_round: clean float noise to N decimals
 val $rnx = "$dir/$tag-round.xlsx"
 Office::sheet_write($rnx, [{ name => "D", rows => [["a", "b"], [1.234, 5.678]] }])

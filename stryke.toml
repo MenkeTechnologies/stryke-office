@@ -83,6 +83,7 @@ exports = [
     "office__sheet_where",
     "office__sheet_freeze",
     "office__sheet_autofilter",
+    "office__sheet_autosize",
     "office__sheet_round",
     "office__sheet_histogram",
     "office__sheet_bin",

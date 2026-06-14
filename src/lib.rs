@@ -6710,6 +6710,43 @@ fn op_sheet_freeze(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "row": row, "col": col }))
 }
 
+/// Auto-size columns to their content (xlsx only) — the one-call equivalent of
+/// setting the per-sheet `autofit` key. opts: path, output (default in place),
+/// sheet => a single sheet selector (name/index; default: every sheet), format.
+/// Returns `{ ok, path, sheets }` (count of sheets autofit).
+fn op_sheet_autosize(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    // A `sheet` selector limits to one sheet; otherwise autofit every sheet.
+    let targets: Vec<usize> = match opts.get("sheet") {
+        None | Some(Value::Null) => (0..sheets.len()).collect(),
+        _ => vec![sheet_target_index(&opts, &mut sheets)?],
+    };
+    for &t in &targets {
+        sheets[t]["autofit"] = json!(true);
+    }
+    let n = targets.len();
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sheets": n }))
+}
+
 /// Apply an autofilter (header dropdown filters) over a sheet's range (xlsx
 /// only). opts: path, output (default in place), range => `[r1,c1,r2,c2]`
 /// 0-based (default: the whole used range), sheet, format. Returns
@@ -9048,6 +9085,7 @@ export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
+export!(office__sheet_autosize, op_sheet_autosize);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);
 export!(office__sheet_bin, op_sheet_bin);
