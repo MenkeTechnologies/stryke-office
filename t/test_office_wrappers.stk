@@ -69,6 +69,9 @@ assert_ok ($txt->{text} =~ /Item/), "sheet_to_text: header rendered"
 val $desc = Office::sheet_describe($xl)
 assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"
 
+val $qn = Office::sheet_quantile($xl, "Count", 0.5)
+assert_eq $qn->{value}, 5, "sheet_quantile: median of single value"
+
 val $fr = Office::sheet_freq($xl, "Item")
 assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
 unlink $xl

@@ -1383,6 +1383,65 @@ fn op_sheet_describe(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// Compute an arbitrary percentile of a numeric column (generalizes the fixed
+/// quartiles in `sheet_describe`). opts: path, column => name or 0-based index
+/// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
+/// header (default true). Linear interpolation (pandas default). Returns
+/// `{ column, q, value, count }` (value is null when the column has no numbers).
+fn op_sheet_quantile(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let q = opts
+        .get("q")
+        .and_then(Value::as_f64)
+        .filter(|x| (0.0..=1.0).contains(x))
+        .ok_or_else(|| anyhow!("missing q (a quantile in 0.0..=1.0)"))?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let value = if vals.is_empty() {
+        Value::Null
+    } else {
+        json!(percentile_sorted(&vals, q))
+    };
+    Ok(json!({ "column": col_name, "q": q, "value": value, "count": vals.len() }))
+}
+
 /// Pearson correlation coefficient over paired observations. Returns None when
 /// fewer than two points or either side has zero variance.
 fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
@@ -7412,6 +7471,7 @@ export!(office__sheet_merge, op_sheet_merge);
 export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
+export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__md_to_sheet, op_md_to_sheet);
