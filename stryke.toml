@@ -172,6 +172,7 @@ exports = [
     "office__img_to_base64",
     "office__img_from_base64",
     "office__img_data_uri",
+    "office__img_resize_file",
     "office__img_draw_rounded_rect",
     "office__img_draw_polyline",
     "office__img_draw_arc",

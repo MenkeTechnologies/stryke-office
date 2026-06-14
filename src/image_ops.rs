@@ -1556,6 +1556,43 @@ fn op_img_data_uri(opts: Value) -> Result<Value> {
     Ok(json!({ "data_uri": uri, "mime": mime, "bytes": bytes.len() }))
 }
 
+/// Open, resize, and save an image file in one call (output format by
+/// extension, so it also transcodes). opts: input, output, then either `max`
+/// (fit within max×max, aspect preserved) or `width`+`height` (exact). Returns
+/// `{ ok, path, width, height }`.
+fn op_img_resize_file(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let opened = op_img_open(json!({ "path": input }))?;
+    let handle = opened
+        .get("handle")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("open produced no handle"))?;
+    let result = (|| -> Result<Value> {
+        if let Some(max) = opts.get("max") {
+            op_img_thumbnail(json!({ "handle": handle, "max": max }))?;
+        } else {
+            let w = opts
+                .get("width")
+                .ok_or_else(|| anyhow!("need max, or width + height"))?;
+            let h = opts
+                .get("height")
+                .ok_or_else(|| anyhow!("need max, or width + height"))?;
+            op_img_resize(json!({ "handle": handle, "width": w, "height": h }))?;
+        }
+        op_img_save(json!({ "handle": handle, "path": output }))?;
+        op_img_info(json!({ "handle": handle }))
+    })();
+    let _ = op_img_close(json!({ "handle": handle }));
+    let info = result?;
+    Ok(json!({
+        "ok": true,
+        "path": output,
+        "width": info.get("width").cloned().unwrap_or(json!(0)),
+        "height": info.get("height").cloned().unwrap_or(json!(0)),
+    }))
+}
+
 // ── shapes, fills, masks, color analysis ─────────────────────────────────────
 
 /// Is point (px,py) inside the rounded rect [x,x+w)×[y,y+h) with corner `r`?

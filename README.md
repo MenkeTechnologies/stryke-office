@@ -601,6 +601,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_warp($h, $matrix)` | 3×3 projective (affine/perspective); 9 numbers |
 | `img_to_base64($h, %opts)` / `img_from_base64($b64)` | encode/decode (`format` opt); embed images as strings |
 | `img_data_uri($path)` | encode an image file as a `data:` URI for inline HTML/CSS → `{data_uri, mime, bytes}` |
+| `img_resize_file($input, $output, %opts)` | open+resize+save in one call; `max` (fit) or `width`+`height` (exact); transcodes by ext |
 
 #### Shapes, fills, masks, color analysis
 

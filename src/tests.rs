@@ -3728,6 +3728,46 @@ fn image_animation_drawing_transform_base64() {
 }
 
 #[test]
+fn img_resize_file_exact_and_fit() {
+    let src = tmp("rf.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":100,"height":50,"color":[9,9,9,255]}"#,
+    );
+    call(
+        office__img_save,
+        &format!(
+            r#"{{"handle":{},"path":"{src}"}}"#,
+            n["handle"].as_u64().unwrap()
+        ),
+    );
+    call(
+        office__img_close,
+        &format!(r#"{{"handle":{}}}"#, n["handle"].as_u64().unwrap()),
+    );
+
+    let ex = tmp("rf_ex.png");
+    let r = call(
+        office__img_resize_file,
+        &format!(r#"{{"input":"{src}","output":"{ex}","width":40,"height":20}}"#),
+    );
+    assert_eq!(r["width"], 40, "exact w: {r}");
+    assert_eq!(r["height"], 20, "exact h: {r}");
+
+    let ft = tmp("rf_ft.png");
+    let r2 = call(
+        office__img_resize_file,
+        &format!(r#"{{"input":"{src}","output":"{ft}","max":40}}"#),
+    );
+    assert_eq!(r2["width"], 40, "fit w: {r2}");
+    assert_eq!(r2["height"], 20, "fit h (aspect): {r2}");
+
+    for f in [&src, &ex, &ft] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn img_data_uri_encodes() {
     let png = tmp("uri.png");
     let n = call(
