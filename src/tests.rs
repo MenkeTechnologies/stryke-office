@@ -2211,6 +2211,37 @@ fn images_to_pdf_one_per_page() {
 }
 
 #[test]
+fn sheet_to_pdf_table() {
+    let path = tmp("s2p.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["widget",3],["gadget",7]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("s2p.pdf");
+    let r = call(
+        office__sheet_to_pdf,
+        &format!(r#"{{"path":"{path}","output":"{out}","title":"Inventory"}}"#),
+    );
+    assert_eq!(r["ok"], true, "sheet_to_pdf: {r}");
+    assert!(r["pages"].as_u64().unwrap_or(0) >= 1, "has pages: {r}");
+    // the rendered PDF re-reads and contains the title + cell text
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let txt = rd["text"].as_str().unwrap_or("");
+    assert!(txt.contains("Inventory"), "title rendered: {txt:?}");
+    assert!(
+        txt.contains("widget") && txt.contains("gadget"),
+        "cells rendered: {txt:?}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn pdf_merge_split_rotate_info() {
     // make two 2-page source PDFs via pdf_build
     let a = tmp("a.pdf");

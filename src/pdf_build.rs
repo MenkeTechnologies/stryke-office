@@ -193,6 +193,56 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let p = pages.last_mut().unwrap();
                 let _ = writeln!(p.content, "{r:.3} {g:.3} {b:.3} RG {x0:.1} {:.1} m {x1:.1} {:.1} l S", ph - y0, ph - y1);
             }
+            "table" => {
+                // Bordered grid of cells with text; flows and paginates by row.
+                let x0 = el.get("x").and_then(Value::as_f64).unwrap_or(margin);
+                let size = el.get("size").and_then(Value::as_f64).unwrap_or(10.0);
+                let rh = el.get("row_height").and_then(Value::as_f64).unwrap_or(size * 1.6);
+                let head = el.get("header").and_then(Value::as_bool).unwrap_or(false);
+                let trows = el.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
+                let ncols = trows
+                    .iter()
+                    .map(|r| r.as_array().map_or(0, |a| a.len()))
+                    .max()
+                    .unwrap_or(0);
+                let avail = (pw - margin - x0).max(1.0);
+                let default_w = avail / ncols.max(1) as f64;
+                let widths: Vec<f64> = match el.get("col_widths").and_then(Value::as_array) {
+                    Some(a) => a.iter().filter_map(Value::as_f64).collect(),
+                    None => vec![default_w; ncols],
+                };
+                let pad = 2.0;
+                for (ri, row) in trows.iter().enumerate() {
+                    ensure(&mut pages, &mut ty, rh);
+                    let row_top = ty;
+                    let cells = row.as_array().cloned().unwrap_or_default();
+                    let cy = ph - (row_top + rh);
+                    let p = pages.last_mut().unwrap();
+                    let mut cx = x0;
+                    for c in 0..ncols {
+                        let cw = *widths.get(c).unwrap_or(&default_w);
+                        if head && ri == 0 {
+                            let _ = writeln!(p.content, "0.90 0.90 0.90 rg {cx:.1} {cy:.1} {cw:.1} {rh:.1} re f");
+                        }
+                        let _ = writeln!(p.content, "0.5 0.5 0.5 RG {cx:.1} {cy:.1} {cw:.1} {rh:.1} re S");
+                        let raw = cells.get(c).map(cell_to_string).unwrap_or_default();
+                        let maxch = (((cw - 2.0 * pad) / (size * 0.5)).floor() as usize).max(1);
+                        let txt = if raw.chars().count() > maxch {
+                            let s: String = raw.chars().take(maxch.saturating_sub(2)).collect();
+                            format!("{s}..")
+                        } else {
+                            raw
+                        };
+                        let font = if head && ri == 0 { "F2" } else { "F1" };
+                        let pdf_y = ph - row_top - size - pad;
+                        let tx = cx + pad;
+                        let _ = writeln!(p.content, "BT /{font} {size} Tf 0 0 0 rg {tx:.1} {pdf_y:.1} Td ({}) Tj ET", pdf_escape(&txt));
+                        cx += cw;
+                    }
+                    ty += rh;
+                }
+                ty += rh * 0.3;
+            }
             "image" => {
                 let (jpeg, iw, ih) = pdf_element_jpeg(el)?;
                 let x = el.get("x").and_then(Value::as_f64).unwrap_or(margin);
@@ -270,6 +320,48 @@ fn op_images_to_pdf(opts: Value) -> Result<Value> {
         "margin": margin,
     }))?;
     Ok(json!({ "ok": true, "path": output, "pages": images.len() }))
+}
+
+/// Render a spreadsheet as a bordered table in a PDF. opts: path => sheet,
+/// output => pdf, sheet => name/index, title => optional heading, header =>
+/// bool (shade/bold the first row; default true), size, landscape => bool,
+/// margin. Returns the pdf_build result (`{ ok, path, pages, bytes }`).
+fn op_sheet_to_pdf(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let rows = sheet["rows"].clone();
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(10.0);
+
+    let mut elements: Vec<Value> = Vec::new();
+    if let Some(t) = opts.get("title").and_then(Value::as_str) {
+        elements.push(json!({ "type": "heading", "level": 1, "text": t }));
+    }
+    elements.push(json!({ "type": "table", "rows": rows, "header": header, "size": size }));
+
+    // Landscape A4 by default keeps wide tables readable when requested.
+    let page_size = if opts.get("landscape").and_then(Value::as_bool) == Some(true) {
+        json!([842.0, 595.0])
+    } else {
+        json!([595.0, 842.0])
+    };
+    let mut bopts = json!({ "path": output, "elements": elements, "page_size": page_size });
+    if let Some(m) = opts.get("margin") {
+        bopts["margin"] = m.clone();
+    }
+    op_pdf_build(bopts)
 }
 
 /// Serialize the accumulated pages into a single PDF byte buffer.
