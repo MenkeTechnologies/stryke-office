@@ -5123,6 +5123,36 @@ fn op_slides_write(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": path, "slides": slides.len()}))
 }
 
+/// Read every file entry of a zip container into `(name, bytes)`, skipping
+/// directory entries. Used to rewrite OOXML packages part-by-part.
+fn read_zip_entries(bytes: &[u8]) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes))?;
+    let mut out = Vec::new();
+    for i in 0..zip.len() {
+        let mut f = zip.by_index(i)?;
+        let name = f.name().to_string();
+        if name.ends_with('/') {
+            continue;
+        }
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf)?;
+        out.push((name, buf));
+    }
+    Ok(out)
+}
+
+/// Write `(name, bytes)` entries to a new deflated zip, returning the archive.
+fn write_zip_entries(entries: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut zw = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let zopt = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, bytes) in entries {
+        zw.start_file(name.as_str(), zopt)?;
+        zw.write_all(bytes)?;
+    }
+    Ok(zw.finish()?.into_inner())
+}
+
 /// Image content type for a file extension (PresentationML media).
 fn image_content_type(ext: &str) -> &'static str {
     match ext {
@@ -5175,19 +5205,7 @@ fn op_slides_add_image(opts: Value) -> Result<Value> {
     let img_bytes = std::fs::read(image)?;
 
     // Read every entry of the source pptx into memory.
-    let src = std::fs::read(path)?;
-    let mut zip = zip::ZipArchive::new(Cursor::new(&src))?;
-    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
-    for i in 0..zip.len() {
-        let mut f = zip.by_index(i)?;
-        let name = f.name().to_string();
-        if name.ends_with('/') {
-            continue;
-        }
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf)?;
-        entries.push((name, buf));
-    }
+    let mut entries = read_zip_entries(&std::fs::read(path)?)?;
 
     let slide_name = format!("ppt/slides/slide{slide_no}.xml");
     if !entries.iter().any(|(n, _)| n == &slide_name) {
@@ -5264,17 +5282,136 @@ fn op_slides_add_image(opts: Value) -> Result<Value> {
 
     // Add the media part and rewrite the package.
     entries.push((media_name, img_bytes));
-    let mut zw = zip::ZipWriter::new(Cursor::new(Vec::new()));
-    let zopt = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-    for (name, bytes) in &entries {
-        zw.start_file(name.as_str(), zopt)?;
-        zw.write_all(bytes)?;
-    }
-    let cursor = zw.finish()?;
-    std::fs::write(&output, cursor.into_inner())?;
+    std::fs::write(&output, write_zip_entries(&entries)?)?;
 
     Ok(json!({ "ok": true, "path": output, "slide": slide_no, "image": image }))
+}
+
+/// Set (or replace) the speaker notes on a slide of an existing pptx. The
+/// reader (`slides_read`) recovers notes via the slide's `notesSlide`
+/// relationship, so this writes a minimal `ppt/notesSlides` part, links it from
+/// the slide rels, and declares its content type. opts: path (pptx), slide =>
+/// 1-based slide number (default 1), notes => a string (split on newlines) or an
+/// array of lines, output => target (default in place). Returns `{ ok, path,
+/// slide, lines }`.
+fn op_slides_set_notes(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let slide_no = opts.get("slide").and_then(Value::as_u64).unwrap_or(1);
+    let lines: Vec<String> = match opts.get("notes") {
+        Some(Value::Array(a)) => a.iter().map(cell_to_string).collect(),
+        Some(Value::String(s)) => s.lines().map(str::to_string).collect(),
+        Some(other) => vec![cell_to_string(other)],
+        None => return Err(anyhow!("missing notes (string or array of lines)")),
+    };
+
+    let mut entries = read_zip_entries(&std::fs::read(path)?)?;
+    let slide_name = format!("ppt/slides/slide{slide_no}.xml");
+    if !entries.iter().any(|(n, _)| n == &slide_name) {
+        return Err(anyhow!("slide {slide_no} not found in {path}"));
+    }
+
+    let paras: String = lines
+        .iter()
+        .map(|l| {
+            format!(
+                "<a:p><a:r><a:rPr lang=\"en-US\"/><a:t>{}</a:t></a:r></a:p>",
+                xml_escape(l)
+            )
+        })
+        .collect();
+    let notes_xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<p:notes xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Notes Placeholder\"/><p:cNvSpPr><a:spLocks noGrp=\"1\"/></p:cNvSpPr><p:nvPr><p:ph type=\"body\" idx=\"1\"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>{paras}</p:txBody></p:sp></p:spTree></p:cSld></p:notes>\n"
+    );
+
+    let rels_name = format!("ppt/slides/_rels/slide{slide_no}.xml.rels");
+    let existing_notes = entries
+        .iter()
+        .find(|(n, _)| n == &rels_name)
+        .and_then(|(_, b)| {
+            let s = String::from_utf8_lossy(b);
+            rels_relationship_target(s.as_bytes(), "notesSlide")
+                .map(|t| resolve_zip_path("ppt/slides", &t))
+        });
+
+    if let Some(notes_part) = existing_notes {
+        // Replace the body of the already-linked notesSlide part.
+        if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| *n == notes_part) {
+            *bytes = notes_xml.into_bytes();
+        }
+    } else {
+        // Allocate a fresh notesSlide index.
+        let mut max_idx = 0u32;
+        for (n, _) in &entries {
+            if let Some(rest) = n.strip_prefix("ppt/notesSlides/notesSlide") {
+                let num: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                if let Ok(v) = num.parse::<u32>() {
+                    max_idx = max_idx.max(v);
+                }
+            }
+        }
+        let idx = max_idx + 1;
+        let notes_part = format!("ppt/notesSlides/notesSlide{idx}.xml");
+
+        // Link it from the slide rels (creating the rels part if absent).
+        let rel = |rid: u32| {
+            format!(
+                "<Relationship Id=\"rId{rid}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide\" Target=\"../notesSlides/notesSlide{idx}.xml\"/>"
+            )
+        };
+        if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| n == &rels_name) {
+            let s = String::from_utf8_lossy(bytes).into_owned();
+            let mut rid = 1u32;
+            for cap in s.split("Id=\"rId").skip(1) {
+                let num: String = cap.chars().take_while(char::is_ascii_digit).collect();
+                if let Ok(v) = num.parse::<u32>() {
+                    rid = rid.max(v + 1);
+                }
+            }
+            *bytes = s
+                .replacen(
+                    "</Relationships>",
+                    &format!("{}</Relationships>", rel(rid)),
+                    1,
+                )
+                .into_bytes();
+        } else {
+            let rels = format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">{}</Relationships>\n",
+                rel(1)
+            );
+            entries.push((rels_name, rels.into_bytes()));
+        }
+
+        // The notesSlide's own rels point back at the slide.
+        let notes_rels = format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"../slides/slide{slide_no}.xml\"/></Relationships>\n"
+        );
+        entries.push((
+            format!("ppt/notesSlides/_rels/notesSlide{idx}.xml.rels"),
+            notes_rels.into_bytes(),
+        ));
+
+        // Declare the new part's content type.
+        if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| n == "[Content_Types].xml") {
+            let s = String::from_utf8_lossy(bytes).into_owned();
+            let decl = format!(
+                "<Override PartName=\"/{notes_part}\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml\"/>"
+            );
+            *bytes = s
+                .replacen("</Types>", &format!("{decl}</Types>"), 1)
+                .into_bytes();
+        }
+
+        entries.push((notes_part, notes_xml.into_bytes()));
+    }
+
+    std::fs::write(&output, write_zip_entries(&entries)?)?;
+    Ok(json!({ "ok": true, "path": output, "slide": slide_no, "lines": lines.len() }))
 }
 
 /// Concatenate presentations into one deck. opts: inputs => [paths],
@@ -5608,6 +5745,7 @@ export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
 export!(office__slides_add_image, op_slides_add_image);
+export!(office__slides_set_notes, op_slides_set_notes);
 export!(office__slides_merge, op_slides_merge);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);

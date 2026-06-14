@@ -2516,6 +2516,48 @@ fn slides_add_image_embeds_picture() {
 }
 
 #[test]
+fn slides_set_notes_round_trip() {
+    let deck = tmp("notesdeck.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{deck}","slides":[{{"title":"Talk","body":["point"]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "deck write: {w}");
+
+    // add notes, then recover them via slides_read's notesSlide path
+    let r = call(
+        office__slides_set_notes,
+        &format!(r#"{{"path":"{deck}","slide":1,"notes":"remember to smile"}}"#),
+    );
+    assert_eq!(r["ok"], true, "set_notes: {r}");
+    assert_eq!(r["lines"], 1, "one note line: {r}");
+
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{deck}"}}"#));
+    let notes = rd["slides"][0]["notes"].to_string();
+    assert!(
+        notes.contains("remember to smile"),
+        "notes round-trip: {rd}"
+    );
+    assert_eq!(rd["slides"][0]["text"][0], "Talk", "title intact: {rd}");
+
+    // replacing notes updates in place (no duplicate notesSlide)
+    let r2 = call(
+        office__slides_set_notes,
+        &format!(r#"{{"path":"{deck}","slide":1,"notes":["line a","line b"]}}"#),
+    );
+    assert_eq!(r2["lines"], 2, "two lines: {r2}");
+    let rd2 = call(office__slides_read, &format!(r#"{{"path":"{deck}"}}"#));
+    let n2 = rd2["slides"][0]["notes"].to_string();
+    assert!(
+        n2.contains("line a") && n2.contains("line b"),
+        "replaced notes: {rd2}"
+    );
+    assert!(!n2.contains("smile"), "old notes replaced: {rd2}");
+
+    std::fs::remove_file(&deck).ok();
+}
+
+#[test]
 fn slides_to_pdf_one_per_page() {
     let px = tmp("s2pdf.pptx");
     let w = call(

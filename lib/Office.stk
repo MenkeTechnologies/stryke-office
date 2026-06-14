@@ -725,6 +725,14 @@ fn Office::slides_add_image ($path, $image, %opts) {
         office__slides_add_image(to_json({ path => $path, image => $image, output => $opts{output}, slide => $opts{slide}, x => $opts{x}, y => $opts{y}, width => $opts{width}, height => $opts{height} })))
 }
 
+## Set/replace a slide's speaker notes ($notes = string or arrayref of lines).
+## opts: slide (1-based, default 1), output (default in place). Returns
+## { ok, path, slide, lines }.
+fn Office::slides_set_notes ($path, $notes, %opts) {
+    Office::_decode("slides_set_notes",
+        office__slides_set_notes(to_json({ path => $path, notes => $notes, slide => $opts{slide}, output => $opts{output} })))
+}
+
 ## Concatenate presentations into one deck. $inputs is an arrayref of paths; the
 ## target format follows $output's extension (so this also converts pptx<->odp).
 ## Each source slide's first text line becomes the title, the rest the body
