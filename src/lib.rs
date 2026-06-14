@@ -2023,6 +2023,121 @@ fn op_sheet_sort(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sorted": sorted, "column": col }))
 }
 
+/// Append a rank column to a sheet without reordering its rows (Excel `RANK` /
+/// SQL `RANK()`). opts: path, output, by => column (name or 0-based index,
+/// required), ascending => smallest value ranks first (default false = largest
+/// first), dense => dense ranking 1,2,2,3 (default false = competition 1,2,2,4),
+/// name => new column header (default "rank"), sheet, header, format. Rows whose
+/// `by` cell is non-numeric get a blank rank. Returns `{ ok, path, ranked }`.
+fn op_sheet_rank(opts: Value) -> Result<Value> {
+    use std::cmp::Ordering;
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ascending = opts
+        .get("ascending")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let dense = opts.get("dense").and_then(Value::as_bool).unwrap_or(false);
+    let name = opts.get("name").and_then(Value::as_str).unwrap_or("rank");
+
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array)
+    } else {
+        None
+    };
+    let col = match opts.get("by") {
+        Some(Value::Number(n)) => n.as_u64().ok_or_else(|| anyhow!("bad column index"))? as usize,
+        Some(Value::String(name)) => header_row
+            .and_then(|hr| hr.iter().position(|c| cell_to_string(c) == *name))
+            .ok_or_else(|| anyhow!("column not found: {name}"))?,
+        _ => return Err(anyhow!("missing by (column name or 0-based index)")),
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let cell_num = |row: &Value| -> Option<f64> {
+        row.as_array()
+            .and_then(|a| a.get(col))
+            .and_then(sheet_cell_num)
+    };
+
+    // Distinct numeric values sorted in ranking order; index into this list (with
+    // ties skipped for competition ranking) gives each value's rank.
+    let mut present: Vec<f64> = rows[data_start..].iter().filter_map(cell_num).collect();
+    present.sort_by(|a, b| {
+        let ord = a.partial_cmp(b).unwrap_or(Ordering::Equal);
+        if ascending {
+            ord
+        } else {
+            ord.reverse()
+        }
+    });
+    let rank_of = |x: f64| -> i64 {
+        if dense {
+            // 1 + number of distinct values that outrank x.
+            let mut better = 0i64;
+            let mut last: Option<f64> = None;
+            for &v in &present {
+                if v == x {
+                    break;
+                }
+                if last != Some(v) {
+                    better += 1;
+                    last = Some(v);
+                }
+            }
+            better + 1
+        } else {
+            // 1 + number of values strictly outranking x (competition).
+            present.iter().take_while(|&&v| v != x).count() as i64 + 1
+        }
+    };
+
+    let mut ranked = 0i64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(name));
+            } else if let Some(x) = cell_num(row) {
+                ranked += 1;
+                cells.push(json!(rank_of(x)));
+            } else {
+                cells.push(json!(""));
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "ranked": ranked, "column": col }))
+}
+
 /// Whether a cell satisfies `op` against `value`. String ops: eq, ne, contains,
 /// not_contains (honour `ignore_case`). Numeric ops: gt, lt, ge, le (both sides
 /// must parse as numbers, else no match).
@@ -4693,6 +4808,7 @@ export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
 export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
+export!(office__sheet_rank, op_sheet_rank);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_pivot, op_sheet_pivot);

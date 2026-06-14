@@ -154,6 +154,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_to_json($path, $output, %opts)` | `{count}` | export a sheet to a JSON file (array of objects); `pretty` opt |
 | `Office::json_to_sheet($input, $output, %opts)` | `{rows, fields}` | import a JSON array-of-objects file into a spreadsheet |
 | `Office::sheet_sort($path, $by, $output, %opts)` | `{sorted, column}` | sort data rows by a column (header kept); `descending`/`numeric`/`ignore_case` opts |
+| `Office::sheet_rank($path, $by, $output, %opts)` | `{ok, path, ranked}` | append a rank column by a column without reordering (Excel `RANK`); `ascending`/`dense`/`name` opts |
 | `Office::sheet_filter($path, $by, $output, %opts)` | `{kept, removed, column}` | keep rows matching `op` (eq/ne/contains/gt/lt/ge/le) on a column |
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
 | `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable |

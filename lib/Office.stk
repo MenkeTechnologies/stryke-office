@@ -176,6 +176,13 @@ fn Office::sheet_sort ($path, $by, $output, %opts) {
         office__sheet_sort(to_json({ path => $path, by => $by, output => $output, sheet => $opts{sheet}, descending => $opts{descending}, numeric => $opts{numeric}, ignore_case => $opts{ignore_case}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a rank column by $by without reordering (Excel RANK / SQL RANK()).
+## opts: ascending, dense, name, sheet, header, format. Returns { ok, path, ranked }.
+fn Office::sheet_rank ($path, $by, $output, %opts) {
+    Office::_decode("sheet_rank",
+        office__sheet_rank(to_json({ path => $path, by => $by, output => $output, ascending => $opts{ascending}, dense => $opts{dense}, name => $opts{name}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Keep only rows whose $by column satisfies a predicate. opts: op => one of
 ## eq|ne|contains|not_contains|gt|lt|ge|le (default eq), value => comparison
 ## value, sheet, ignore_case => 1, header => 0 if first row is data, format =>

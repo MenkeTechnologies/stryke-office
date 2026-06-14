@@ -719,6 +719,52 @@ fn sheet_top_by_column() {
 }
 
 #[test]
+fn sheet_rank_competition_and_dense() {
+    let path = tmp("rank.xlsx");
+    // a=30, b=10, c=30 (tie with a), d=20
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","sales"],["a",30],["b",10],["c",30],["d",20]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // Competition ranking, largest first (default). Rows are NOT reordered.
+    let out = tmp("rank_c.xlsx");
+    let r = call(
+        office__sheet_rank,
+        &format!(r#"{{"path":"{path}","by":"sales","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ranked"], 4, "four rows ranked: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][2], "rank", "header name appended: {rd}");
+    assert_eq!(rows[1][0], "a", "row order preserved (a first): {rd}");
+    // a=30 ->1, b=10 ->4, c=30 ->1 (tie), d=20 ->3 (competition skips 2)
+    assert_eq!(rows[1][2].as_f64().unwrap(), 1.0, "a rank 1: {rd}");
+    assert_eq!(rows[2][2].as_f64().unwrap(), 4.0, "b rank 4: {rd}");
+    assert_eq!(rows[3][2].as_f64().unwrap(), 1.0, "c tie rank 1: {rd}");
+    assert_eq!(rows[4][2].as_f64().unwrap(), 3.0, "d rank 3 (skip 2): {rd}");
+
+    // Dense ranking: 30->1, 20->2, 10->3
+    let outd = tmp("rank_d.xlsx");
+    call(
+        office__sheet_rank,
+        &format!(r#"{{"path":"{path}","by":"sales","output":"{outd}","dense":true,"name":"pos"}}"#),
+    );
+    let rdd = call(office__sheet_read, &format!(r#"{{"path":"{outd}"}}"#));
+    let rd2 = rdd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rd2[0][2], "pos", "custom name: {rdd}");
+    assert_eq!(rd2[2][2].as_f64().unwrap(), 3.0, "b dense rank 3: {rdd}");
+    assert_eq!(rd2[4][2].as_f64().unwrap(), 2.0, "d dense rank 2: {rdd}");
+
+    for f in [&path, &out, &outd] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_head_and_tail() {
     let path = tmp("head.xlsx");
     let w = call(
