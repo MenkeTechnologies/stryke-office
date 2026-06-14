@@ -174,6 +174,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_split_column($path, $column, $output, %opts)` | `{ok, path, columns}` | split a column into several by a delimiter (Text to Columns); `delimiter`/`into`/`max`/`keep` opts |
 | `Office::sheet_concat_columns($path, $columns, $output, %opts)` | `{ok, path, into}` | join several columns into one with a separator (Excel `TEXTJOIN`); `separator`/`into`/`skip_blanks`/`keep` opts |
 | `Office::sheet_filter($path, $by, $output, %opts)` | `{kept, removed, column}` | keep rows matching `op` (eq/ne/contains/gt/lt/ge/le) on a column |
+| `Office::sheet_flag($path, $by, $output, %opts)` | `{ok, path, column, flagged}` | append a flag column marking rows matching a predicate (keeps all rows); `op`/`value`/`true_value`/`false_value`/`into` opts |
 | `Office::sheet_where($path, $conditions, $output, %opts)` | `{ok, path, kept}` | keep rows matching multiple conditions (`[{column,op,value}]`); `match` all/any |
 | `Office::sheet_freeze($path, $output, %opts)` | `{ok, path, row, col}` | freeze panes on a sheet (xlsx); `row` (default 1)/`col` opts |
 | `Office::sheet_autofilter($path, $output, %opts)` | `{ok, path, range}` | apply an autofilter over a sheet's range (xlsx); `range` opt (default used range) |

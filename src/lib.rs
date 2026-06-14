@@ -4896,6 +4896,77 @@ fn op_sheet_filter(opts: Value) -> Result<Value> {
     )
 }
 
+/// Append a flag column marking rows whose cell in a column satisfies a
+/// predicate — keeps every row (unlike `sheet_filter`/`sheet_where`, which
+/// subset). opts: path, output, by => column name/index (required), op => one of
+/// eq|ne|contains|not_contains|gt|lt|ge|le (default eq), value, true_value /
+/// false_value => what to write on match / no-match (defaults 1 / 0), into =>
+/// new column header (default "flag"), ignore_case, sheet, header, format.
+/// Returns `{ ok, path, column, flagged }` (count of matching rows).
+fn op_sheet_flag(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
+    let value = opts.get("value").cloned().unwrap_or(Value::Null);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let true_value = opts.get("true_value").cloned().unwrap_or_else(|| json!(1));
+    let false_value = opts.get("false_value").cloned().unwrap_or_else(|| json!(0));
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("by"), header_row)?;
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .unwrap_or("flag")
+        .to_string();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut flagged = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let cell = cells.get(col).cloned().unwrap_or(Value::Null);
+            if cell_matches(&cell, op, &value, ignore_case) {
+                flagged += 1;
+                cells.push(true_value.clone());
+            } else {
+                cells.push(false_value.clone());
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into, "flagged": flagged }))
+}
+
 /// Resolve a column selector (0-based index or header name) to an index.
 fn resolve_col(by: Option<&Value>, header_row: Option<&[Value]>) -> Result<usize> {
     match by {
@@ -10182,6 +10253,7 @@ export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);
 export!(office__sheet_filter, op_sheet_filter);
+export!(office__sheet_flag, op_sheet_flag);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
