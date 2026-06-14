@@ -9108,6 +9108,63 @@ fn op_slides_append(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": total, "added": added }))
 }
 
+/// Insert a new slide at a position (1-based) in a deck. Unlike `slides_append`
+/// (end-only), this places the slide anywhere — e.g. a section divider mid-deck.
+/// opts: path, output (default in place), position => 1-based insert index
+/// (default: append at end; clamped to the deck length), title => slide title,
+/// body => array of body lines, format. Returns `{ ok, path, position, slides }`.
+fn op_slides_insert(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let existing = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut out_slides: Vec<Value> = Vec::new();
+    for s in &existing {
+        let text: Vec<String> = s
+            .get("text")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (title, body) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        out_slides.push(json!({ "title": title, "body": body }));
+    }
+
+    let title = opts.get("title").and_then(Value::as_str).unwrap_or("");
+    let body = opts.get("body").cloned().unwrap_or_else(|| json!([]));
+    let new_slide = json!({ "title": title, "body": body });
+    // 1-based position; default and over-length append at the end.
+    let pos = opts
+        .get("position")
+        .and_then(Value::as_u64)
+        .map(|p| (p.max(1) as usize - 1).min(out_slides.len()))
+        .unwrap_or(out_slides.len());
+    out_slides.insert(pos, new_slide);
+    let total = out_slides.len();
+
+    let mut wopts = json!({ "path": output, "slides": out_slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "position": pos + 1, "slides": total }))
+}
+
 // ── pdf (self-contained, via lo_core) ────────────────────────────────────────
 
 fn op_pdf_read(opts: Value) -> Result<Value> {
@@ -9293,6 +9350,7 @@ export!(office__slides_delete, op_slides_delete);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);
 export!(office__slides_append, op_slides_append);
+export!(office__slides_insert, op_slides_insert);
 export!(office__pdf_read, op_pdf_read);
 export!(office__pdf_write, op_pdf_write);
 

@@ -207,6 +207,17 @@ assert_eq $sdread->[0]{text}[0], "A", "slides_delete: slide A kept"
 assert_eq $sdread->[1]{text}[0], "C", "slides_delete: slide C kept"
 unlink $sdx
 unlink $sdo
+# slides_insert: place a new slide mid-deck
+val $six = "$dir/$tag-sins.pptx"
+Office::slides_write($six, [{ title => "A", body => ["a"] }, { title => "C", body => ["c"] }])
+val $sio = "$dir/$tag-sins-out.pptx"
+val $sir = Office::slides_insert($six, position => 2, title => "B", body => ["b"], output => $sio)
+assert_eq $sir->{slides}, 3, "slides_insert: three slides"
+assert_eq $sir->{position}, 2, "slides_insert: position 2"
+val $siread = Office::slides_read($sio)
+assert_eq $siread->[1]{text}[0], "B", "slides_insert: B placed in the middle"
+unlink $six
+unlink $sio
 val $s2sh = "$dir/$tag-s2sheet.xlsx"
 Office::slides_to_sheet($pptx, $s2sh)
 val $s2shr = Office::sheet_get_cell($s2sh, "B2")
