@@ -268,6 +268,13 @@ fn Office::md_to_doc ($input, $output, %opts) {
         office__md_to_doc(to_json({ input => $input, output => $output, format => $opts{format} })))
 }
 
+## Convert a docx/odt to structured Markdown (headings + tables preserved),
+## written to $output. The inverse of md_to_doc. Returns { ok, path, blocks }.
+fn Office::doc_to_md ($path, $output) {
+    Office::_decode("doc_to_md",
+        office__doc_to_md(to_json({ path => $path, output => $output })))
+}
+
 ## Split a document into multiple files at headings of a given level, written to
 ## $dir as {prefix}-{n}.{ext}. opts: level => heading level to split at (default
 ## 1), format => output extension (default: the source's), prefix => filename
