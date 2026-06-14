@@ -226,6 +226,54 @@ fn sheet_describe_numeric_summary() {
 }
 
 #[test]
+fn sheet_quantile_arbitrary_percentile() {
+    let path = tmp("quantile.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let med = call(
+        office__sheet_quantile,
+        &format!(r#"{{"path":"{path}","column":"v","q":0.5}}"#),
+    );
+    assert_eq!(med["count"], 4, "four values: {med}");
+    assert!(
+        (med["value"].as_f64().unwrap() - 2.5).abs() < 1e-9,
+        "median 2.5: {med}"
+    );
+
+    let p0 = call(
+        office__sheet_quantile,
+        &format!(r#"{{"path":"{path}","column":"v","q":0.0}}"#),
+    );
+    assert!(
+        (p0["value"].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "min: {p0}"
+    );
+    let p100 = call(
+        office__sheet_quantile,
+        &format!(r#"{{"path":"{path}","column":"v","q":1.0}}"#),
+    );
+    assert!(
+        (p100["value"].as_f64().unwrap() - 4.0).abs() < 1e-9,
+        "max: {p100}"
+    );
+    // p25 linear interp = 1.75
+    let p25 = call(
+        office__sheet_quantile,
+        &format!(r#"{{"path":"{path}","column":"v","q":0.25}}"#),
+    );
+    assert!(
+        (p25["value"].as_f64().unwrap() - 1.75).abs() < 1e-9,
+        "p25 interp: {p25}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_corr_pearson_matrix() {
     let path = tmp("corr.xlsx");
     // y = 2x (perfect +), z = -x (perfect -).

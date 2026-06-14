@@ -147,6 +147,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_union($inputs, $output, %opts)` | `{sources, rows, fields}` | concatenate sheets aligned by column name (SQL UNION) |
 | `Office::sheet_stats($path, %opts)` | `{sheet, rows, columns:[{name,count,numeric,blanks,sum?,min?,max?,mean?}]}` | per-column descriptive stats; `sheet`/`header` opts |
 | `Office::sheet_describe($path, %opts)` | `{sheet, rows, columns:[{name,count,mean,std,min,p25,p50,p75,max}]}` | pandas-style numeric summary (std + quartiles); `sheet`/`header` opts |
+| `Office::sheet_quantile($path, $column, $q, %opts)` | `{column, q, value, count}` | arbitrary percentile of a numeric column (e.g. `q=0.9` for p90) |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | Pearson correlation matrix between numeric columns (pandas `df.corr()`) |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |
