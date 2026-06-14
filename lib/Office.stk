@@ -161,6 +161,14 @@ fn Office::sheet_corr ($path, %opts) {
         office__sheet_corr(to_json({ path => $path, method => $opts{method}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Simple OLS linear regression of $y on $x (lm(y ~ x)). opts: output (append
+## predicted+residual columns and write there), decimals (round coefficients),
+## sheet, header, format. Returns { ok, slope, intercept, r2, n, path? }.
+fn Office::sheet_regress ($path, $x, $y, %opts) {
+    Office::_decode("sheet_regress",
+        office__sheet_regress(to_json({ path => $path, x => $x, y => $y, output => $opts{output}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Render a spreadsheet as a GitHub-flavored Markdown table. opts: output (write
 ## to a .md file; omit to return the text), sheet, header. Returns { ok, rows,
 ## cols, markdown, path? }.

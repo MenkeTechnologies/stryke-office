@@ -1292,6 +1292,19 @@ val $crk = Office::sheet_corr($crx, method => "kendall")
 assert_eq $crk->{matrix}[0][1], 1, "sheet_corr: kendall concordant = 1"
 unlink $crx
 
+# ── sheet_regress: OLS slope/intercept/r2 + predicted/residual ──────
+val $rgx = "$dir/$tag-regress.xlsx"
+Office::sheet_write($rgx, [{ name => "R", rows => [["x", "y"], [1, 5], [2, 8], [3, 11], [4, 14]] }])
+val $rgo = "$dir/$tag-regress-out.xlsx"
+val $rgr = Office::sheet_regress($rgx, "x", "y", output => $rgo, decimals => 6)
+assert_eq $rgr->{slope}, 3, "sheet_regress: slope 3"
+assert_eq $rgr->{intercept}, 2, "sheet_regress: intercept 2"
+assert_eq $rgr->{r2}, 1, "sheet_regress: r2 1"
+val $rgb = Office::sheet_read($rgo)
+assert_eq $rgb->[0]{rows}[0][2], "predicted", "sheet_regress: predicted column"
+unlink $rgx
+unlink $rgo
+
 # ── chart density (ggplot2 geom_density): KDE curve to SVG ───────────
 val $densvg = Office::chart_svg("density", [{ name => "a", data => [1, 2, 2, 3, 3, 3, 4, 4, 5] }])
 assert_ok ($densvg =~ /^<svg/), "chart density: svg document"
