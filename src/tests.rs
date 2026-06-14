@@ -444,6 +444,41 @@ fn sheet_moments_skew_kurtosis() {
 }
 
 #[test]
+fn sheet_npv_discount() {
+    let path = tmp("npv.xlsx");
+    // cashflows 100, 200, 300 at 10% — Excel NPV (first discounted 1 period)
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"C","rows":[["cf"],[100],[200],[300]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_npv,
+        &format!(r#"{{"path":"{path}","column":"cf","rate":0.1,"decimals":4}}"#),
+    );
+    // 100/1.1 + 200/1.21 + 300/1.331 = 90.9091 + 165.2893 + 225.3944 = 481.5928
+    assert!(
+        (s["npv"].as_f64().unwrap() - 481.5928).abs() < 1e-3,
+        "npv excel convention: {s}"
+    );
+    assert_eq!(s["n"].as_u64().unwrap(), 3, "three cashflows: {s}");
+
+    // start=0: first cashflow undiscounted -> 100 + 200/1.1 + 300/1.21
+    let s0 = call(
+        office__sheet_npv,
+        &format!(r#"{{"path":"{path}","column":"cf","rate":0.1,"start":0,"decimals":4}}"#),
+    );
+    assert!(
+        (s0["npv"].as_f64().unwrap() - 529.7521).abs() < 1e-3,
+        "npv start=0: {s0}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_autocorr_acf() {
     // a perfectly periodic series: ACF at lag 0 is 1; an alternating series is
     // anti-correlated at lag 1.

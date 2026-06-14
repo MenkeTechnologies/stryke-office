@@ -140,6 +140,14 @@ fn Office::sheet_moments ($path, $column, %opts) {
         office__sheet_moments(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Net present value of a cashflow $column at periodic discount $rate (Excel
+## NPV). opts: start (first-period exponent, default 1; 0 = first cashflow now),
+## decimals, sheet, header. Returns { ok, npv, n, rate }.
+fn Office::sheet_npv ($path, $column, $rate, %opts) {
+    Office::_decode("sheet_npv",
+        office__sheet_npv(to_json({ path => $path, column => $column, rate => $rate, start => $opts{start}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Autocorrelation function (ACF) of a $column treated as an ordered series.
 ## opts: lags (max lag, default 10), decimals, sheet, header. Returns { ok,
 ## column, n, acf } with acf = [{ lag, value }] for lags 0..=lags (r0 = 1).
