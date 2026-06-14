@@ -773,6 +773,14 @@ fn Office::sheet_bin ($path, $output, $column, %opts) {
         office__sheet_bin(to_json({ path => $path, output => $output, column => $column, edges => $opts{edges}, bins => $opts{bins}, labels => $opts{labels}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append an equal-frequency bucket column (SQL NTILE / pandas qcut). opts: n
+## (bucket count, default 4 = quartiles), labels (length-n names), into (default
+## "{column}_ntile"), sheet, header, format. Returns { ok, path, column, into, buckets }.
+fn Office::sheet_ntile ($path, $output, $column, %opts) {
+    Office::_decode("sheet_ntile",
+        office__sheet_ntile(to_json({ path => $path, output => $output, column => $column, n => $opts{n}, labels => $opts{labels}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Detect outlier rows in a numeric column. opts: method (iqr default | zscore),
 ## k (iqr fence 1.5 / zscore threshold 3), sheet, header. Returns
 ## { column, method, count, lower, upper, outliers: [{row, value}] }.

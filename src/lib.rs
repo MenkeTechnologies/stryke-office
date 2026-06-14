@@ -3145,6 +3145,110 @@ fn op_sheet_bin(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": base, "into": into, "bins": nbins }))
 }
 
+/// Append an equal-frequency bucket column (SQL `NTILE` / pandas `qcut`): each
+/// numeric value is assigned to one of `n` buckets so each bucket holds roughly
+/// the same *count* of rows — the equal-frequency counterpart to `sheet_bin`'s
+/// equal-width buckets. Useful for quartiles (n=4), deciles (n=10), etc. opts:
+/// path, output, column => name/index (required), n => bucket count (default 4),
+/// labels => optional length-n array written instead of the 0-based bucket index,
+/// into => header (default "{column}_ntile"), sheet, header, format. Non-numeric
+/// cells get a blank. Returns `{ ok, path, column, into, buckets }`.
+fn op_sheet_ntile(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let n = opts
+        .get("n")
+        .and_then(Value::as_u64)
+        .filter(|&n| n > 0)
+        .unwrap_or(4) as usize;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_ntile"));
+    let labels: Option<Vec<Value>> = opts.get("labels").and_then(Value::as_array).cloned();
+    if let Some(l) = &labels {
+        if l.len() != n {
+            return Err(anyhow!("labels length {} != bucket count {n}", l.len()));
+        }
+    }
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Rank the numeric values: each data-row index paired with its value, sorted
+    // ascending; a value's bucket is its position-in-sorted-order scaled to n.
+    let mut pairs: Vec<(usize, f64)> = rows[data_start..]
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+                .map(|x| (i, x))
+        })
+        .collect();
+    pairs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    let total = pairs.len();
+    // data-row index -> bucket (0-based)
+    let mut bucket_of: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    // `total` >= 1 here since we are iterating the collected numeric pairs.
+    for (rank, &(ri, _)) in pairs.iter().enumerate() {
+        let b = (rank * n / total).min(n - 1);
+        bucket_of.insert(ri, b);
+    }
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = match bucket_of.get(&(i - data_start)) {
+                    Some(&b) => match &labels {
+                        Some(l) => l[b].clone(),
+                        None => json!(b),
+                    },
+                    None => json!(""),
+                };
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": base, "into": into, "buckets": n }))
+}
+
 /// Append a moving-average (rolling mean) column over a fixed window. opts: path,
 /// output, column => name or 0-based index (required), window => number of rows
 /// (required, ≥1), into => new column header (default "{column}_ma{window}"),
@@ -9440,6 +9544,7 @@ export!(office__sheet_autosize, op_sheet_autosize);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);
 export!(office__sheet_bin, op_sheet_bin);
+export!(office__sheet_ntile, op_sheet_ntile);
 export!(office__sheet_outliers, op_sheet_outliers);
 export!(office__sheet_cov, op_sheet_cov);
 export!(office__sheet_split, op_sheet_split);

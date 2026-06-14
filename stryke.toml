@@ -89,6 +89,7 @@ exports = [
     "office__sheet_round",
     "office__sheet_histogram",
     "office__sheet_bin",
+    "office__sheet_ntile",
     "office__sheet_outliers",
     "office__sheet_cov",
     "office__sheet_split",
