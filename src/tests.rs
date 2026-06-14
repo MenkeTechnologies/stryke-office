@@ -3380,6 +3380,56 @@ fn sheet_flag_marks_rows() {
 }
 
 #[test]
+fn sheet_onehot_encode() {
+    let path = tmp("onehot.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["color","n"],["red",1],["blue",2],["red",3]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("onehot_out.xlsx");
+    let r = call(
+        office__sheet_onehot,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"color"}}"#),
+    );
+    let cats: Vec<String> = r["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(cats, vec!["red", "blue"], "first-seen category order: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // original 2 cols + color_red, color_blue appended
+    assert_eq!(rows[0][2], "color_red", "indicator header: {rd}");
+    assert_eq!(rows[0][3], "color_blue", "indicator header: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 1.0, "row1 red=1: {rd}");
+    assert_eq!(rows[1][3].as_f64().unwrap(), 0.0, "row1 blue=0: {rd}");
+    assert_eq!(rows[2][2].as_f64().unwrap(), 0.0, "row2 red=0: {rd}");
+    assert_eq!(rows[2][3].as_f64().unwrap(), 1.0, "row2 blue=1: {rd}");
+
+    // drop removes the original column
+    let outd = tmp("onehot_drop.xlsx");
+    call(
+        office__sheet_onehot,
+        &format!(r#"{{"path":"{path}","output":"{outd}","column":"color","drop":true}}"#),
+    );
+    let rdd = call(office__sheet_read, &format!(r#"{{"path":"{outd}"}}"#));
+    let rowsd = rdd["sheets"][0]["rows"].as_array().unwrap();
+    // after drop: n, color_red, color_blue
+    assert_eq!(rowsd[0][0], "n", "original color column dropped: {rdd}");
+    assert_eq!(rowsd[0][1], "color_red", "indicator after drop: {rdd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outd).ok();
+}
+
+#[test]
 fn sheet_sort_by_column() {
     let path = tmp("sort.xlsx");
     let w = call(

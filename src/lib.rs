@@ -5012,6 +5012,95 @@ fn op_sheet_flag(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into, "flagged": flagged }))
 }
 
+/// One-hot encode a categorical column into 0/1 indicator columns (pandas
+/// `get_dummies`) — ML feature prep. For each distinct value V in the column an
+/// indicator column "{prefix}_{V}" is appended, holding 1 where the row's value
+/// is V and 0 otherwise. opts: path, output, column => name/index (required),
+/// prefix => indicator-name prefix (default: the source column header), drop =>
+/// remove the original column (default false), sheet, header, format. Categories
+/// appear in first-seen order; blank cells produce no indicator. Returns
+/// `{ ok, path, categories }` (the distinct values encoded, in order).
+fn op_sheet_onehot(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let drop = opts.get("drop").and_then(flag_of).unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .unwrap_or(&base)
+        .to_string();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Distinct non-blank category values in first-seen order.
+    let mut cats: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for row in &rows[data_start..] {
+        if let Some(c) = row.as_array().and_then(|a| a.get(col)) {
+            if !sheet_cell_blank(c) {
+                let s = cell_to_string(c);
+                if seen.insert(s.clone()) {
+                    cats.push(s);
+                }
+            }
+        }
+    }
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                for c in &cats {
+                    cells.push(json!(format!("{prefix}_{c}")));
+                }
+            } else {
+                let v = cells.get(col).map(cell_to_string).unwrap_or_default();
+                let blank = cells.get(col).map(sheet_cell_blank).unwrap_or(true);
+                for c in &cats {
+                    cells.push(json!(if !blank && &v == c { 1 } else { 0 }));
+                }
+            }
+            // Optionally drop the original column (after indicators were derived).
+            if drop && col < cells.len() {
+                cells.remove(col);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "categories": cats }))
+}
+
 /// Resolve a column selector (0-based index or header name) to an index.
 fn resolve_col(by: Option<&Value>, header_row: Option<&[Value]>) -> Result<usize> {
     match by {
@@ -10300,6 +10389,7 @@ export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_flag, op_sheet_flag);
+export!(office__sheet_onehot, op_sheet_onehot);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
