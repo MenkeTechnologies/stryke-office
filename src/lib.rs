@@ -8407,6 +8407,75 @@ fn op_sheet_hstack(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": n, "columns": lw + rw }))
 }
 
+/// Cartesian product (cross join) of two sheets — every left data row paired
+/// with every right data row, columns concatenated (pandas merge `how='cross'`).
+/// Distinct from `sheet_join` (key-based) and `sheet_hstack` (positional). opts:
+/// path (left), right => second spreadsheet path (required), output, sheet =>
+/// left sheet selector, right_sheet => right selector, header (default true; the
+/// header row of each becomes the combined header), format. Returns
+/// `{ ok, path, rows }` (the L×R data rows produced).
+fn op_sheet_cross(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let right_path = req_str(&opts, "right")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+
+    let pick = |read: &Value, sel: Option<&Value>| -> Vec<Value> {
+        let sheets = read.get("sheets").and_then(Value::as_array);
+        let sheet = sheets.and_then(|ss| match sel {
+            Some(Value::String(name)) => ss.iter().find(|s| s["name"] == *name),
+            Some(Value::Number(n)) => n.as_u64().and_then(|i| ss.get(i as usize)),
+            _ => ss.first(),
+        });
+        sheet
+            .and_then(|s| s["rows"].as_array())
+            .cloned()
+            .unwrap_or_default()
+    };
+    let lrows = pick(&op_sheet_read(json!({ "path": path }))?, opts.get("sheet"));
+    let rrows = pick(
+        &op_sheet_read(json!({ "path": right_path }))?,
+        opts.get("right_sheet"),
+    );
+    let data_start = |rows: &[Value]| if header && !rows.is_empty() { 1 } else { 0 };
+    let ls = data_start(&lrows);
+    let rs = data_start(&rrows);
+
+    let mut out_rows: Vec<Value> = Vec::new();
+    if header {
+        let mut hdr = lrows
+            .first()
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        hdr.extend(
+            rrows
+                .first()
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+        );
+        out_rows.push(Value::Array(hdr));
+    }
+    let mut n = 0u64;
+    for l in &lrows[ls..] {
+        let lc = l.as_array().cloned().unwrap_or_default();
+        for r in &rrows[rs..] {
+            let mut row = lc.clone();
+            row.extend(r.as_array().cloned().unwrap_or_default());
+            out_rows.push(Value::Array(row));
+            n += 1;
+        }
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Cross", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n }))
+}
+
 /// Fill blank cells in a sheet. opts: path, output (default: in place),
 /// method => "ffill" (default; carry the last non-blank value down) | "bfill"
 /// (carry the next non-blank value up) | "value" (use a constant `value`), by =>
@@ -12518,6 +12587,7 @@ export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_duplicates, op_sheet_duplicates);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_hstack, op_sheet_hstack);
+export!(office__sheet_cross, op_sheet_cross);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_interpolate, op_sheet_interpolate);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);

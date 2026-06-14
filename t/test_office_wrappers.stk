@@ -723,6 +723,17 @@ assert_eq $hsb->[0]{rows}[1][2], 9, "sheet_hstack: right value aligned"
 unlink $hlx
 unlink $hrx
 unlink $hso2
+# sheet_cross: cartesian product
+val $crl = "$dir/$tag-crl.xlsx"
+val $crr = "$dir/$tag-crr.xlsx"
+Office::sheet_write($crl, [{ name => "L", rows => [["size"], ["S"], ["M"]] }])
+Office::sheet_write($crr, [{ name => "R", rows => [["color"], ["red"], ["blue"]] }])
+val $cro = "$dir/$tag-cross-out.xlsx"
+val $crrs = Office::sheet_cross($crl, $crr, $cro)
+assert_eq $crrs->{rows}, 4, "sheet_cross: 2 x 2 = 4 combos"
+unlink $crl
+unlink $crr
+unlink $cro
 # sheet_join: outer join keeps unmatched rows from both sides
 val $jlx = "$dir/$tag-jl.xlsx"
 val $jrx = "$dir/$tag-jr.xlsx"

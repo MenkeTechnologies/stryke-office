@@ -710,6 +710,14 @@ fn Office::sheet_hstack ($path, $right, $output, %opts) {
         office__sheet_hstack(to_json({ path => $path, right => $right, output => $output, sheet => $opts{sheet}, right_sheet => $opts{right_sheet}, format => $opts{format} })))
 }
 
+## Cartesian product (cross join) of two sheets (pandas merge how='cross').
+## $right is the second spreadsheet path. opts: sheet (left selector), right_sheet,
+## header, format. Returns { ok, path, rows }.
+fn Office::sheet_cross ($path, $right, $output, %opts) {
+    Office::_decode("sheet_cross",
+        office__sheet_cross(to_json({ path => $path, right => $right, output => $output, sheet => $opts{sheet}, right_sheet => $opts{right_sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Validate a sheet's cells against per-column rules. $rules is an arrayref of
 ## { column => name/index, type => "number"|"int"|"nonempty", min, max,
 ## allowed => [values] }. opts: sheet, header => 0 if first row is data. Returns
