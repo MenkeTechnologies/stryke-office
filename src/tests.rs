@@ -3360,6 +3360,34 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn slides_reorder_and_subset() {
+    let deck = tmp("reorder.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{deck}","slides":[{{"title":"A","body":["a"]}},{{"title":"B","body":["b"]}},{{"title":"C","body":["c"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // reorder to [3,1] — drops slide 2, swaps order
+    let out = tmp("reorder_out.pptx");
+    let r = call(
+        office__slides_reorder,
+        &format!(r#"{{"path":"{deck}","order":[3,1],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["slides"], 2, "two slides kept: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read 2 slides: {rd}");
+    assert_eq!(slides[0]["text"][0], "C", "first is C: {rd}");
+    assert_eq!(slides[1]["text"][0], "A", "second is A: {rd}");
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn slides_split_one_file_per_slide() {
     let deck = tmp("splitdeck.pptx");
     let w = call(

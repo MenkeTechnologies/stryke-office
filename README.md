@@ -253,6 +253,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_to_sheet($path, $output, %opts)` | `{ok, path, slides}` | extract a deck into a spreadsheet (number/title/text per slide); `sep` opt |
 | `Office::md_to_slides($output, %opts)` | `{ok, path, slides}` | parse a Markdown outline into a deck (headings→slides, bullets→body); `markdown`/`path` opts |
 | `Office::slides_split($path, $dir, %opts)` | `{count, files}` | split a deck into one file per slide; `prefix`/`format` opts |
+| `Office::slides_reorder($path, $order, %opts)` | `{ok, path, slides}` | reorder/subset slides by a 1-based order list (deck analogue of `pdf_reorder`) |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}`; opts `header`/`footer`/`page_numbers`/`page_size` |

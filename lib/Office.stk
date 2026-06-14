@@ -985,6 +985,13 @@ fn Office::slides_merge ($inputs, $output, %opts) {
         office__slides_merge(to_json({ inputs => $inputs, output => $output, format => $opts{format} })))
 }
 
+## Reorder/subset a deck's slides by a 1-based $order list (deck analogue of
+## pdf_reorder). opts: output (default in place), format. Returns { ok, path, slides }.
+fn Office::slides_reorder ($path, $order, %opts) {
+    Office::_decode("slides_reorder",
+        office__slides_reorder(to_json({ path => $path, order => $order, output => $opts{output}, format => $opts{format} })))
+}
+
 fn Office::slides_split ($path, $dir, %opts) {
     Office::_decode("slides_split",
         office__slides_split(to_json({ path => $path, dir => $dir, format => $opts{format}, prefix => $opts{prefix} })))
