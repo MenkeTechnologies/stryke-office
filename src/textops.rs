@@ -1081,3 +1081,33 @@ fn op_text_shuf(opts: Value) -> Result<Value> {
     std::fs::write(&output, joined)?;
     Ok(json!({ "ok": true, "path": output, "lines": lines.len() }))
 }
+
+/// Base64-encode or -decode a file (RFC 4648). opts: path => input file
+/// (required), decode => true to decode base64 back to bytes (default false:
+/// encode), output => destination file. When encoding, the base64 text is both
+/// returned in `base64` and written to `output` if given. When decoding,
+/// `output` is required (raw bytes are binary). Returns `{ ok, bytes, base64?,
+/// path? }` (`bytes` is the decoded/source byte length). Reuses the shared
+/// base64 codec.
+fn op_text_base64(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let decode = opts.get("decode").and_then(flag_of).unwrap_or(false);
+    let output = opts.get("output").and_then(Value::as_str);
+
+    if decode {
+        let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+        let bytes = base64_decode(text.trim())?;
+        let out = output.ok_or_else(|| anyhow!("decode requires output (binary bytes)"))?;
+        std::fs::write(out, &bytes)?;
+        Ok(json!({ "ok": true, "bytes": bytes.len(), "path": out }))
+    } else {
+        let bytes = std::fs::read(path)?;
+        let encoded = base64_encode(&bytes);
+        let mut out = json!({ "ok": true, "bytes": bytes.len(), "base64": encoded });
+        if let Some(o) = output {
+            std::fs::write(o, out["base64"].as_str().unwrap())?;
+            out["path"] = json!(o);
+        }
+        Ok(out)
+    }
+}

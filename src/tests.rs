@@ -13608,6 +13608,45 @@ fn text_shuf_reproducible() {
 }
 
 #[test]
+fn text_base64_roundtrip() {
+    let path = tmp("b64.bin");
+    let content = "Hello, World! \u{2014} café \u{1F600}";
+    std::fs::write(&path, content).unwrap();
+
+    // encode -> returns base64 + writes it
+    let enc_out = tmp("b64.txt");
+    let e = call(
+        office__text_base64,
+        &format!(r#"{{"path":"{path}","output":"{enc_out}"}}"#),
+    );
+    assert_eq!(e["ok"], true, "encode: {e}");
+    let b64 = e["base64"].as_str().unwrap();
+    assert!(!b64.is_empty(), "base64 produced: {e}");
+    assert_eq!(
+        std::fs::read_to_string(&enc_out).unwrap(),
+        b64,
+        "written matches returned"
+    );
+
+    // decode -> original bytes recovered
+    let dec_out = tmp("b64_decoded.bin");
+    let d = call(
+        office__text_base64,
+        &format!(r#"{{"path":"{enc_out}","decode":true,"output":"{dec_out}"}}"#),
+    );
+    assert_eq!(d["ok"], true, "decode: {d}");
+    assert_eq!(
+        std::fs::read_to_string(&dec_out).unwrap(),
+        content,
+        "roundtrip preserves content"
+    );
+
+    for f in [&path, &enc_out, &dec_out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
