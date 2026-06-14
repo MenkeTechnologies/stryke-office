@@ -99,6 +99,7 @@ exports = [
     "office__sheet_duplicates",
     "office__sheet_append",
     "office__sheet_hstack",
+    "office__sheet_cross",
     "office__sheet_fill",
     "office__sheet_interpolate",
     "office__sheet_drop_empty",

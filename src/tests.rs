@@ -3183,6 +3183,41 @@ fn sheet_hstack_side_by_side() {
 }
 
 #[test]
+fn sheet_cross_cartesian() {
+    let left = tmp("cl.xlsx");
+    let right = tmp("cr.xlsx");
+    // sizes (2) × colors (3) -> 6 combinations
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{left}","sheets":[{{"name":"L","rows":[["size"],["S"],["M"]]}}]}}"#),
+    );
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{right}","sheets":[{{"name":"R","rows":[["color"],["red"],["green"],["blue"]]}}]}}"#
+        ),
+    );
+
+    let out = tmp("cross_out.xlsx");
+    let r = call(
+        office__sheet_cross,
+        &format!(r#"{{"path":"{left}","right":"{right}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["rows"], 6, "2 x 3 = 6 combinations: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 7, "header + 6 rows: {rd}");
+    assert_eq!(rows[0][0], "size", "left header: {rd}");
+    assert_eq!(rows[0][1], "color", "right header joined: {rd}");
+    assert_eq!(rows[1][0], "S", "first combo size: {rd}");
+    assert_eq!(rows[1][1], "red", "first combo color: {rd}");
+
+    std::fs::remove_file(&left).ok();
+    std::fs::remove_file(&right).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_dedupe_rows() {
     let path = tmp("dedup.xlsx");
     let w = call(
