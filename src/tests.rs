@@ -10758,6 +10758,16 @@ fn text_grep_matches_lines() {
     );
     assert_eq!(inv["count"], 3, "three non-matching lines: {inv}");
 
+    // regex mode: lines starting with f or g
+    let rx = call(
+        office__text_grep,
+        &format!(r#"{{"path":"{path}","query":"^[fg]","regex":true}}"#),
+    );
+    assert_eq!(
+        rx["count"], 2,
+        "regex ^[fg] matches gamma and foo bar: {rx}"
+    );
+
     std::fs::remove_file(&path).ok();
 }
 

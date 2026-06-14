@@ -422,7 +422,8 @@ fn op_text_extract(opts: Value) -> Result<Value> {
 }
 
 /// Grep matching lines from a text file (the line-oriented complement of
-/// `doc_find`). opts: path, query (required, literal substring), ignore_case
+/// `doc_find`). opts: path, query (required; a literal substring, or a regular
+/// expression when `regex => true`), regex (default false), ignore_case
 /// (default false), invert => return lines that do NOT match (default false),
 /// max => cap the number of matches. Returns `{ count, matches: [{ line, text }] }`
 /// with 1-based line numbers.
@@ -431,7 +432,21 @@ fn op_text_grep(opts: Value) -> Result<Value> {
     let query = req_str(&opts, "query")?;
     let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
     let invert = opts.get("invert").and_then(flag_of).unwrap_or(false);
+    let regex_mode = opts.get("regex").and_then(flag_of).unwrap_or(false);
     let max = opts.get("max").and_then(Value::as_u64).map(|n| n as usize);
+
+    // With `regex => 1`, the query is a regular expression (compiled once);
+    // otherwise it is a literal substring.
+    let re = if regex_mode {
+        Some(
+            regex::RegexBuilder::new(query)
+                .case_insensitive(ignore_case)
+                .build()
+                .map_err(|e| anyhow!("invalid regex: {e}"))?,
+        )
+    } else {
+        None
+    };
 
     let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
     let needle = if ignore_case {
@@ -441,12 +456,17 @@ fn op_text_grep(opts: Value) -> Result<Value> {
     };
     let mut matches = Vec::new();
     for (i, line) in text.lines().enumerate() {
-        let hay = if ignore_case {
-            line.to_lowercase()
-        } else {
-            line.to_string()
+        let hit = match &re {
+            Some(r) => r.is_match(line),
+            None => {
+                let hay = if ignore_case {
+                    line.to_lowercase()
+                } else {
+                    line.to_string()
+                };
+                hay.contains(&needle)
+            }
         };
-        let hit = hay.contains(&needle);
         if hit != invert {
             matches.push(json!({ "line": i + 1, "text": line }));
             if max.is_some_and(|m| matches.len() >= m) {
