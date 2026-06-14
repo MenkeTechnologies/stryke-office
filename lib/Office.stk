@@ -190,6 +190,13 @@ fn Office::sheet_cumsum ($path, $column, $output, %opts) {
         office__sheet_cumsum(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a percent-of-total column (value / column sum * 100). opts: into,
+## decimals (round), sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_pct ($path, $column, $output, %opts) {
+    Office::_decode("sheet_pct",
+        office__sheet_pct(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

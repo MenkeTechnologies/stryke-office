@@ -595,6 +595,36 @@ fn sheet_cumsum_running_total() {
 }
 
 #[test]
+fn sheet_pct_of_total() {
+    let path = tmp("pct.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["amt"],[100],[300]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_pct,
+        &format!(r#"{{"path":"{path}","column":"amt","output":"{path}","decimals":1}}"#),
+    );
+    assert_eq!(r["column"], "amt_pct", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "amt_pct", "header appended: {rd}");
+    // 100/400 = 25%, 300/400 = 75%
+    assert!(
+        (rows[1][1].as_f64().unwrap() - 25.0).abs() < 1e-9,
+        "pct 25: {rd}"
+    );
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 75.0).abs() < 1e-9,
+        "pct 75: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

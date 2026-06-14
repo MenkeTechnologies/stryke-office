@@ -98,8 +98,14 @@ val $cso = "$dir/$tag-cumsum-out.xlsx"
 Office::sheet_cumsum($csx, "amt", $cso)
 val $csr = Office::sheet_get_cell($cso, "B3")
 assert_eq $csr->{value}, 30, "sheet_cumsum: running total"
+# percent-of-total
+val $pco = "$dir/$tag-pct-out.xlsx"
+Office::sheet_pct($csx, "amt", $pco, decimals => 1)
+val $pcr = Office::sheet_get_cell($pco, "B2")
+assert_ok ($pcr->{value} > 33 && $pcr->{value} < 34), "sheet_pct: 10 of 30 ~= 33.3%"
 unlink $csx
 unlink $cso
+unlink $pco
 
 # ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"
