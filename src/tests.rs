@@ -10655,6 +10655,49 @@ fn text_replace_plain_file() {
 }
 
 #[test]
+fn text_sed_regex_replace() {
+    let path = tmp("sed.txt");
+    std::fs::write(&path, "2026-06-14 log\n2025-01-02 old\n").unwrap();
+
+    // reformat YYYY-MM-DD -> MM/DD/YYYY via backreferences, global
+    let out = tmp("sed_out.txt");
+    let r = call(
+        office__text_sed,
+        &serde_json::json!({
+            "path": path, "output": out,
+            "pattern": r"(\d{4})-(\d{2})-(\d{2})", "replacement": "$2/$3/$1"
+        })
+        .to_string(),
+    );
+    assert_eq!(r["replaced"], 2, "two dates rewritten: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        t.contains("06/14/2026 log"),
+        "first date reformatted: {t:?}"
+    );
+    assert!(
+        t.contains("01/02/2025 old"),
+        "second date reformatted: {t:?}"
+    );
+
+    // non-global: only the first match
+    let out1 = tmp("sed_one.txt");
+    let r1 = call(
+        office__text_sed,
+        &serde_json::json!({
+            "path": path, "output": out1,
+            "pattern": r"\d{4}", "replacement": "YEAR", "global": false
+        })
+        .to_string(),
+    );
+    assert_eq!(r1["replaced"], 1, "non-global replaces one: {r1}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&out1).ok();
+}
+
+#[test]
 fn text_grep_matches_lines() {
     let path = tmp("grep.txt");
     std::fs::write(&path, "alpha\nbeta FOO\ngamma\nfoo bar\n").unwrap();
