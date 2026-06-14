@@ -257,6 +257,34 @@ fn sheet_corr_pearson_matrix() {
 }
 
 #[test]
+fn sheet_to_md_github_table() {
+    let path = tmp("tomd.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[
+                ["Item","Count"],
+                ["apples",5],
+                ["a|b","x"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_to_md, &format!(r#"{{"path":"{path}"}}"#));
+    let md = r["markdown"].as_str().unwrap();
+    let lines: Vec<&str> = md.lines().collect();
+    assert_eq!(lines[0], "| Item | Count |", "header row: {md}");
+    assert_eq!(lines[1], "| --- | --- |", "separator: {md}");
+    assert_eq!(lines[2], "| apples | 5 |", "integer cell, no .0: {md}");
+    assert_eq!(lines[3], r"| a\|b | x |", "pipe escaped: {md}");
+    assert_eq!(r["rows"], 3, "row count: {r}");
+    assert_eq!(r["cols"], 2, "col count: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

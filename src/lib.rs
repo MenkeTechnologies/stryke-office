@@ -1447,6 +1447,92 @@ fn op_sheet_corr(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "columns": names, "matrix": matrix }))
 }
 
+/// Escape a cell for a GitHub-flavored Markdown table: literal `|` is escaped
+/// and newlines collapse to spaces (a table cell cannot span lines).
+fn md_cell_escape(s: &str) -> String {
+    s.replace('|', "\\|")
+        .replace(['\n', '\r'], " ")
+        .trim()
+        .to_string()
+}
+
+/// Render a spreadsheet as a GitHub-flavored Markdown table. opts: path, output
+/// => write to a `.md` file (omit to return the text), sheet => selector, header
+/// => first row is the header (default true; when false, generic `Col1..` headers
+/// are synthesized). Whole-number floats render without a trailing `.0`. Returns
+/// `{ ok, rows, cols, markdown }` (plus `path` when written).
+fn op_sheet_to_md(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    if ncols == 0 {
+        return Err(anyhow!("sheet has no columns"));
+    }
+
+    let cell_text = |c: &Value| -> String {
+        let raw = match c.as_f64() {
+            Some(x) if c.is_number() && x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+            _ => cell_to_string(c),
+        };
+        md_cell_escape(&raw)
+    };
+    let fmt_row = |row: &Value| -> String {
+        let cells: Vec<String> = (0..ncols)
+            .map(|c| {
+                let v = row
+                    .as_array()
+                    .and_then(|a| a.get(c))
+                    .unwrap_or(&Value::Null);
+                cell_text(v)
+            })
+            .collect();
+        format!("| {} |", cells.join(" | "))
+    };
+
+    let sep = format!("| {} |", vec!["---"; ncols].join(" | "));
+    let mut lines: Vec<String> = Vec::new();
+    let body: &[Value] = if header && !rows.is_empty() {
+        lines.push(fmt_row(&rows[0]));
+        lines.push(sep);
+        &rows[1..]
+    } else {
+        let hdr: Vec<String> = (1..=ncols).map(|i| format!("Col{i}")).collect();
+        lines.push(format!("| {} |", hdr.join(" | ")));
+        lines.push(sep);
+        &rows[..]
+    };
+    for row in body {
+        lines.push(fmt_row(row));
+    }
+    let markdown = format!("{}\n", lines.join("\n"));
+
+    let mut out = json!({ "ok": true, "rows": rows.len(), "cols": ncols, "markdown": markdown });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, &markdown)?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -4423,6 +4509,7 @@ export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_corr, op_sheet_corr);
+export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

@@ -102,6 +102,14 @@ fn Office::sheet_corr ($path, %opts) {
         office__sheet_corr(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Render a spreadsheet as a GitHub-flavored Markdown table. opts: output (write
+## to a .md file; omit to return the text), sheet, header. Returns { ok, rows,
+## cols, markdown, path? }.
+fn Office::sheet_to_md ($path, %opts) {
+    Office::_decode("sheet_to_md",
+        office__sheet_to_md(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
