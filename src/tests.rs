@@ -2152,6 +2152,55 @@ fn sheet_coalesce_first_nonblank() {
 }
 
 #[test]
+fn sheet_recode_value_map() {
+    let path = tmp("recode.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["flag"],["Y"],["N"],["Y"],["?"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // recode in place with a default for the unmapped "?"
+    let out = tmp("recode_out.xlsx");
+    let r = call(
+        office__sheet_recode,
+        &serde_json::json!({
+            "path": path, "output": out, "column": "flag",
+            "map": { "Y": "Yes", "N": "No" }, "default": "Unknown"
+        })
+        .to_string(),
+    );
+    assert_eq!(r["recoded"], 3, "three mapped cells: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "Yes", "Y -> Yes: {rd}");
+    assert_eq!(rows[2][0], "No", "N -> No: {rd}");
+    assert_eq!(rows[4][0], "Unknown", "? -> default: {rd}");
+
+    // into a new column, no default → unmapped kept as-is
+    let outc = tmp("recode_into.xlsx");
+    call(
+        office__sheet_recode,
+        &serde_json::json!({
+            "path": path, "output": outc, "column": "flag",
+            "map": { "Y": "Yes" }, "into": "label"
+        })
+        .to_string(),
+    );
+    let rdc = call(office__sheet_read, &format!(r#"{{"path":"{outc}"}}"#));
+    let rowsc = rdc["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rowsc[0][1], "label", "new column header: {rdc}");
+    assert_eq!(rowsc[1][1], "Yes", "mapped in new col: {rdc}");
+    assert_eq!(rowsc[2][1], "N", "unmapped kept (no default): {rdc}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outc).ok();
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(

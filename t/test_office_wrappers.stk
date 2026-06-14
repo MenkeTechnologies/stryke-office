@@ -445,6 +445,17 @@ assert_eq $cob->[0]{rows}[1][2], "alt1", "sheet_coalesce: row1 fallback"
 assert_eq $cob->[0]{rows}[2][2], "main2", "sheet_coalesce: row2 primary"
 unlink $cox
 unlink $coo
+# sheet_recode: remap a column's values via a dict
+val $rcx2 = "$dir/$tag-recode.xlsx"
+Office::sheet_write($rcx2, [{ name => "D", rows => [["flag"], ["Y"], ["N"], ["?"]] }])
+val $rco2 = "$dir/$tag-recode-out.xlsx"
+val $rcr2 = Office::sheet_recode($rcx2, $rco2, "flag", { Y => "Yes", N => "No" }, default => "Unknown")
+assert_eq $rcr2->{recoded}, 2, "sheet_recode: two mapped cells"
+val $rcb2 = Office::sheet_read($rco2)
+assert_eq $rcb2->[0]{rows}[1][0], "Yes", "sheet_recode: Y -> Yes"
+assert_eq $rcb2->[0]{rows}[3][0], "Unknown", "sheet_recode: ? -> default"
+unlink $rcx2
+unlink $rco2
 # sheet_duplicates: report duplicate rows by key
 val $dux = "$dir/$tag-dups.xlsx"
 Office::sheet_write($dux, [{ name => "D", rows => [["name", "qty"], ["a", 1], ["b", 2], ["a", 1], ["a", 3]] }])

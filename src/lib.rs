@@ -8178,6 +8178,89 @@ fn op_sheet_coalesce(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into, "filled": filled }))
 }
 
+/// Recode a column's values via a lookup map (pandas `Series.map` / SQL CASE on
+/// equality). Distinct from `sheet_replace` (substring rewrite) and
+/// `sheet_lookup` (cross-table join). opts: path, output, column => name/index
+/// (required), map => `{ old: new }` object (required; keys matched against the
+/// cell's string form), default => value for unmapped cells (omit to keep the
+/// original), into => write to a new column (default: recode in place), sheet,
+/// header, format. Returns `{ ok, path, recoded }` (count of cells changed).
+fn op_sheet_recode(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let map = opts
+        .get("map")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("missing map (expected an object of old => new)"))?
+        .clone();
+    let default = opts.get("default").cloned();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut recoded = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).cloned().unwrap_or(Value::Null);
+            // Map by the cell's string form; fall back to default, else original.
+            let mapped = match map.get(&cell_to_string(&src)) {
+                Some(v) => {
+                    recoded += 1;
+                    v.clone()
+                }
+                None => default.clone().unwrap_or_else(|| src.clone()),
+            };
+            match &into {
+                Some(_) => cells.push(mapped),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = mapped;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = mapped;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "recoded": recoded }))
+}
+
 /// Top-N rows by a column (sort then take N). opts: path, output, by => column
 /// (required), n => row count (default 10), ascending => bool (default false =
 /// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
@@ -10145,6 +10228,7 @@ export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_coalesce, op_sheet_coalesce);
+export!(office__sheet_recode, op_sheet_recode);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
