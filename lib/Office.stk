@@ -231,6 +231,15 @@ fn Office::sheet_diff ($left, $right, %opts) {
         office__sheet_diff(to_json({ left => $left, right => $right, sheet => $opts{sheet}, left_sheet => $opts{left_sheet}, right_sheet => $opts{right_sheet} })))
 }
 
+## Split a sheet's rows into fixed-size chunks of $size data rows, written to
+## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
+## each chunk, sheet, format => output extension (default: source's), prefix.
+## Returns { count, files }.
+fn Office::sheet_chunk ($path, $size, $dir, %opts) {
+    Office::_decode("sheet_chunk",
+        office__sheet_chunk(to_json({ path => $path, size => $size, dir => $dir, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format}, prefix => $opts{prefix} })))
+}
+
 ## Explode a multi-sheet workbook into one file per sheet, written to $dir as
 ## {prefix}{sheet}.{ext}. opts: format => output extension (default: the
 ## source's), prefix => filename prefix. Returns { count, files }.

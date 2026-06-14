@@ -2488,6 +2488,61 @@ fn op_sheet_split(opts: Value) -> Result<Value> {
     Ok(json!({ "count": files.len(), "files": files }))
 }
 
+/// Split a sheet's rows into fixed-size chunks across files. opts: path,
+/// dir => output directory, size => data rows per chunk (required, > 0),
+/// header => repeat the first row in each chunk (default true), sheet,
+/// format => output extension (default: source's), prefix => filename stem
+/// (default: source's). Files are `{dir}/{prefix}-{n}.{ext}`. Returns
+/// `{ count, files }`.
+fn op_sheet_chunk(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let size = opts
+        .get("size")
+        .and_then(Value::as_u64)
+        .filter(|&n| n > 0)
+        .ok_or_else(|| anyhow!("missing size (rows per chunk, > 0)"))? as usize;
+    let ext = opts
+        .get("format")
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| ext_of(path));
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("chunk")
+                .to_string()
+        });
+    let repeat_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+
+    let rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let (header, data) = if repeat_header && !rows.is_empty() {
+        (Some(rows[0].clone()), &rows[1..])
+    } else {
+        (None, &rows[..])
+    };
+
+    let mut files = Vec::new();
+    for (i, chunk) in data.chunks(size).enumerate() {
+        let mut out_rows: Vec<Value> = Vec::with_capacity(chunk.len() + 1);
+        if let Some(h) = &header {
+            out_rows.push(h.clone());
+        }
+        out_rows.extend(chunk.iter().cloned());
+        let out = format!("{dir}/{prefix}-{}.{ext}", i + 1);
+        op_sheet_write(
+            json!({ "path": out, "sheets": [{ "name": "Sheet1", "rows": out_rows }], "format": ext }),
+        )?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
+
 /// Read one sheet's rows from a file, selected by name/index (default first).
 fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3499,6 +3554,7 @@ export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
+export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);
