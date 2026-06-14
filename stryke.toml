@@ -182,6 +182,7 @@ exports = [
     "office__doc_blocks",
     "office__doc_outline",
     "office__doc_links",
+    "office__doc_comments",
     "office__doc_stats",
     "office__doc_merge",
     "office__doc_diff",

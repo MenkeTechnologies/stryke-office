@@ -663,6 +663,12 @@ assert_eq $dfr->{added}, 2, "doc_diff: two added"
 assert_eq $dfr->{removed_paragraphs}[0], "beta", "doc_diff: removed text"
 unlink $dfa
 unlink $dfb
+# doc_comments: a docx written without comments returns an empty list
+val $dcx = "$dir/$tag-comments.docx"
+Office::doc_write($dcx, [{ kind => "para", text => "body" }])
+val $dcr = Office::doc_comments($dcx)
+assert_eq $dcr->{count}, 0, "doc_comments: no comments in a plain docx"
+unlink $dcx
 
 # ── lenient boolean flags: a false-default flag passed as 1 must take effect ──
 # (regression for stryke 1/0 booleans vs JSON true/false)
