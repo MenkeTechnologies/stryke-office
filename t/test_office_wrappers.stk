@@ -1314,6 +1314,15 @@ assert_eq $flr->{value}, 3, "tail => 1 honored (lenient bool): last row kept"
 unlink $flx
 unlink $flo
 
+# ── sheet_moments: skewness + kurtosis of a column ──────────────────
+val $mmx = "$dir/$tag-moments.xlsx"
+Office::sheet_write($mmx, [{ name => "M", rows => [["v"], [1], [2], [3], [4], [5]] }])
+val $mmr = Office::sheet_moments($mmx, "v", decimals => 6)
+assert_eq $mmr->{mean}, 3, "sheet_moments: mean 3"
+assert_eq $mmr->{variance}, 2.5, "sheet_moments: sample variance 2.5"
+assert_eq $mmr->{skewness}, 0, "sheet_moments: symmetric skew 0"
+unlink $mmx
+
 # ── sheet_corr: Pearson + Spearman correlation matrices ─────────────
 val $crx = "$dir/$tag-corr.xlsx"
 Office::sheet_write($crx, [{ name => "C", rows => [["x", "y"], [1, 1], [2, 8], [3, 27], [4, 64], [5, 125]] }])

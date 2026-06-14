@@ -151,6 +151,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_agg($path, $column, %opts)` | `{column, agg, value, count}` | single-column scalar aggregate (`agg` sum/mean/min/max/count/median) |
 | `Office::sheet_sparkline($path, $column, %opts)` | `{column, sparkline, count, min, max}` | render a numeric column as a Unicode block sparkline string (▁▂▃▄▅▆▇█) |
 | `Office::sheet_argmax($path, $column, %opts)` | `{column, row, value, label?}` | locate the row of a column's max/min (pandas `idxmax`/`idxmin`); `min`/`label` opts |
+| `Office::sheet_moments($path, $column, %opts)` | `{ok, n, mean, variance, std, skewness, kurtosis}` | distribution moments of a column (skewness g1, excess kurtosis g2); complements `sheet_describe` |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | correlation matrix between numeric columns (pandas `df.corr()`); `method` pearson (default), spearman (rank), or kendall (tau-b) |
 | `Office::sheet_regress($path, $x, $y, %opts)` | `{ok, slope, intercept, r2, n, path?}` | simple OLS regression `lm(y ~ x)`; `output` appends predicted/residual columns, `decimals` rounds coefficients |
 | `Office::sheet_ttest($path, $a, $b, %opts)` | `{ok, t, df, p, mean_a, mean_b, n_a, n_b}` | Welch's two-sample t-test between columns; two-sided Student-t p-value; `decimals` opt |

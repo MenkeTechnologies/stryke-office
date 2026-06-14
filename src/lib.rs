@@ -1712,6 +1712,81 @@ fn op_sheet_count(opts: Value) -> Result<Value> {
 /// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
 /// header (default true). Linear interpolation (pandas default). Returns
 /// `{ column, q, value, count }` (value is null when the column has no numbers).
+/// Distribution shape moments of one numeric column — mean, sample variance and
+/// std, plus skewness (Fisher–Pearson g1) and excess kurtosis (g2). Complements
+/// `sheet_describe` (which gives the quartile five-number summary). opts: path,
+/// column => name/index (required), sheet, header (default true), decimals =>
+/// round. Skewness/kurtosis use population central moments; both are null when
+/// the column has zero spread. Returns `{ ok, n, mean, variance, std, skewness,
+/// kurtosis }`.
+fn op_sheet_moments(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let xs: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let n = xs.len();
+    if n < 2 {
+        return Err(anyhow!("need at least two numeric values"));
+    }
+    let mean = xs.iter().sum::<f64>() / n as f64;
+    let nf = n as f64;
+    let m2 = xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / nf;
+    let m3 = xs.iter().map(|x| (x - mean).powi(3)).sum::<f64>() / nf;
+    let m4 = xs.iter().map(|x| (x - mean).powi(4)).sum::<f64>() / nf;
+    let variance = xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (nf - 1.0);
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    let (skew, kurt) = if m2 > 0.0 {
+        (
+            json!(round(m3 / m2.powf(1.5))),
+            json!(round(m4 / (m2 * m2) - 3.0)),
+        )
+    } else {
+        (Value::Null, Value::Null)
+    };
+    Ok(json!({
+        "ok": true,
+        "n": n,
+        "mean": round(mean),
+        "variance": round(variance),
+        "std": round(variance.sqrt()),
+        "skewness": skew,
+        "kurtosis": kurt,
+    }))
+}
+
 fn op_sheet_quantile(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let q = opts
@@ -14215,6 +14290,7 @@ export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
+export!(office__sheet_moments, op_sheet_moments);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);
 export!(office__sheet_argmax, op_sheet_argmax);

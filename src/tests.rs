@@ -396,6 +396,54 @@ fn sheet_quantile_arbitrary_percentile() {
 }
 
 #[test]
+fn sheet_moments_skew_kurtosis() {
+    let path = tmp("moments.xlsx");
+    // symmetric data -> skewness ~ 0
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"M","rows":[["v"],[1],[2],[3],[4],[5]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_moments,
+        &format!(r#"{{"path":"{path}","column":"v","decimals":6}}"#),
+    );
+    assert_eq!(s["n"].as_u64().unwrap(), 5, "n=5: {s}");
+    assert_eq!(s["mean"].as_f64().unwrap(), 3.0, "mean 3: {s}");
+    assert_eq!(
+        s["variance"].as_f64().unwrap(),
+        2.5,
+        "sample variance 2.5: {s}"
+    );
+    assert!(
+        s["skewness"].as_f64().unwrap().abs() < 1e-6,
+        "symmetric skew ~0: {s}"
+    );
+
+    // right-skewed data -> positive skewness
+    let path2 = tmp("moments_skew.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path2}","sheets":[{{"name":"M","rows":[["v"],[1],[1],[1],[2],[10]]}}]}}"#
+        ),
+    );
+    let s2 = call(
+        office__sheet_moments,
+        &format!(r#"{{"path":"{path2}","column":"v"}}"#),
+    );
+    assert!(
+        s2["skewness"].as_f64().unwrap() > 0.5,
+        "right-skewed positive: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_agg_scalar() {
     let path = tmp("agg.xlsx");
     let w = call(
