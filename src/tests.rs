@@ -3988,6 +3988,44 @@ fn sheet_resample_by_month() {
 }
 
 #[test]
+fn sheet_date_part_extract() {
+    let path = tmp("datepart.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["d"],["2026-06-14"],["2025-12-01"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // month into a new column
+    let out = tmp("datepart_out.xlsx");
+    let r = call(
+        office__sheet_date_part,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"d","part":"month","into":"mo"}}"#),
+    );
+    assert_eq!(r["column"], "mo", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "mo", "header appended: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 6.0, "June -> 6: {rd}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 12.0, "December -> 12: {rd}");
+
+    // ym part is text YYYY-MM
+    let outy = tmp("datepart_ym.xlsx");
+    call(
+        office__sheet_date_part,
+        &format!(r#"{{"path":"{path}","output":"{outy}","column":"d","part":"ym"}}"#),
+    );
+    let rdy = call(office__sheet_read, &format!(r#"{{"path":"{outy}"}}"#));
+    assert_eq!(rdy["sheets"][0]["rows"][1][1], "2026-06", "ym slice: {rdy}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outy).ok();
+}
+
+#[test]
 fn sheet_freq_value_counts() {
     let path = tmp("freq.xlsx");
     // west x3, east x2, north x1; one blank (skipped)
