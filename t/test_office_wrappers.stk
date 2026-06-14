@@ -185,6 +185,18 @@ val $sro = "$dir/$tag-sreorder.pptx"
 val $srr = Office::slides_reorder($pptx, [1], output => $sro)
 assert_eq $srr->{slides}, 1, "slides_reorder: slide count"
 unlink $sro
+# slides_delete: drop slide 2 of a 3-slide deck
+val $sdx = "$dir/$tag-sdel.pptx"
+Office::slides_write($sdx, [{ title => "A", body => ["a"] }, { title => "B", body => ["b"] }, { title => "C", body => ["c"] }])
+val $sdo = "$dir/$tag-sdel-out.pptx"
+val $sdr = Office::slides_delete($sdx, [2], output => $sdo)
+assert_eq $sdr->{removed}, 1, "slides_delete: one removed"
+assert_eq $sdr->{slides}, 2, "slides_delete: two remain"
+val $sdread = Office::slides_read($sdo)
+assert_eq $sdread->[0]{text}[0], "A", "slides_delete: slide A kept"
+assert_eq $sdread->[1]{text}[0], "C", "slides_delete: slide C kept"
+unlink $sdx
+unlink $sdo
 val $s2sh = "$dir/$tag-s2sheet.xlsx"
 Office::slides_to_sheet($pptx, $s2sh)
 val $s2shr = Office::sheet_get_cell($s2sh, "B2")

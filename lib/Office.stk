@@ -1079,6 +1079,14 @@ fn Office::slides_reorder ($path, $order, %opts) {
         office__slides_reorder(to_json({ path => $path, order => $order, output => $opts{output}, format => $opts{format} })))
 }
 
+## Delete slides by 1-based number (number or array) — deck analogue of
+## pdf_delete. opts: output (default in place), format. Returns
+## { ok, path, removed, slides }.
+fn Office::slides_delete ($path, $slides, %opts) {
+    Office::_decode("slides_delete",
+        office__slides_delete(to_json({ path => $path, slides => $slides, output => $opts{output}, format => $opts{format} })))
+}
+
 fn Office::slides_split ($path, $dir, %opts) {
     Office::_decode("slides_split",
         office__slides_split(to_json({ path => $path, dir => $dir, format => $opts{format}, prefix => $opts{prefix} })))
