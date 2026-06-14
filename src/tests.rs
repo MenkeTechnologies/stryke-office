@@ -13647,6 +13647,29 @@ fn text_base64_roundtrip() {
 }
 
 #[test]
+fn text_hash_checksums() {
+    let path = tmp("hash.txt");
+    // canonical CRC-32 check value for "123456789" is 0xCBF43926
+    std::fs::write(&path, "123456789").unwrap();
+    let h = call(office__text_hash, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(h["bytes"].as_u64().unwrap(), 9, "byte count: {h}");
+    assert_eq!(h["crc32"], "cbf43926", "canonical CRC-32 check value: {h}");
+    // FNV-1a 64 is 16 hex chars
+    assert_eq!(
+        h["fnv1a64"].as_str().unwrap().len(),
+        16,
+        "fnv hex width: {h}"
+    );
+
+    // different content -> different crc
+    std::fs::write(&path, "123456780").unwrap();
+    let h2 = call(office__text_hash, &format!(r#"{{"path":"{path}"}}"#));
+    assert_ne!(h2["crc32"], h["crc32"], "crc changes with content");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

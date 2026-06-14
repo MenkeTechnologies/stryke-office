@@ -1111,3 +1111,36 @@ fn op_text_base64(opts: Value) -> Result<Value> {
         Ok(out)
     }
 }
+
+/// Non-cryptographic checksums of a file's bytes — CRC-32 (IEEE 802.3) and
+/// FNV-1a 64-bit, both dependency-free, for fast integrity checks and dedup.
+/// opts: path => input file (required). Returns `{ ok, bytes, crc32, fnv1a64 }`
+/// where the two hashes are lowercase hex strings.
+fn op_text_hash(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let data = std::fs::read(path)?;
+
+    // CRC-32, reflected, polynomial 0xEDB88320.
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in &data {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+        }
+    }
+    let crc = !crc;
+
+    // FNV-1a 64-bit.
+    let mut fnv = 0xcbf2_9ce4_8422_2325u64;
+    for &b in &data {
+        fnv ^= b as u64;
+        fnv = fnv.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+
+    Ok(json!({
+        "ok": true,
+        "bytes": data.len(),
+        "crc32": format!("{crc:08x}"),
+        "fnv1a64": format!("{fnv:016x}"),
+    }))
+}

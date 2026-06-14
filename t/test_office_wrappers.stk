@@ -123,11 +123,18 @@ assert_ok ($b64e->{base64} =~ /^[A-Za-z0-9+\/=]+$/), "text_base64: encoded alpha
 val $b64dec = "$dir/$tag-b64-dec.txt"
 Office::text_base64($b64enc, decode => 1, output => $b64dec)
 assert_eq slurp($b64dec), "Hello base64", "text_base64: roundtrip"
-unlink $gpa
-unlink $gpb
 unlink $b64in
 unlink $b64enc
 unlink $b64dec
+# text_hash: CRC-32 canonical check value
+val $hshx = "$dir/$tag-hash.txt"
+spew $hshx, "123456789"
+val $hshr = Office::text_hash($hshx)
+assert_eq $hshr->{crc32}, "cbf43926", "text_hash: canonical CRC-32"
+assert_eq $hshr->{bytes}, 9, "text_hash: byte count"
+unlink $gpa
+unlink $gpb
+unlink $hshx
 unlink $grx
 unlink $grt
 unlink $gso
