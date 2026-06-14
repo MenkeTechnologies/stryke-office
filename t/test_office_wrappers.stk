@@ -109,6 +109,15 @@ unlink $hso
 val $desc = Office::sheet_describe($xl)
 assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"
 
+# dtypes: per-column type inference
+val $dtx = "$dir/$tag-dtypes.xlsx"
+Office::sheet_write($dtx, [{ name => "D", rows => [["name", "qty", "price"], ["a", 1, 1.5], ["b", 2, 2.5]] }])
+val $dt = Office::sheet_dtypes($dtx)
+assert_eq $dt->{columns}[0]{type}, "string", "sheet_dtypes: name -> string"
+assert_eq $dt->{columns}[1]{type}, "integer", "sheet_dtypes: qty -> integer"
+assert_eq $dt->{columns}[2]{type}, "float", "sheet_dtypes: price -> float"
+unlink $dtx
+
 val $qn = Office::sheet_quantile($xl, "Count", 0.5)
 assert_eq $qn->{value}, 5, "sheet_quantile: median of single value"
 

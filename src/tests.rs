@@ -226,6 +226,37 @@ fn sheet_describe_numeric_summary() {
 }
 
 #[test]
+fn sheet_dtypes_infers_column_types() {
+    let path = tmp("dtypes.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","qty","price","mixed"],
+                ["a",1,1.5,"x"],
+                ["b",2,2.5,7],
+                ["c",3,3.5,""]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_dtypes, &format!(r#"{{"path":"{path}"}}"#));
+    let cols = r["columns"].as_array().unwrap();
+    assert_eq!(cols.len(), 4, "four columns: {r}");
+    assert_eq!(cols[0]["name"], "name", "col0 name: {r}");
+    assert_eq!(cols[0]["type"], "string", "name -> string: {r}");
+    assert_eq!(cols[1]["type"], "integer", "qty -> integer: {r}");
+    assert_eq!(cols[2]["type"], "float", "price -> float: {r}");
+    // "mixed" has a string, an int, and a blank → mixed
+    assert_eq!(cols[3]["type"], "mixed", "mixed -> mixed: {r}");
+    assert_eq!(cols[3]["counts"]["blank"], 1, "one blank in mixed: {r}");
+    assert_eq!(cols[3]["counts"]["string"], 1, "one string in mixed: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_quantile_arbitrary_percentile() {
     let path = tmp("quantile.xlsx");
     let w = call(

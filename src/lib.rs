@@ -1383,6 +1383,121 @@ fn op_sheet_describe(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// Infer the data type of each column (the profiling counterpart to
+/// `sheet_describe`'s numeric stats; ~pandas `df.dtypes`). Each data cell is
+/// classified as integer, float, bool, string, or blank; the column's reported
+/// `type` is the unifying kind: `integer`/`float` when all non-blank values are
+/// numeric (`float` if any is non-integer), `bool` when all are booleans,
+/// `string` when all are text, `empty` when entirely blank, else `mixed`. opts:
+/// path, sheet, header. Returns `{ sheet, rows, columns: [{ name, type, counts:
+/// { integer, float, bool, string, blank } }] }`.
+fn op_sheet_dtypes(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    // Classify one cell into a kind tag.
+    let classify = |cell: &Value| -> &'static str {
+        if sheet_cell_blank(cell) {
+            return "blank";
+        }
+        if let Some(x) = sheet_cell_num(cell) {
+            return if x.fract() == 0.0 { "integer" } else { "float" };
+        }
+        // Only a bare boolean literal counts as bool (numbers already handled).
+        match cell {
+            Value::Bool(_) => "bool",
+            _ => {
+                let s = cell_to_string(cell);
+                let l = s.trim().to_ascii_lowercase();
+                if matches!(l.as_str(), "true" | "false") {
+                    "bool"
+                } else {
+                    "string"
+                }
+            }
+        }
+    };
+
+    let mut columns = Vec::new();
+    for c in 0..ncols {
+        let (mut int_n, mut float_n, mut bool_n, mut str_n, mut blank_n) =
+            (0u64, 0u64, 0u64, 0u64, 0u64);
+        for row in data {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(c))
+                .cloned()
+                .unwrap_or(Value::Null);
+            match classify(&cell) {
+                "integer" => int_n += 1,
+                "float" => float_n += 1,
+                "bool" => bool_n += 1,
+                "string" => str_n += 1,
+                _ => blank_n += 1,
+            }
+        }
+        let non_blank = int_n + float_n + bool_n + str_n;
+        let ty = if non_blank == 0 {
+            "empty"
+        } else if str_n == 0 && bool_n == 0 && float_n == 0 {
+            "integer"
+        } else if str_n == 0 && bool_n == 0 {
+            "float"
+        } else if str_n == 0 && int_n == 0 && float_n == 0 {
+            "bool"
+        } else if int_n == 0 && float_n == 0 && bool_n == 0 {
+            "string"
+        } else {
+            "mixed"
+        };
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        columns.push(json!({
+            "name": cname,
+            "type": ty,
+            "counts": {
+                "integer": int_n,
+                "float": float_n,
+                "bool": bool_n,
+                "string": str_n,
+                "blank": blank_n,
+            },
+        }));
+    }
+    Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
+}
+
 /// Compute an arbitrary percentile of a numeric column (generalizes the fixed
 /// quartiles in `sheet_describe`). opts: path, column => name or 0-based index
 /// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
@@ -9716,6 +9831,7 @@ export!(office__sheet_merge, op_sheet_merge);
 export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
+export!(office__sheet_dtypes, op_sheet_dtypes);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_corr, op_sheet_corr);
