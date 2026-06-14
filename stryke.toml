@@ -66,6 +66,7 @@ exports = [
     "office__pdf_chunk",
     "office__pdf_split_ranges",
     "office__pdf_to_text",
+    "office__pdf_assemble",
     "office__pdf_attach",
     "office__pdf_attachments",
     "office__pdf_form_fields",

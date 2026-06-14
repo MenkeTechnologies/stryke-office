@@ -601,6 +601,14 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Assemble one PDF from a mix of inputs in order — image files become
+## fit-to-page pages, existing PDFs are merged in. $inputs is an arrayref of
+## paths. Returns { ok, path, inputs, pages }.
+fn Office::pdf_assemble ($inputs, $output) {
+    Office::_decode("pdf_assemble",
+        office__pdf_assemble(to_json({ inputs => $inputs, output => $output })))
+}
+
 ## Extract a PDF's text to a file. Pass either dir => write one page-{n}.txt per
 ## page (returns { count, files }), or output => write the whole text (pages
 ## joined by opts{separator}, default "\n\n") to one file (returns { ok, path,
