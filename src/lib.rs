@@ -6453,6 +6453,51 @@ fn op_slides_set_notes(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slide": slide_no, "lines": lines.len() }))
 }
 
+/// Add a text box to a slide of an existing pptx (the text analogue of
+/// `slides_add_image`). Injects a `p:sp` shape into the slide's shape tree, so
+/// the text is recoverable via `slides_read`. opts: path, text (required), slide
+/// => 1-based slide number (default 1), x/y => offset in pixels (default 96),
+/// width/height => box size in pixels (default 400×100), size => font size in pt
+/// (default 18), output => target (default in place). Pixels convert to EMU at
+/// 96 dpi. Returns `{ ok, path, slide }`.
+fn op_slides_add_text(opts: Value) -> Result<Value> {
+    const EMU_PER_PX: i64 = 9525;
+    let path = req_str(&opts, "path")?;
+    let text = req_str(&opts, "text")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let slide_no = opts.get("slide").and_then(Value::as_u64).unwrap_or(1);
+    let x = opts.get("x").and_then(Value::as_i64).unwrap_or(96) * EMU_PER_PX;
+    let y = opts.get("y").and_then(Value::as_i64).unwrap_or(96) * EMU_PER_PX;
+    let cx = opts.get("width").and_then(Value::as_i64).unwrap_or(400) * EMU_PER_PX;
+    let cy = opts.get("height").and_then(Value::as_i64).unwrap_or(100) * EMU_PER_PX;
+    let sz = opts.get("size").and_then(Value::as_i64).unwrap_or(18) * 100;
+
+    let mut entries = read_zip_entries(&std::fs::read(path)?)?;
+    let slide_name = format!("ppt/slides/slide{slide_no}.xml");
+    if !entries.iter().any(|(n, _)| n == &slide_name) {
+        return Err(anyhow!("slide {slide_no} not found in {path}"));
+    }
+
+    let sp = format!(
+        "<p:sp><p:nvSpPr><p:cNvPr id=\"{id}\" name=\"TextBox {slide_no}\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"{x}\" y=\"{y}\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang=\"en-US\" sz=\"{sz}\"/><a:t>{t}</a:t></a:r></a:p></p:txBody></p:sp>",
+        id = 5000 + slide_no,
+        t = xml_escape(text),
+    );
+    if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| *n == slide_name) {
+        let s = String::from_utf8_lossy(bytes).into_owned();
+        *bytes = s
+            .replacen("</p:spTree>", &format!("{sp}</p:spTree>"), 1)
+            .into_bytes();
+    }
+
+    std::fs::write(&output, write_zip_entries(&entries)?)?;
+    Ok(json!({ "ok": true, "path": output, "slide": slide_no }))
+}
+
 /// Concatenate presentations into one deck. opts: inputs => [paths],
 /// output => path, format => override. Each source slide's first text line
 /// becomes the title and the rest the body; the target format follows the
@@ -6800,6 +6845,7 @@ export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
 export!(office__slides_add_image, op_slides_add_image);
 export!(office__slides_set_notes, op_slides_set_notes);
+export!(office__slides_add_text, op_slides_add_text);
 export!(office__slides_merge, op_slides_merge);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);

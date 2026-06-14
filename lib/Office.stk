@@ -861,6 +861,13 @@ fn Office::slides_set_notes ($path, $notes, %opts) {
         office__slides_set_notes(to_json({ path => $path, notes => $notes, slide => $opts{slide}, output => $opts{output} })))
 }
 
+## Add a text box to a slide of an existing pptx. opts: slide (1-based), x/y (px),
+## width/height (px), size (pt), output. Returns { ok, path, slide }.
+fn Office::slides_add_text ($path, $text, %opts) {
+    Office::_decode("slides_add_text",
+        office__slides_add_text(to_json({ path => $path, text => $text, slide => $opts{slide}, x => $opts{x}, y => $opts{y}, width => $opts{width}, height => $opts{height}, size => $opts{size}, output => $opts{output} })))
+}
+
 ## Concatenate presentations into one deck. $inputs is an arrayref of paths; the
 ## target format follows $output's extension (so this also converts pptx<->odp).
 ## Each source slide's first text line becomes the title, the rest the body

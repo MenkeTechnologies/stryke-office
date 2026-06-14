@@ -3035,6 +3035,30 @@ fn slides_set_notes_round_trip() {
 }
 
 #[test]
+fn slides_add_text_injects_box() {
+    let deck = tmp("addtext.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{deck}","slides":[{{"title":"T","body":["b"]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__slides_add_text,
+        &format!(r#"{{"path":"{deck}","text":"Caption here","slide":1,"x":100,"y":400}}"#),
+    );
+    assert_eq!(r["ok"], true, "add_text: {r}");
+
+    // the new text box is recoverable via slides_read; existing title intact
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{deck}"}}"#));
+    let txt = rd["slides"][0]["text"].to_string();
+    assert!(txt.contains("Caption here"), "added text present: {rd}");
+    assert!(txt.contains("T"), "title still present: {rd}");
+
+    std::fs::remove_file(&deck).ok();
+}
+
+#[test]
 fn slides_to_pdf_one_per_page() {
     let px = tmp("s2pdf.pptx");
     let w = call(

@@ -218,6 +218,10 @@ assert_eq $ex->{images}[0]{width}, 16, "slides_add_image: native width"
 Office::slides_set_notes($idk, "speaker reminder", slide => 1)
 val $nrd = Office::slides_read($idk)
 assert_ok scalar(grep { /speaker reminder/ } @{ $nrd->[0]{notes} }), "slides_set_notes: notes round-trip"
+# add a text box and recover it
+Office::slides_add_text($idk, "Caption", slide => 1)
+val $atrd = Office::slides_read($idk)
+assert_ok scalar(grep { /Caption/ } @{ $atrd->[0]{text} }), "slides_add_text: text box round-trip"
 unlink $idk
 unlink $logo
 
