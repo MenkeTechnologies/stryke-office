@@ -3056,6 +3056,60 @@ fn sheet_round_columns_subset() {
 }
 
 #[test]
+fn sheet_histogram_bins() {
+    let path = tmp("hist.xlsx");
+    // Values 1..=10 across 5 bins → 2 per bin.
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_histogram,
+        &format!(r#"{{"path":"{path}","column":"v","bins":5}}"#),
+    );
+    assert_eq!(r["count"], 10, "count: {r}");
+    assert_eq!(r["min"].as_f64().unwrap(), 1.0, "min: {r}");
+    assert_eq!(r["max"].as_f64().unwrap(), 10.0, "max: {r}");
+    let bins = r["bins"].as_array().unwrap();
+    assert_eq!(bins.len(), 5, "bin count: {r}");
+    // width = 9/5 = 1.8; each of the 5 bins gets 2 values, max lands in last bin.
+    let total: u64 = bins.iter().map(|b| b["count"].as_u64().unwrap()).sum();
+    assert_eq!(total, 10, "all values binned: {r}");
+    assert_eq!(bins[0]["lo"].as_f64().unwrap(), 1.0, "first lo: {r}");
+    assert_eq!(bins[4]["hi"].as_f64().unwrap(), 10.0, "last hi == max: {r}");
+    assert_eq!(
+        bins[4]["count"].as_u64().unwrap(),
+        2,
+        "max in last bin: {r}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn sheet_histogram_empty_column() {
+    let path = tmp("hist_empty.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],["x"],["y"]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_histogram,
+        &format!(r#"{{"path":"{path}","column":"v"}}"#),
+    );
+    assert_eq!(r["count"], 0, "no numeric values: {r}");
+    assert!(r["bins"].as_array().unwrap().is_empty(), "no bins: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(

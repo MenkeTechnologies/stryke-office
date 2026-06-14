@@ -289,6 +289,16 @@ assert_eq $rnb->[0]{rows}[1][1], 5.7, "sheet_round: 5.678 -> 5.7"
 assert_eq $rnb->[0]{rows}[0][0], "a", "sheet_round: header untouched"
 unlink $rnx
 unlink $rno
+# sheet_histogram: equal-width bins over a numeric column
+val $hgx = "$dir/$tag-hist.xlsx"
+Office::sheet_write($hgx, [{ name => "D", rows => [["v"], [1], [2], [3], [4], [5], [6], [7], [8], [9], [10]] }])
+val $hgr = Office::sheet_histogram($hgx, "v", bins => 5)
+assert_eq $hgr->{count}, 10, "sheet_histogram: value count"
+assert_eq scalar(@{$hgr->{bins}}), 5, "sheet_histogram: bin count"
+assert_eq $hgr->{min}, 1, "sheet_histogram: min"
+assert_eq $hgr->{max}, 10, "sheet_histogram: max"
+assert_eq $hgr->{bins}[4]{count}, 2, "sheet_histogram: max lands in last bin"
+unlink $hgx
 unlink $gcx
 unlink $gco2
 

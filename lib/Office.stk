@@ -691,6 +691,13 @@ fn Office::sheet_round ($path, $output, %opts) {
         office__sheet_round(to_json({ path => $path, output => $output, decimals => $opts{decimals}, columns => $opts{columns}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Histogram of a numeric column into equal-width bins. opts: bins (default 10),
+## sheet, header. Returns { column, count, min, max, bins: [{lo, hi, count}] }.
+fn Office::sheet_histogram ($path, $column, %opts) {
+    Office::_decode("sheet_histogram",
+        office__sheet_histogram(to_json({ path => $path, column => $column, bins => $opts{bins}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns
