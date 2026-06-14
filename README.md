@@ -176,6 +176,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_to_md($path, $output)` | `{blocks}` | convert a docx/odt to structured Markdown (headings + tables); inverse of md_to_doc |
 | `Office::doc_to_html($path, $output)` | `{blocks}` | convert a docx/odt to structured HTML; inverse of html_to_doc |
 | `Office::doc_to_slides($path, $output, %opts)` | `{slides}` | turn a document into a deck — headings become slide titles, content becomes bullets |
+| `Office::slides_to_doc($path, $output, %opts)` | `{slides}` | turn a deck into a document (slides → headings + paragraphs); `notes` opt |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |
