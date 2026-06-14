@@ -573,6 +573,10 @@ Office::slides_write($idk, [{ title => "Cover", body => ["x"] }])
 val $logo = "$dir/$tag-logo.png"
 val $im = Office::img_new(16, 8, color => [10, 20, 30, 255])
 Office::img_save($im->{handle}, $logo)
+# img_fit: letterbox the 16x8 image into an exact 20x20 canvas
+val $fitr = Office::img_fit($im->{handle}, 20, 20)
+assert_eq $fitr->{width}, 20, "img_fit: exact canvas width"
+assert_eq $fitr->{height}, 20, "img_fit: exact canvas height"
 Office::img_close($im->{handle})
 Office::slides_add_image($idk, $logo)
 val $ex = Office::extract_images($idk)

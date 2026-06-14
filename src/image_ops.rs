@@ -184,6 +184,37 @@ fn op_img_thumbnail(opts: Value) -> Result<Value> {
     with_image(handle, |img| Ok(info_json(handle, img)))
 }
 
+/// Letterbox-fit into an exact `width`×`height` canvas: scale the image down (or
+/// up) to fit entirely within the box preserving aspect ratio, then center it on
+/// a background-filled canvas of the exact target size. Unlike `img_thumbnail`
+/// (fits within a box but yields variable dimensions) and `img_resize` (exact
+/// size but distorts), this gives uniform dimensions with no distortion. opts:
+/// handle, width, height (required), color => background fill (default black),
+/// filter. Returns the new geometry.
+fn op_img_fit(opts: Value) -> Result<Value> {
+    let handle = req_u64_img(&opts, "handle")?;
+    let tw = req_u64_img(&opts, "width")? as u32;
+    let th = req_u64_img(&opts, "height")? as u32;
+    let color = parse_color(opts.get("color"));
+    let filter = filter_of(&opts);
+    transform(handle, move |img| {
+        let (w0, h0) = (img.width(), img.height());
+        if w0 == 0 || h0 == 0 || tw == 0 || th == 0 {
+            return Ok(img);
+        }
+        let scale = (tw as f64 / w0 as f64).min(th as f64 / h0 as f64);
+        let nw = ((w0 as f64 * scale).round() as u32).clamp(1, tw);
+        let nh = ((h0 as f64 * scale).round() as u32).clamp(1, th);
+        let resized = img.resize_exact(nw, nh, filter).to_rgba8();
+        let mut out = image::RgbaImage::from_pixel(tw, th, color);
+        let ox = ((tw - nw) / 2) as i64;
+        let oy = ((th - nh) / 2) as i64;
+        image::imageops::overlay(&mut out, &resized, ox, oy);
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
 fn op_img_crop(opts: Value) -> Result<Value> {
     let handle = req_u64_img(&opts, "handle")?;
     let x = req_u64_img(&opts, "x")? as u32;

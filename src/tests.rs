@@ -6063,6 +6063,40 @@ fn image_resize_crop_convert() {
 }
 
 #[test]
+fn image_fit_letterbox() {
+    // 100x40 (wide) fit into a 50x50 box → scaled to 50x20, centered.
+    let n = call(
+        office__img_new,
+        r#"{"width":100,"height":40,"color":[200,100,50,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    let r = call(
+        office__img_fit,
+        &format!(r#"{{"handle":{h},"width":50,"height":50,"color":[0,0,0,255]}}"#),
+    );
+    assert_eq!(r["width"], 50, "exact canvas width: {r}");
+    assert_eq!(r["height"], 50, "exact canvas height: {r}");
+
+    // center row should hold the scaled image; top row is letterbox background.
+    let top = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{h},"x":25,"y":0}}"#),
+    );
+    assert_eq!(top["r"].as_u64().unwrap(), 0, "top is background: {top}");
+    let mid = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{h},"x":25,"y":25}}"#),
+    );
+    assert_eq!(
+        mid["r"].as_u64().unwrap(),
+        200,
+        "center is the image: {mid}"
+    );
+
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn image_cross_format_png_to_jpeg() {
     let png = tmp("x.png");
     let jpg = tmp("x.jpg");
