@@ -240,6 +240,14 @@ fn Office::sheet_explode ($path, $column, $output, %opts) {
         office__sheet_explode(to_json({ path => $path, column => $column, output => $output, sep => $opts{sep}, trim => $opts{trim}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Recode a column's values via a $mapping hashref { old => new }. opts: default
+## (for unmapped), into (new column; default in place), sheet, header, format.
+## Returns { ok, path, mapped }.
+fn Office::sheet_map ($path, $column, $mapping, $output, %opts) {
+    Office::_decode("sheet_map",
+        office__sheet_map(to_json({ path => $path, column => $column, mapping => $mapping, output => $output, default => $opts{default}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

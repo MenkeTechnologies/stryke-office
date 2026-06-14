@@ -38,6 +38,7 @@ exports = [
     "office__sheet_clamp",
     "office__sheet_rename_column",
     "office__sheet_explode",
+    "office__sheet_map",
     "office__sheet_find",
     "office__sheet_records",
     "office__records_write",
