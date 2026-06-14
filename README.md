@@ -212,6 +212,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_pct($path, $column, $output, %opts)` | `{ok, path, column}` | append a percent-of-total column (value ÷ column sum × 100); `into`/`decimals` opts |
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |
 | `Office::sheet_movavg($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a moving-average (rolling mean) column over a window; `into`/`decimals` opts |
+| `Office::sheet_delta($path, $column, $output, %opts)` | `{ok, path, column}` | append a row-over-row difference (current − previous) column; `into`/`decimals` opts |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_outline($path)` | `{outline:[{level,text}], count}` | heading outline of a docx/odt (document analogue of pdf_outline) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |

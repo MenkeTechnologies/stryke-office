@@ -113,11 +113,17 @@ val $mao = "$dir/$tag-ma-out.xlsx"
 Office::sheet_movavg($csx, "amt", 2, $mao)
 val $mar = Office::sheet_get_cell($mao, "B3")
 assert_eq $mar->{value}, 15, "sheet_movavg: rolling mean"
+# delta (20 - 10 = 10 at row 3)
+val $dlo = "$dir/$tag-delta-out.xlsx"
+Office::sheet_delta($csx, "amt", $dlo)
+val $dlr = Office::sheet_get_cell($dlo, "B3")
+assert_eq $dlr->{value}, 10, "sheet_delta: row-over-row difference"
 unlink $csx
 unlink $cso
 unlink $pco
 unlink $nmo
 unlink $mao
+unlink $dlo
 
 # ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"

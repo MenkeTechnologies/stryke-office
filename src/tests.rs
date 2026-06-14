@@ -725,6 +725,42 @@ fn sheet_movavg_rolling_mean() {
 }
 
 #[test]
+fn sheet_delta_row_over_row() {
+    let path = tmp("delta.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[30],[25]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("delta_out.xlsx");
+    let r = call(
+        office__sheet_delta,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_delta", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "v_delta", "header appended: {rd}");
+    assert_eq!(
+        rows[1][1].as_str().unwrap_or(""),
+        "",
+        "first row blank: {rd}"
+    );
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 20.0).abs() < 1e-9,
+        "30-10=20: {rd}"
+    );
+    assert!(
+        (rows[3][1].as_f64().unwrap() + 5.0).abs() < 1e-9,
+        "25-30=-5: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

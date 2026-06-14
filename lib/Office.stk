@@ -211,6 +211,13 @@ fn Office::sheet_movavg ($path, $column, $window, $output, %opts) {
         office__sheet_movavg(to_json({ path => $path, column => $column, window => $window, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a row-over-row difference (current - previous) column. opts: into,
+## decimals, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_delta ($path, $column, $output, %opts) {
+    Office::_decode("sheet_delta",
+        office__sheet_delta(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
