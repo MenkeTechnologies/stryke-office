@@ -6798,6 +6798,100 @@ fn op_sheet_date_part(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Per-group descriptive statistics for a numeric column (pandas
+/// `groupby(group)[value].describe()`) — the by-group counterpart to
+/// `sheet_describe` and the multi-statistic counterpart to `sheet_aggregate`.
+/// opts: path, output, group => grouping column name/index (required), value =>
+/// numeric column name/index (required), sheet, header, format. Output is a sheet
+/// `[group, count, mean, std, min, max]` (sample std) sorted by group key. Groups
+/// with no numeric values report 0/null stats. Returns `{ ok, path, groups }`.
+fn op_sheet_group_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let gcol = resolve_col(opts.get("group"), header_row)?;
+    let vcol = resolve_col(opts.get("value"), header_row)?;
+    let group_name = header_row
+        .and_then(|hr| hr.get(gcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| "group".to_string());
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Collect each group's numeric values, preserving sorted key order.
+    let mut groups: std::collections::BTreeMap<String, Vec<f64>> =
+        std::collections::BTreeMap::new();
+    for row in &rows[data_start..] {
+        let key = cell_to_string(
+            row.as_array()
+                .and_then(|a| a.get(gcol))
+                .unwrap_or(&Value::Null),
+        );
+        let entry = groups.entry(key).or_default();
+        if let Some(x) = row
+            .as_array()
+            .and_then(|a| a.get(vcol))
+            .and_then(sheet_cell_num)
+        {
+            entry.push(x);
+        }
+    }
+
+    let n = groups.len();
+    let mut out_rows: Vec<Value> = vec![json!([group_name, "count", "mean", "std", "min", "max"])];
+    for (key, vals) in groups {
+        let cnt = vals.len();
+        if cnt == 0 {
+            out_rows.push(json!([
+                key,
+                0,
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Null
+            ]));
+            continue;
+        }
+        let mean = vals.iter().sum::<f64>() / cnt as f64;
+        let std = if cnt > 1 {
+            (vals.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (cnt - 1) as f64).sqrt()
+        } else {
+            0.0
+        };
+        let min = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        out_rows.push(json!([key, cnt, mean, std, min, max]));
+    }
+
+    let mut wopts =
+        json!({ "path": output, "sheets": [{ "name": "GroupStats", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "groups": n }))
+}
+
 /// Group rows by one column and concatenate another column's values per group
 /// (SQL `GROUP_CONCAT`). opts: path, output, group_by => grouping column,
 /// value => column whose values are joined (both name or 0-based index,
@@ -13080,6 +13174,7 @@ export!(office__sheet_flag, op_sheet_flag);
 export!(office__sheet_onehot, op_sheet_onehot);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_resample, op_sheet_resample);
+export!(office__sheet_group_stats, op_sheet_group_stats);
 export!(office__sheet_date_part, op_sheet_date_part);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);

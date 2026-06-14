@@ -563,6 +563,14 @@ fn Office::sheet_resample ($path, $date, $output, %opts) {
         office__sheet_resample(to_json({ path => $path, date => $date, output => $output, freq => $opts{freq}, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Per-group descriptive stats for $value grouped by $group (pandas
+## groupby.describe). opts: sheet, header, format. Output is a sheet
+## [group, count, mean, std, min, max]. Returns { ok, path, groups }.
+fn Office::sheet_group_stats ($path, $group, $value, $output, %opts) {
+    Office::_decode("sheet_group_stats",
+        office__sheet_group_stats(to_json({ path => $path, group => $group, value => $value, output => $output, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Extract a calendar part from an ISO-date $column into a new column. opts: part
 ## (year|month|day|ym, default year), into (default "{column}_{part}"), sheet,
 ## header, format. Returns { ok, path, column }.
