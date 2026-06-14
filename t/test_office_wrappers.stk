@@ -423,6 +423,17 @@ assert_eq $ctb->[0]{rows}[1][0], 1234.5, "sheet_cast: \$1,234.50 -> 1234.5"
 assert_eq $ctb->[0]{rows}[2][0], -2000, "sheet_cast: (2,000) -> -2000"
 unlink $ctx
 unlink $cto
+# sheet_strip: trim whitespace across all string cells
+val $spx = "$dir/$tag-strip.xlsx"
+Office::sheet_write($spx, [{ name => "D", rows => [["  name ", "city"], [" apple ", "x"]] }])
+val $spo = "$dir/$tag-strip-out.xlsx"
+val $spr = Office::sheet_strip($spx, output => $spo)
+assert_ok ($spr->{trimmed} >= 2), "sheet_strip: trimmed count"
+val $spb = Office::sheet_read($spo)
+assert_eq $spb->[0]{rows}[0][0], "name", "sheet_strip: header trimmed"
+assert_eq $spb->[0]{rows}[1][0], "apple", "sheet_strip: cell trimmed"
+unlink $spx
+unlink $spo
 # sheet_subtotal: group-wise subtotal rows
 val $stx = "$dir/$tag-subtot.xlsx"
 Office::sheet_write($stx, [{ name => "D", rows => [["region", "amt"], ["east", 10], ["east", 20], ["west", 30]] }])
