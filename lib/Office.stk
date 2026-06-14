@@ -123,6 +123,13 @@ fn Office::sheet_agg ($path, $column, %opts) {
         office__sheet_agg(to_json({ path => $path, column => $column, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Render a numeric column as a Unicode block sparkline string (▁▂▃▄▅▆▇█). opts:
+## sheet, header. Returns { column, sparkline, count, min, max }.
+fn Office::sheet_sparkline ($path, $column, %opts) {
+    Office::_decode("sheet_sparkline",
+        office__sheet_sparkline(to_json({ path => $path, column => $column, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Pearson correlation matrix between numeric columns (pandas df.corr()).
 ## opts: sheet, header. Returns { sheet, columns, matrix }.
 fn Office::sheet_corr ($path, %opts) {

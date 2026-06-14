@@ -164,6 +164,14 @@ assert_eq $qn->{value}, 5, "sheet_quantile: median of single value"
 val $ag = Office::sheet_agg($xl, "Count", agg => "sum")
 assert_eq $ag->{value}, 5, "sheet_agg: sum of single value"
 
+# sparkline: Unicode block trend string
+val $spkx = "$dir/$tag-spark.xlsx"
+Office::sheet_write($spkx, [{ name => "D", rows => [["v"], [1], [4], [8]] }])
+val $spk = Office::sheet_sparkline($spkx, "v")
+assert_eq $spk->{count}, 3, "sheet_sparkline: value count"
+assert_ok (length($spk->{sparkline}) > 0), "sheet_sparkline: non-empty glyph string"
+unlink $spkx
+
 val $fr = Office::sheet_freq($xl, "Item")
 assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
 unlink $xl
