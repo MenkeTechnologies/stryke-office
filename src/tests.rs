@@ -338,6 +338,46 @@ fn sheet_diff_cells() {
 }
 
 #[test]
+fn sheet_chunk_rows() {
+    let path = tmp("schunk.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["h"],[1],[2],[3],[4],[5]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let dir = tmp("schunk_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__sheet_chunk,
+        &format!(r#"{{"path":"{path}","size":2,"dir":"{dir}","prefix":"c"}}"#),
+    );
+    assert_eq!(r["count"], 3, "5 data rows / 2 -> 3 chunks: {r}");
+    let c1 = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{dir}/c-1.xlsx"}}"#),
+    );
+    let r1 = c1["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(r1.len(), 3, "header + 2 rows: {c1}");
+    assert_eq!(r1[0][0], "h", "header repeated: {c1}");
+    assert_eq!(r1[1][0], 1.0, "first data: {c1}");
+    let c3 = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{dir}/c-3.xlsx"}}"#),
+    );
+    assert_eq!(
+        c3["sheets"][0]["rows"].as_array().unwrap().len(),
+        2,
+        "header + 1 row: {c3}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn sheet_split_per_sheet() {
     let path = tmp("wb.xlsx");
     let w = call(
