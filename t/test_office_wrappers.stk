@@ -1356,6 +1356,14 @@ assert_eq $flr->{value}, 3, "tail => 1 honored (lenient bool): last row kept"
 unlink $flx
 unlink $flo
 
+# ── sheet_npv: net present value of a cashflow column ───────────────
+val $npx = "$dir/$tag-npv.xlsx"
+Office::sheet_write($npx, [{ name => "C", rows => [["cf"], [100], [200], [300]] }])
+val $npr = Office::sheet_npv($npx, "cf", 0.1, decimals => 4)
+assert_eq $npr->{n}, 3, "sheet_npv: three cashflows"
+assert_ok ($npr->{npv} > 481.59 && $npr->{npv} < 481.60), "sheet_npv: Excel NPV at 10%"
+unlink $npx
+
 # ── sheet_moments: skewness + kurtosis of a column ──────────────────
 val $mmx = "$dir/$tag-moments.xlsx"
 Office::sheet_write($mmx, [{ name => "M", rows => [["v"], [1], [2], [3], [4], [5]] }])

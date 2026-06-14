@@ -1712,6 +1712,71 @@ fn op_sheet_count(opts: Value) -> Result<Value> {
 /// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
 /// header (default true). Linear interpolation (pandas default). Returns
 /// `{ column, q, value, count }` (value is null when the column has no numbers).
+/// Net present value of a cashflow column at a periodic discount `rate` (Excel
+/// `NPV`). opts: path, column => cashflow column name/index (required), rate =>
+/// per-period discount rate (required, e.g. 0.1 for 10%), start => first period
+/// exponent (default 1, the Excel convention where the first cashflow is
+/// discounted one period; pass 0 to treat the first cashflow as occurring now),
+/// sheet, header (default true), decimals => round. Returns
+/// `{ ok, npv, n, rate }`.
+fn op_sheet_npv(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let rate = opts
+        .get("rate")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing rate (per-period discount rate)"))?;
+    if rate <= -1.0 {
+        return Err(anyhow!("rate must be greater than -1"));
+    }
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let cf: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if cf.is_empty() {
+        return Err(anyhow!("no numeric cashflows"));
+    }
+    let start = opts.get("start").and_then(Value::as_i64).unwrap_or(1);
+    let npv: f64 = cf
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| c / (1.0 + rate).powi(i as i32 + start as i32))
+        .sum();
+    let npv = match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (npv * f).round() / f
+        }
+        None => npv,
+    };
+    Ok(json!({ "ok": true, "npv": npv, "n": cf.len(), "rate": rate }))
+}
+
 /// Distribution shape moments of one numeric column — mean, sample variance and
 /// std, plus skewness (Fisher–Pearson g1) and excess kurtosis (g2). Complements
 /// `sheet_describe` (which gives the quartile five-number summary). opts: path,
@@ -14695,6 +14760,7 @@ export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
+export!(office__sheet_npv, op_sheet_npv);
 export!(office__sheet_autocorr, op_sheet_autocorr);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);
