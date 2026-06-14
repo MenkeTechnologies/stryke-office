@@ -250,6 +250,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_to_sql($path, $table, %opts)` | `{ok, statements, rows, sql, path?}` | emit SQL `INSERT` statements for a sheet; `columns`/`batch`/`output` opts |
 | `Office::sheet_to_latex($path, %opts)` | `{ok, rows, cols, latex, path?}` | render a sheet as a LaTeX `tabular`; `align`/`booktabs`/`caption`/`output` opts |
 | `Office::sheet_to_csv($path, %opts)` | `{ok, rows, csv, path?}` | serialize a sheet as an RFC-4180 CSV string (proper quoting); `delimiter`/`output` opts |
+| `Office::csv_to_sheet($output, %opts)` | `{ok, path, rows, cols}` | parse RFC-4180 CSV text/file into a sheet (inverse of `sheet_to_csv`); `csv`/`input`/`delimiter`/`numeric` opts |
 | `Office::md_to_sheet($output, %opts)` | `{ok, path, rows, cols}` | parse a Markdown table into a spreadsheet file; `markdown`/`path`/`name` opts |
 | `Office::html_to_sheet($input, $output, %opts)` | `{ok, path, rows, cols}` | parse an HTML table into a spreadsheet (web scraping); `index`/`name` opts |
 | `Office::sheet_to_html($path, %opts)` | `{ok, rows, cols, html, path?}` | render a spreadsheet as an HTML table (thead/tbody, escaped); `output`/`title`/`full` opts |

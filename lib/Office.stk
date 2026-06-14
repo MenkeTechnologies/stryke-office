@@ -479,6 +479,14 @@ fn Office::ndjson_to_sheet ($output, %opts) {
         office__ndjson_to_sheet(to_json({ output => $output, input => $opts{input}, ndjson => $opts{ndjson}, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
 }
 
+## Parse RFC-4180 CSV text (or a file) into a sheet (inverse of sheet_to_csv).
+## opts: csv (text) or input (file), delimiter (default ","), numeric (default 1),
+## name (sheet name), format. Returns { ok, path, rows, cols }.
+fn Office::csv_to_sheet ($output, %opts) {
+    Office::_decode("csv_to_sheet",
+        office__csv_to_sheet(to_json({ output => $output, csv => $opts{csv}, input => $opts{input}, delimiter => $opts{delimiter}, numeric => $opts{numeric}, name => $opts{name}, format => $opts{format} })))
+}
+
 ## Import a JSON file (array of objects) into a spreadsheet. opts: fields =>
 ## explicit column order, sheet_name, format => override. Returns
 ## { ok, path, rows, fields }.

@@ -138,6 +138,14 @@ val $csvr = Office::sheet_to_csv($xl)
 assert_ok ($csvr->{csv} =~ /Item,Count/), "sheet_to_csv: header row"
 assert_ok ($csvr->{csv} =~ /apples,5/), "sheet_to_csv: data row"
 
+# csv_to_sheet: parse a CSV string back into a sheet
+val $c2s = "$dir/$tag-csv2sheet.xlsx"
+val $c2sr = Office::csv_to_sheet($c2s, csv => "name,n\n\"a,b\",5\n")
+assert_eq $c2sr->{rows}, 2, "csv_to_sheet: header + 1 row"
+val $c2sb = Office::sheet_read($c2s)
+assert_eq $c2sb->[0]{rows}[1][0], "a,b", "csv_to_sheet: quoted comma preserved"
+unlink $c2s
+
 val $back = "$dir/$tag-md.xlsx"
 Office::md_to_sheet($back, markdown => "| A | B |\n| --- | --- |\n| 1 | 2 |")
 val $ms = Office::sheet_read($back)

@@ -5176,6 +5176,36 @@ fn ndjson_to_sheet_from_text() {
 }
 
 #[test]
+fn csv_to_sheet_rfc4180() {
+    let out = tmp("csv2sheet.xlsx");
+    // a quoted field with an embedded comma + numeric coercion
+    let r = call(
+        office__csv_to_sheet,
+        &serde_json::json!({
+            "csv": "name,n\n\"a,b\",5\nplain,6\n",
+            "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["rows"], 3, "header + 2 rows: {r}");
+    assert_eq!(r["cols"], 2, "two columns: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "a,b", "quoted comma field preserved: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 5.0, "numeric coerced: {rd}");
+    assert_eq!(rows[2][0], "plain", "plain field: {rd}");
+
+    // round-trip with sheet_to_csv
+    let back = call(office__sheet_to_csv, &format!(r#"{{"path":"{out}"}}"#));
+    assert!(
+        back["csv"].as_str().unwrap().contains("\"a,b\",5"),
+        "round-trips through to_csv: {back}"
+    );
+
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn ods_write_then_read_round_trips() {
     let path = tmp("rt.ods");
     let w = call(
