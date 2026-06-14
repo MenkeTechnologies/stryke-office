@@ -850,6 +850,39 @@ fn op_pdf_to_text(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "pages": pages.len(), "chars": text.chars().count() }))
 }
 
+/// Word/character statistics for a PDF (the PDF analogue of `doc_stats`). opts:
+/// path. Counts whitespace-delimited words and characters from extracted page
+/// text. Returns `{ pages, words, chars, chars_no_spaces, per_page: [{ page,
+/// words, chars }] }`.
+fn op_pdf_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let bytes = std::fs::read(path)?;
+    let pages = lo_core::extract_pages_from_pdf(&bytes).map_err(|e| anyhow!("pdf parse: {e}"))?;
+
+    let mut words = 0u64;
+    let mut chars = 0u64;
+    let mut chars_no_spaces = 0u64;
+    let per_page: Vec<Value> = pages
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let w = p.split_whitespace().count() as u64;
+            let c = p.chars().count() as u64;
+            words += w;
+            chars += c;
+            chars_no_spaces += p.chars().filter(|ch| !ch.is_whitespace()).count() as u64;
+            json!({ "page": i + 1, "words": w, "chars": c })
+        })
+        .collect();
+    Ok(json!({
+        "pages": pages.len(),
+        "words": words,
+        "chars": chars,
+        "chars_no_spaces": chars_no_spaces,
+        "per_page": per_page,
+    }))
+}
+
 /// Build a JPEG image XObject `Stream` (DeviceRGB / DCTDecode) from raw JPEG
 /// bytes and dimensions. `with_compression(false)` so the writer doesn't deflate
 /// the already-compressed JPEG.

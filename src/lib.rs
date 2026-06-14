@@ -5209,6 +5209,7 @@ export!(office__pdf_burst, op_pdf_burst);
 export!(office__pdf_chunk, op_pdf_chunk);
 export!(office__pdf_split_ranges, op_pdf_split_ranges);
 export!(office__pdf_to_text, op_pdf_to_text);
+export!(office__pdf_stats, op_pdf_stats);
 export!(office__pdf_assemble, op_pdf_assemble);
 export!(office__pdf_stamp_image, op_pdf_stamp_image);
 export!(office__pdf_insert, op_pdf_insert);
