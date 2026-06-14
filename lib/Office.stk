@@ -682,6 +682,14 @@ fn Office::sheet_cast ($path, $output, %opts) {
         office__sheet_cast(to_json({ path => $path, output => $output, by => $opts{by}, type => $opts{type}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Strip whitespace from every string cell (whole-sheet trim). opts: collapse
+## (collapse internal whitespace to single spaces), output (default in place),
+## sheet, header, format. Returns { ok, path, trimmed }.
+fn Office::sheet_strip ($path, %opts) {
+    Office::_decode("sheet_strip",
+        office__sheet_strip(to_json({ path => $path, collapse => $opts{collapse}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Split a sheet's rows into fixed-size chunks of $size data rows, written to
 ## $dir as {prefix}-{n}.{ext}. opts: header => 0 to not repeat the header in
 ## each chunk, sheet, format => output extension (default: source's), prefix.

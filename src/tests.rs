@@ -2057,6 +2057,56 @@ fn sheet_cast_messy_numbers() {
 }
 
 #[test]
+fn sheet_strip_whitespace() {
+    let path = tmp("strip.xlsx");
+    let w = call(
+        office__sheet_write,
+        &serde_json::json!({
+            "path": path,
+            "sheets": [{
+                "name": "D",
+                "rows": [["  name ", "city"], [" apple ", "new   york"], [5, " keep "]]
+            }]
+        })
+        .to_string(),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // default: trim ends only
+    let out = tmp("strip_out.xlsx");
+    let r = call(
+        office__sheet_strip,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert!(r["trimmed"].as_u64().unwrap() >= 3, "trimmed count: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "name", "header trimmed: {rd}");
+    assert_eq!(rows[1][0], "apple", "cell trimmed: {rd}");
+    assert_eq!(rows[2][1], "keep", "trailing-col cell trimmed: {rd}");
+    // numeric untouched
+    assert_eq!(rows[2][0].as_f64().unwrap(), 5.0, "numeric kept: {rd}");
+    // internal whitespace preserved without collapse
+    assert_eq!(rows[1][1], "new   york", "internal whitespace kept: {rd}");
+
+    // collapse mode squeezes internal runs
+    let outc = tmp("strip_col.xlsx");
+    call(
+        office__sheet_strip,
+        &format!(r#"{{"path":"{path}","output":"{outc}","collapse":true}}"#),
+    );
+    let rdc = call(office__sheet_read, &format!(r#"{{"path":"{outc}"}}"#));
+    assert_eq!(
+        rdc["sheets"][0]["rows"][1][1], "new york",
+        "collapsed internal whitespace: {rdc}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outc).ok();
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(

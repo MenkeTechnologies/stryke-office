@@ -7950,6 +7950,70 @@ fn op_sheet_cast(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "cast": cast }))
 }
 
+/// Strip leading/trailing whitespace from every string cell in a sheet (the
+/// whole-sheet cleanup counterpart to `sheet_transform op=trim`, which targets a
+/// single column). opts: path, output (default in place), collapse => also
+/// collapse internal runs of whitespace to a single space (default false), sheet,
+/// header (default true; the header row is trimmed too), format. Numeric cells
+/// are left untouched. Returns `{ ok, path, trimmed }` (count of cells changed).
+fn op_sheet_strip(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let collapse = opts.get("collapse").and_then(flag_of).unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let mut trimmed = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let out: Vec<Value> = cells
+                .into_iter()
+                .map(|cell| match &cell {
+                    Value::String(s) => {
+                        let stripped = if collapse {
+                            s.split_whitespace().collect::<Vec<_>>().join(" ")
+                        } else {
+                            s.trim().to_string()
+                        };
+                        if stripped != *s {
+                            trimmed += 1;
+                            json!(stripped)
+                        } else {
+                            cell
+                        }
+                    }
+                    _ => cell,
+                })
+                .collect();
+            Value::Array(out)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "trimmed": trimmed }))
+}
+
 /// Top-N rows by a column (sort then take N). opts: path, output, by => column
 /// (required), n => row count (default 10), ascending => bool (default false =
 /// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
@@ -9914,6 +9978,7 @@ export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_sample, op_sheet_sample);
 export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
+export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);
