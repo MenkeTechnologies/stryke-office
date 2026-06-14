@@ -5793,6 +5793,101 @@ fn op_ndjson_to_sheet(opts: Value) -> Result<Value> {
     op_records_write(wopts)
 }
 
+/// Parse RFC-4180 CSV text into rows of fields, honoring quoted fields (`""`
+/// escapes a quote, quotes may contain the delimiter and newlines).
+fn parse_csv(text: &str, delim: char) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut row: Vec<String> = Vec::new();
+    let mut field = String::new();
+    let mut in_quotes = false;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if in_quotes {
+            match c {
+                '"' if chars.peek() == Some(&'"') => {
+                    field.push('"');
+                    chars.next();
+                }
+                '"' => in_quotes = false,
+                _ => field.push(c),
+            }
+        } else {
+            match c {
+                '"' => in_quotes = true,
+                _ if c == delim => {
+                    row.push(std::mem::take(&mut field));
+                }
+                '\r' => {} // swallow; the \n ends the record
+                '\n' => {
+                    row.push(std::mem::take(&mut field));
+                    rows.push(std::mem::take(&mut row));
+                }
+                _ => field.push(c),
+            }
+        }
+    }
+    // Flush a trailing field/row that wasn't newline-terminated.
+    if !field.is_empty() || !row.is_empty() {
+        row.push(field);
+        rows.push(row);
+    }
+    rows
+}
+
+/// Import RFC-4180 CSV text (or a file) into a spreadsheet — the inverse of
+/// `sheet_to_csv`, parsing inline strings without a temp file. opts: csv =>
+/// the CSV text, or input => a file path (one required), output => sheet path
+/// (required), delimiter => field separator (default ","), numeric => parse
+/// numeric-looking fields into numbers (default true), name => sheet name
+/// (default "Sheet1"), format. Quoted fields (with `""` escaping) are handled.
+/// Returns `{ ok, path, rows, cols }`.
+fn op_csv_to_sheet(opts: Value) -> Result<Value> {
+    let text = match opts.get("csv").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            let input = req_str(&opts, "input")?;
+            String::from_utf8_lossy(&std::fs::read(input)?).into_owned()
+        }
+    };
+    let output = req_str(&opts, "output")?.to_string();
+    let delim = opts
+        .get("delimiter")
+        .and_then(Value::as_str)
+        .and_then(|s| s.chars().next())
+        .unwrap_or(',');
+    let numeric = opts.get("numeric").and_then(flag_of).unwrap_or(true);
+    let name = opts.get("name").and_then(Value::as_str).unwrap_or("Sheet1");
+
+    let parsed = parse_csv(&text, delim);
+    let rows: Vec<Value> = parsed
+        .iter()
+        .map(|r| {
+            Value::Array(
+                r.iter()
+                    .map(|f| match (numeric, f.trim().parse::<f64>()) {
+                        // Only coerce non-empty numeric tokens; keep "" as text.
+                        (true, Ok(n)) if !f.trim().is_empty() => json!(n),
+                        _ => json!(f),
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let nrows = rows.len();
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": name, "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": nrows, "cols": ncols }))
+}
+
 /// Import a JSON file (array of objects) into a spreadsheet. opts: input (.json),
 /// output (sheet path), fields => explicit column order, sheet_name, format.
 /// Returns `{ ok, path, rows, fields }` (from records_write).
@@ -12354,6 +12449,7 @@ export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
 export!(office__sheet_to_ndjson, op_sheet_to_ndjson);
 export!(office__ndjson_to_sheet, op_ndjson_to_sheet);
+export!(office__csv_to_sheet, op_csv_to_sheet);
 export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);
