@@ -3508,6 +3508,39 @@ fn pdf_stamp_image_onto_pages() {
 }
 
 #[test]
+fn pdf_insert_at_position() {
+    // base A,B,C and an insert X
+    let base = tmp("ins_base.pdf");
+    call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{base}","elements":[{{"type":"heading","level":1,"text":"Aye"}},{{"type":"pagebreak"}},{{"type":"heading","level":1,"text":"Bee"}},{{"type":"pagebreak"}},{{"type":"heading","level":1,"text":"Cee"}}]}}"#
+        ),
+    );
+    let ins = tmp("ins_x.pdf");
+    call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{ins}","elements":[{{"type":"heading","level":1,"text":"Ex"}}]}}"#),
+    );
+
+    // insert after page 1 -> Aye, Ex, Bee, Cee
+    let out = tmp("ins_out.pdf");
+    let r = call(
+        office__pdf_insert,
+        &format!(r#"{{"path":"{base}","insert":"{ins}","position":1,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["pages"], 4, "4 pages after insert: {r}");
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let txt = rd["text"].as_str().unwrap_or("");
+    let (ia, ix, ib) = (txt.find("Aye"), txt.find("Ex"), txt.find("Bee"));
+    assert!(ia < ix && ix < ib, "order Aye<Ex<Bee: {txt:?}");
+
+    for f in [&base, &ins, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(
