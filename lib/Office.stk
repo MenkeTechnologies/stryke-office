@@ -716,6 +716,13 @@ fn Office::html_to_doc ($input, $output, %opts) {
         office__html_to_doc(to_json({ input => $input, output => $output, format => $opts{format} })))
 }
 
+## Parse an HTML table into a spreadsheet (inverse of sheet_to_html). opts:
+## index (0-based table), name, format. Returns { ok, path, rows, cols }.
+fn Office::html_to_sheet ($input, $output, %opts) {
+    Office::_decode("html_to_sheet",
+        office__html_to_sheet(to_json({ input => $input, output => $output, index => $opts{index}, name => $opts{name}, format => $opts{format} })))
+}
+
 ## Convert a Markdown file into a document, preserving headings, bullet/ordered
 ## lists, and pipe tables. $output's extension picks the format (docx/odt/pdf/
 ## html/...). opts: format => override. Returns { ok, path, blocks }.

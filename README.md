@@ -207,6 +207,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_to_doc($path, $output, %opts)` | `{ok, path, rows, cols}` | render a spreadsheet as a table inside a docx/odt; `sheet`/`title` opts |
 | `Office::sheet_to_md($path, %opts)` | `{ok, rows, cols, markdown, path?}` | render a spreadsheet as a GitHub-flavored Markdown table; `output`/`sheet`/`header` opts |
 | `Office::md_to_sheet($output, %opts)` | `{ok, path, rows, cols}` | parse a Markdown table into a spreadsheet file; `markdown`/`path`/`name` opts |
+| `Office::html_to_sheet($input, $output, %opts)` | `{ok, path, rows, cols}` | parse an HTML table into a spreadsheet (web scraping); `index`/`name` opts |
 | `Office::sheet_to_html($path, %opts)` | `{ok, rows, cols, html, path?}` | render a spreadsheet as an HTML table (thead/tbody, escaped); `output`/`title`/`full` opts |
 | `Office::sheet_to_text($path, %opts)` | `{ok, rows, cols, text, path?}` | render a spreadsheet as an aligned plain-text table; `border`/`output`/`header` opts |
 | `Office::sheet_get_cell($path, $cell, %opts)` | `{cell, row, col, value}` | read a single cell by A1 reference (e.g. "B2"); `sheet` opt |

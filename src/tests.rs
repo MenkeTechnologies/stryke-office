@@ -4067,6 +4067,33 @@ fn html_to_pdf_renders() {
 }
 
 #[test]
+fn html_to_sheet_parses_table() {
+    let html = tmp("h2sheet.html");
+    std::fs::write(
+        &html,
+        "<p>intro</p><table><tr><td>Name</td><td>Qty</td></tr><tr><td>apple</td><td>5</td></tr></table>",
+    )
+    .unwrap();
+
+    let out = tmp("h2sheet.xlsx");
+    let r = call(
+        office__html_to_sheet,
+        &format!(r#"{{"input":"{html}","output":"{out}","name":"T"}}"#),
+    );
+    assert_eq!(r["ok"], true, "parse: {r}");
+    assert_eq!(r["rows"], 2, "two table rows: {r}");
+    assert_eq!(r["cols"], 2, "two columns: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rd["sheets"][0]["name"], "T", "sheet name: {rd}");
+    assert_eq!(rows[0][0], "Name", "header cell: {rd}");
+    assert_eq!(rows[1][0], "apple", "body cell: {rd}");
+
+    std::fs::remove_file(&html).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn md_to_pdf_renders() {
     let md = tmp("m2p.md");
     std::fs::write(&md, "# Heading\n\nbody para\n\n- alpha\n- beta\n").unwrap();
