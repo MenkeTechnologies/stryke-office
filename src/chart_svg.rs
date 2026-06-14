@@ -87,6 +87,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "ridgeline" | "ridge" | "joyplot" => svg_ridgeline(&mut s, series, opts, l, t, r, b),
         "smooth" | "loess" => svg_smooth(&mut s, series, opts, l, t, r, b),
         "bin2d" | "bin_2d" => svg_bin2d(&mut s, series, opts, l, t, r, b),
+        "pairs" | "splom" | "scattermatrix" => svg_pairs(&mut s, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -299,7 +300,9 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
     }
 
     // shared legend
-    if opts.get("legend").and_then(flag_of) != Some(false) {
+    if opts.get("legend").and_then(flag_of) != Some(false)
+        && !matches!(kind, "pairs" | "splom" | "scattermatrix")
+    {
         svg_legend(&mut s, kind, series, &cats, w, t);
     }
 
@@ -1867,6 +1870,55 @@ fn svg_bin2d(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: 
     }
     let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(xmin)));
     let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(xmax)));
+}
+
+/// Scatterplot matrix / SPLOM (vector; base R `pairs()`). m×m grid of pair
+/// scatter panels, variable names on the diagonal. Each series is one variable
+/// column (`data => [v1,v2,…]`).
+fn svg_pairs(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let m = series.len();
+    if m < 2 {
+        return;
+    }
+    let cols: Vec<Vec<f64>> = series.iter().map(series_nums).collect();
+    let n = cols.iter().map(Vec::len).min().unwrap_or(0);
+    if n == 0 {
+        return;
+    }
+    let ranges: Vec<(f64, f64)> = cols
+        .iter()
+        .map(|c| {
+            let (lo, mut hi) = c.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, d), &v| (a.min(v), d.max(v)));
+            if hi <= lo {
+                hi = lo + 1.0;
+            }
+            (lo, hi)
+        })
+        .collect();
+
+    let cw = (r - l) / m as f64;
+    let ch = (b - t) / m as f64;
+    let pad = 6.0;
+    let col = svg_palette(0);
+    for i in 0..m {
+        for j in 0..m {
+            let x0 = l + j as f64 * cw;
+            let y0 = t + i as f64 * ch;
+            let _ = write!(s, r##"<rect x="{x0:.1}" y="{y0:.1}" width="{cw:.1}" height="{ch:.1}" fill="none" stroke="#d2d2d2"/>"##);
+            if i == j {
+                let name = series[i].get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("V{}", i + 1));
+                let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-size="13" fill="#1e1e1e">{}</text>"##, x0 + cw / 2.0, y0 + ch / 2.0 + 4.0, xml_escape(&name));
+                continue;
+            }
+            let (jx0, jx1) = ranges[j];
+            let (iy0, iy1) = ranges[i];
+            let px = |v: f64| x0 + pad + (v - jx0) / (jx1 - jx0) * (cw - 2.0 * pad);
+            let py = |v: f64| y0 + ch - pad - (v - iy0) / (iy1 - iy0) * (ch - 2.0 * pad);
+            for k in 0..n {
+                let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="2" fill="{col}"/>"##, px(cols[j][k]), py(cols[i][k]));
+            }
+        }
+    }
 }
 
 fn svg_pie(s: &mut String, series: &[Value], cats: &[String], w: f64, h: f64, donut: bool, labels: bool) {

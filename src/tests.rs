@@ -11224,6 +11224,44 @@ fn chart_bin2d_raster_and_svg() {
 }
 
 #[test]
+fn chart_pairs_splom_raster_and_svg() {
+    // three variables (columns) of equal length -> 3x3 scatterplot matrix
+    let series = r#"[{"name":"mpg","data":[21,22,20,25,30]},{"name":"hp","data":[110,120,90,80,70]},{"name":"wt","data":[2.6,2.9,3.1,2.2,2.0]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"pairs","width":480,"height":480,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("pairs raster: {c}"));
+    assert_eq!(c["type"], "pairs", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"splom","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "pairs svg malformed"
+    );
+    // 3x3 = 9 panel borders
+    assert_eq!(
+        svg.matches("fill=\"none\" stroke=\"#d2d2d2\"").count(),
+        9,
+        "9 panels in a 3x3 matrix"
+    );
+    // diagonal carries the variable names (once each, anchored)
+    assert!(
+        svg.contains(">mpg<") && svg.contains(">hp<") && svg.contains(">wt<"),
+        "diagonal variable labels"
+    );
+    // legend suppressed for SPLOM -> names appear once (diagonal only)
+    assert_eq!(svg.matches(">mpg<").count(), 1, "no duplicate legend label");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
