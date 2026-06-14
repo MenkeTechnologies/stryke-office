@@ -500,6 +500,16 @@ assert_ok ($d2pr->{text} =~ /Chapter/), "doc_to_pdf: heading renders into pdf"
 unlink $d2p
 unlink $d2ppdf
 
+# ── doc_readability: Flesch scores over plain text ──────────────────
+val $rdt = "$dir/$tag-read.txt"
+spew $rdt, "The cat sat. The dog ran."
+val $rdr = Office::doc_readability($rdt)
+assert_eq $rdr->{words}, 6, "doc_readability: word count"
+assert_eq $rdr->{sentences}, 2, "doc_readability: sentence count"
+assert_eq $rdr->{syllables}, 6, "doc_readability: syllable count"
+assert_ok ($rdr->{flesch_reading_ease} > 100), "doc_readability: high reading ease for simple text"
+unlink $rdt
+
 # ── lenient boolean flags: a false-default flag passed as 1 must take effect ──
 # (regression for stryke 1/0 booleans vs JSON true/false)
 val $flx = "$dir/$tag-flag.xlsx"

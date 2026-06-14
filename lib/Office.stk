@@ -972,6 +972,14 @@ fn Office::doc_wordfreq ($path, %opts) {
         office__doc_wordfreq(to_json({ path => $path, top => $opts{top}, min_length => $opts{min_length}, ignore_case => $opts{ignore_case}, stopwords => $opts{stopwords} })))
 }
 
+## Readability scores for any readable document (docx/odt/html/md/rtf/txt/pdf):
+## Flesch Reading Ease + Flesch–Kincaid Grade Level. Returns { words, sentences,
+## syllables, flesch_reading_ease, flesch_kincaid_grade }.
+fn Office::doc_readability ($path) {
+    Office::_decode("doc_readability",
+        office__doc_readability(to_json({ path => $path })))
+}
+
 ## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts:
 ## ignore_case => 1. Returns { count, matches => [{ paragraph, count, snippet }] }
 ## with 1-based paragraph indexes.

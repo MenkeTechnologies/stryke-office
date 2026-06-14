@@ -4916,6 +4916,30 @@ fn doc_wordfreq_ranks_words() {
 }
 
 #[test]
+fn doc_readability_flesch() {
+    let path = tmp("read.txt");
+    // 6 one-syllable words, 2 sentences → wps=3, spw=1.
+    std::fs::write(&path, "The cat sat. The dog ran.").unwrap();
+
+    let r = call(office__doc_readability, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["words"], 6, "word count: {r}");
+    assert_eq!(r["sentences"], 2, "sentence count: {r}");
+    assert_eq!(r["syllables"], 6, "syllable count: {r}");
+    // ease = 206.835 - 1.015*3 - 84.6*1 = 119.19
+    assert!(
+        (r["flesch_reading_ease"].as_f64().unwrap() - 119.19).abs() < 0.01,
+        "reading ease: {r}"
+    );
+    // grade = 0.39*3 + 11.8*1 - 15.59 = -2.62
+    assert!(
+        (r["flesch_kincaid_grade"].as_f64().unwrap() + 2.62).abs() < 0.01,
+        "grade level: {r}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn doc_find_and_slides_find() {
     // doc_find over a docx with three paragraphs
     let dx = tmp("find.docx");
