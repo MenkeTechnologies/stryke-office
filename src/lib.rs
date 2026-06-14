@@ -9767,6 +9767,90 @@ fn op_sheet_shuffle(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": n }))
 }
 
+/// Split a sheet's data rows into two files for ML train/test (sklearn
+/// `train_test_split`). opts: path, train => first output path (required), test
+/// => second output path (required), ratio => fraction of rows going to `train`
+/// (default 0.8), shuffle => randomize before splitting (default true), seed =>
+/// PRNG seed for a reproducible split, sheet, header (default true; each output
+/// carries the header), format. Returns `{ ok, train, test, train_rows,
+/// test_rows }`.
+fn op_sheet_train_test_split(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let train_path = req_str(&opts, "train")?.to_string();
+    let test_path = req_str(&opts, "test")?.to_string();
+    let ratio = opts
+        .get("ratio")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.8)
+        .clamp(0.0, 1.0);
+    let do_shuffle = opts.get("shuffle").and_then(flag_of).unwrap_or(true);
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .filter(|&s| s != 0)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let rows = sheet["rows"].as_array().cloned().unwrap_or_default();
+    let header_row = if header && !rows.is_empty() {
+        Some(rows[0].clone())
+    } else {
+        None
+    };
+    let data_start = if header_row.is_some() { 1 } else { 0 };
+
+    let mut idx: Vec<usize> = (data_start..rows.len()).collect();
+    if do_shuffle {
+        let mut state = seed;
+        for i in (1..idx.len()).rev() {
+            let j = (xorshift64(&mut state) % (i as u64 + 1)) as usize;
+            idx.swap(i, j);
+        }
+    }
+    let n = idx.len();
+    let n_train = (n as f64 * ratio).round() as usize;
+
+    let build = |members: &[usize]| -> Vec<Value> {
+        let mut out: Vec<Value> = Vec::with_capacity(members.len() + 1);
+        if let Some(h) = &header_row {
+            out.push(h.clone());
+        }
+        out.extend(members.iter().map(|&i| rows[i].clone()));
+        out
+    };
+    let write = |dest: &str, members: &[usize]| -> Result<()> {
+        let mut wopts =
+            json!({ "path": dest, "sheets": [{ "name": "Sheet1", "rows": build(members) }] });
+        if let Some(f) = opts.get("format") {
+            wopts["format"] = f.clone();
+        }
+        op_sheet_write(wopts)?;
+        Ok(())
+    };
+    write(&train_path, &idx[..n_train])?;
+    write(&test_path, &idx[n_train..])?;
+
+    Ok(json!({
+        "ok": true,
+        "train": train_path,
+        "test": test_path,
+        "train_rows": n_train,
+        "test_rows": n - n_train,
+    }))
+}
+
 /// Title-case a string: capitalize the first letter of each whitespace-separated
 /// word, lowercasing the rest.
 fn title_case(s: &str) -> String {
@@ -12748,6 +12832,7 @@ export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_sample, op_sheet_sample);
 export!(office__sheet_shuffle, op_sheet_shuffle);
+export!(office__sheet_train_test_split, op_sheet_train_test_split);
 export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
