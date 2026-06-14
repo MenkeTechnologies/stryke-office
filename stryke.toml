@@ -101,6 +101,7 @@ exports = [
     "office__sheet_lookup",
     "office__sheet_countif",
     "office__sheet_sumif",
+    "office__sheet_sumifs",
     "office__sheet_freq",
     "office__sheet_unique",
     "office__sheet_split_column",

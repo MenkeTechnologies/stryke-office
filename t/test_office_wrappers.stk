@@ -551,6 +551,13 @@ val $who = "$dir/$tag-where-out.xlsx"
 val $whr = Office::sheet_where($gcx, [{ column => "g", op => "eq", value => "x" }], $who)
 assert_eq $whr->{kept}, 2, "sheet_where: rows kept"
 unlink $who
+# sumifs: multi-criteria sum
+val $sfx = "$dir/$tag-sumifs.xlsx"
+Office::sheet_write($sfx, [{ name => "D", rows => [["region", "product", "qty"], ["west", "A", 10], ["west", "B", 20], ["west", "A", 5]] }])
+val $sfr = Office::sheet_sumifs($sfx, [{ column => "region", value => "west" }, { column => "product", value => "A" }], sum => "qty")
+assert_eq $sfr->{count}, 2, "sheet_sumifs: two rows match both"
+assert_eq $sfr->{sum}, 15, "sheet_sumifs: west+A qty = 15"
+unlink $sfx
 # flag: g == x marks 2 rows but keeps all
 val $flgo = "$dir/$tag-flag-out.xlsx"
 val $flgr = Office::sheet_flag($gcx, "g", $flgo, op => "eq", value => "x", into => "isx")

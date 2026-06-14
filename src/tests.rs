@@ -5272,6 +5272,50 @@ fn sheet_countif_sumif() {
 }
 
 #[test]
+fn sheet_sumifs_multi_criteria() {
+    let path = tmp("sumifs.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","product","qty"],
+                ["west","A",10],
+                ["west","B",20],
+                ["east","A",30],
+                ["west","A",5]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // region==west AND product==A -> rows (west,A,10) + (west,A,5) = 15
+    let s = call(
+        office__sheet_sumifs,
+        &format!(
+            r#"{{"path":"{path}","conditions":[{{"column":"region","value":"west"}},{{"column":"product","value":"A"}}],"sum":"qty"}}"#
+        ),
+    );
+    assert_eq!(s["count"].as_u64().unwrap(), 2, "two rows match both: {s}");
+    assert_eq!(s["sum"].as_f64().unwrap(), 15.0, "sumifs west+A qty: {s}");
+
+    // match any: region==east OR product==B -> east,A,30 + west,B,20 = 50 over 2 rows
+    let any = call(
+        office__sheet_sumifs,
+        &format!(
+            r#"{{"path":"{path}","conditions":[{{"column":"region","value":"east"}},{{"column":"product","value":"B"}}],"sum":"qty","match":"any"}}"#
+        ),
+    );
+    assert_eq!(
+        any["count"].as_u64().unwrap(),
+        2,
+        "two rows match any: {any}"
+    );
+    assert_eq!(any["sum"].as_f64().unwrap(), 50.0, "sumifs any: {any}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(

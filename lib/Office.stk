@@ -739,6 +739,15 @@ fn Office::sheet_sumif ($path, $column, %opts) {
         office__sheet_sumif(to_json({ path => $path, column => $column, op => $opts{op}, value => $opts{value}, sum => $opts{sum}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## SUMIFS/COUNTIFS: sum/count over rows where multiple $conditions hold.
+## $conditions is an arrayref of { column, op?, value, ignore_case? }. opts:
+## sum (column to total; default count only), match (all|any, default all),
+## sheet, header. Returns { sum, count }.
+fn Office::sheet_sumifs ($path, $conditions, %opts) {
+    Office::_decode("sheet_sumifs",
+        office__sheet_sumifs(to_json({ path => $path, conditions => $conditions, sum => $opts{sum}, match => $opts{match}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Value-counts of one column, sorted by frequency (pandas value_counts).
 ## opts: sheet, header, ignore_case, top. Returns { column, total, distinct, values }.
 fn Office::sheet_freq ($path, $column, %opts) {

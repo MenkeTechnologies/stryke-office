@@ -8783,6 +8783,94 @@ fn op_sheet_sumif(opts: Value) -> Result<Value> {
     Ok(json!({ "sum": sum, "count": count }))
 }
 
+/// Multi-criteria conditional sum/count (Excel `SUMIFS`/`COUNTIFS`) — sum a
+/// numeric column over rows where *all* (or, with `match => "any"`, any) of the
+/// given column predicates hold. opts: path, conditions => array of
+/// `{ column, op?, value, ignore_case? }` (op defaults to "eq"; same op set as
+/// `sheet_filter`/`sheet_where`), sum => column to total (default: count only),
+/// match => "all" (default) | "any", sheet, header (default true). Returns
+/// `{ sum, count }` (count = rows matched; sum = 0 when no `sum` column).
+fn op_sheet_sumifs(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let any = opts.get("match").and_then(Value::as_str) == Some("any");
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let conds = opts
+        .get("conditions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing conditions (array of {{column, op?, value}})"))?;
+    if conds.is_empty() {
+        return Err(anyhow!("conditions must list at least one predicate"));
+    }
+    let preds: Vec<(usize, String, Value, bool)> = conds
+        .iter()
+        .map(|c| {
+            let col = resolve_col(c.get("column"), header_row)?;
+            let op = c
+                .get("op")
+                .and_then(Value::as_str)
+                .unwrap_or("eq")
+                .to_string();
+            let value = c.get("value").cloned().unwrap_or(Value::Null);
+            let ic = c.get("ignore_case").and_then(flag_of).unwrap_or(false);
+            Ok((col, op, value, ic))
+        })
+        .collect::<Result<_>>()?;
+    let sum_col = match opts.get("sum") {
+        Some(v) if !v.is_null() => Some(resolve_col(Some(v), header_row)?),
+        _ => None,
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut sum = 0f64;
+    let mut count = 0u64;
+    for row in &rows[data_start..] {
+        let test = |&(col, ref op, ref value, ic): &(usize, String, Value, bool)| {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(col))
+                .unwrap_or(&Value::Null);
+            cell_matches(cell, op, value, ic)
+        };
+        let ok = if any {
+            preds.iter().any(test)
+        } else {
+            preds.iter().all(test)
+        };
+        if ok {
+            count += 1;
+            if let Some(sc) = sum_col {
+                if let Some(x) = row
+                    .as_array()
+                    .and_then(|a| a.get(sc))
+                    .and_then(sheet_cell_num)
+                {
+                    sum += x;
+                }
+            }
+        }
+    }
+    Ok(json!({ "sum": sum, "count": count }))
+}
+
 /// Frequency analysis (value-counts) of a single column, returned in memory and
 /// sorted by count descending (pandas `value_counts`). Unlike `sheet_aggregate`
 /// (which writes a file sorted by key), this is a pure read for analysis. opts:
@@ -15245,6 +15333,7 @@ export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);
 export!(office__sheet_sumif, op_sheet_sumif);
+export!(office__sheet_sumifs, op_sheet_sumifs);
 export!(office__sheet_freq, op_sheet_freq);
 export!(office__sheet_unique, op_sheet_unique);
 export!(office__sheet_split_column, op_sheet_split_column);
