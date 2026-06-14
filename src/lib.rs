@@ -2778,6 +2778,45 @@ fn op_sheet_rename(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "renamed": to }))
 }
 
+/// Add a new sheet to a workbook. opts: path, output (default in place),
+/// name => new sheet name (required), rows => [[cell,…]] (default empty),
+/// position => 0-based insert index (default: append), format. Returns
+/// `{ ok, path, sheets }` (new total).
+fn op_sheet_add(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let name = req_str(&opts, "name")?.to_string();
+    let rows = opts.get("rows").cloned().unwrap_or_else(|| json!([]));
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let new_sheet = json!({ "name": name, "rows": rows });
+    match opts
+        .get("position")
+        .and_then(Value::as_u64)
+        .map(|i| i as usize)
+    {
+        Some(p) if p <= sheets.len() => sheets.insert(p, new_sheet),
+        _ => sheets.push(new_sheet),
+    }
+
+    let n = sheets.len();
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sheets": n }))
+}
+
 /// Read one sheet's rows from a file, selected by name/index (default first).
 fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3794,6 +3833,7 @@ export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_rename, op_sheet_rename);
+export!(office__sheet_add, op_sheet_add);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);

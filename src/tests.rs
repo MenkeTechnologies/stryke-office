@@ -338,6 +338,31 @@ fn sheet_diff_cells() {
 }
 
 #[test]
+fn sheet_add_new() {
+    let path = tmp("add.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"A","rows":[["x"],[1]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("add_out.xlsx");
+    let r = call(
+        office__sheet_add,
+        &format!(r#"{{"path":"{path}","name":"B","rows":[["y"],[2]],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["sheets"], 2, "two sheets: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(rd["sheets"][0]["name"], "A", "A kept: {rd}");
+    assert_eq!(rd["sheets"][1]["name"], "B", "B added: {rd}");
+    assert_eq!(rd["sheets"][1]["rows"][1][0], 2.0, "B data: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_rename_one() {
     let path = tmp("ren.xlsx");
     let w = call(
