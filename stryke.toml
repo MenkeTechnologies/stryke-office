@@ -94,6 +94,7 @@ exports = [
     "office__sheet_freeze",
     "office__sheet_autofilter",
     "office__sheet_autosize",
+    "office__sheet_protect",
     "office__sheet_comments",
     "office__sheet_round",
     "office__sheet_histogram",

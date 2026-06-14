@@ -831,6 +831,14 @@ fn Office::sheet_autosize ($path, %opts) {
         office__sheet_autosize(to_json({ path => $path, sheet => $opts{sheet}, output => $opts{output}, format => $opts{format} })))
 }
 
+## Enable worksheet protection (xlsx). opts: password (omit for password-less),
+## sheet (default all), output (default in place), format. Returns
+## { ok, path, sheets }.
+fn Office::sheet_protect ($path, %opts) {
+    Office::_decode("sheet_protect",
+        office__sheet_protect(to_json({ path => $path, password => $opts{password}, sheet => $opts{sheet}, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Extract cell comments / notes from an xlsx. Returns
 ## { comments => [{ cell, author, text }], count }.
 fn Office::sheet_comments ($path) {

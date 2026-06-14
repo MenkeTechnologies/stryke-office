@@ -731,8 +731,14 @@ fn write_xlsx(path: &str, sheets: &[Value], opts: &Value) -> Result<()> {
 ///    notes:[{row,col,text,author?}], images:[{row,col,path}]`.
 fn write_xlsx_setup(ws: &mut rust_xlsxwriter::Worksheet, sheet: &str, s: &Value) -> Result<()> {
     use rust_xlsxwriter::{Image, Note};
-    if s.get("protect").and_then(flag_of) == Some(true) {
-        ws.protect();
+    match s.get("protect_password").and_then(Value::as_str) {
+        Some(pw) if !pw.is_empty() => {
+            ws.protect_with_password(pw);
+        }
+        _ if s.get("protect").and_then(flag_of) == Some(true) => {
+            ws.protect();
+        }
+        _ => {}
     }
     if let Some(c) = s.get("tab_color").and_then(Value::as_str) {
         ws.set_tab_color(xlsx_color(c));
@@ -7767,6 +7773,48 @@ fn op_sheet_autosize(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sheets": n }))
 }
 
+/// Turn on worksheet protection (lock against edits) — xlsx only; the one-call
+/// equivalent of the per-sheet `protect`/`protect_password` keys. opts: path,
+/// output (default in place), password => protect with this password (omit for
+/// password-less protection), sheet => a single sheet selector (name/index;
+/// default: every sheet), format. Note: protection is a re-write, so it applies
+/// to the current cell contents. Returns `{ ok, path, sheets }` (count
+/// protected).
+fn op_sheet_protect(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let password = opts.get("password").and_then(Value::as_str);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let targets: Vec<usize> = match opts.get("sheet") {
+        None | Some(Value::Null) => (0..sheets.len()).collect(),
+        _ => vec![sheet_target_index(&opts, &mut sheets)?],
+    };
+    for &t in &targets {
+        match password {
+            Some(pw) if !pw.is_empty() => sheets[t]["protect_password"] = json!(pw),
+            _ => sheets[t]["protect"] = json!(true),
+        }
+    }
+    let n = targets.len();
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sheets": n }))
+}
+
 /// Parse one `xl/comments*.xml` part: an `<authors>` list followed by a
 /// `<commentList>` of `<comment ref="A1" authorId="0">` whose `<text>` holds
 /// `<t>` runs. Returns `[{ cell, author, text }]`.
@@ -10613,6 +10661,7 @@ export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_autosize, op_sheet_autosize);
+export!(office__sheet_protect, op_sheet_protect);
 export!(office__sheet_comments, op_sheet_comments);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);

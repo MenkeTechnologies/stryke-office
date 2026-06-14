@@ -3877,6 +3877,58 @@ fn sheet_autosize_sets_column_widths() {
 }
 
 #[test]
+fn sheet_protect_locks_worksheet() {
+    use std::io::Read as _;
+    let path = tmp("protect.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a"],[1]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let read_xml = |p: &str| {
+        let bytes = std::fs::read(p).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut s = String::new();
+        zip.by_name("xl/worksheets/sheet1.xml")
+            .unwrap()
+            .read_to_string(&mut s)
+            .unwrap();
+        s
+    };
+
+    // password-less protection
+    let out = tmp("protect_out.xlsx");
+    let r = call(
+        office__sheet_protect,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["sheets"], 1, "one sheet protected: {r}");
+    assert!(
+        read_xml(&out).contains("sheetProtection"),
+        "protection element present"
+    );
+
+    // password protection records a hash attribute
+    let outp = tmp("protect_pw.xlsx");
+    let rp = call(
+        office__sheet_protect,
+        &format!(r#"{{"path":"{path}","output":"{outp}","password":"s3cret"}}"#),
+    );
+    assert_eq!(rp["ok"], true, "pw protect: {rp}");
+    let xml = read_xml(&outp);
+    assert!(
+        xml.contains("sheetProtection"),
+        "pw protection element present"
+    );
+    assert!(xml.contains("password="), "password hash recorded: {xml}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outp).ok();
+}
+
+#[test]
 fn sheet_comments_round_trip() {
     // Write a note via the per-sheet `notes` key, then read it back.
     let path = tmp("comments.xlsx");
