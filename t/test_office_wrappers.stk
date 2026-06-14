@@ -559,6 +559,16 @@ assert_eq $pdb->[0]{rows}[1][0], "0005", "sheet_pad: 5 -> 0005"
 assert_eq $pdb->[0]{rows}[2][0], "0042", "sheet_pad: 42 -> 0042"
 unlink $pdx
 unlink $pdo
+# sheet_substr: fixed-position substring extraction
+val $ssx = "$dir/$tag-substr.xlsx"
+Office::sheet_write($ssx, [{ name => "D", rows => [["code"], ["ABC123"], ["XYZ999"]] }])
+val $sso2 = "$dir/$tag-substr-out.xlsx"
+val $ssr = Office::sheet_substr($ssx, $sso2, "code", start => 0, len => 3, into => "prefix")
+assert_eq $ssr->{column}, "prefix", "sheet_substr: new column name"
+val $ssb = Office::sheet_read($sso2)
+assert_eq $ssb->[0]{rows}[1][1], "ABC", "sheet_substr: ABC123 -> ABC"
+unlink $ssx
+unlink $sso2
 # sheet_reverse: flip data-row order, header on top
 val $rvx = "$dir/$tag-reverse.xlsx"
 Office::sheet_write($rvx, [{ name => "D", rows => [["n"], [1], [2], [3]] }])

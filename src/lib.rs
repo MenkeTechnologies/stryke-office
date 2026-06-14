@@ -9375,6 +9375,99 @@ fn op_sheet_pad(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "padded": padded }))
 }
 
+/// Extract a fixed-position substring from a column (SQL `SUBSTRING`; fixed-width
+/// field extraction, e.g. chars 0..3 of a product code). opts: path, output,
+/// column => name/index (required), start => 0-based character offset (default 0;
+/// negative counts from the end), len => number of characters (optional; default:
+/// to the end), into => write to a new column (default in place), sheet, header,
+/// format. Indexing is by Unicode scalar; out-of-range yields an empty string.
+/// Returns `{ ok, path, column }`.
+fn op_sheet_substr(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let start = opts.get("start").and_then(Value::as_i64).unwrap_or(0);
+    let len = opts.get("len").and_then(Value::as_u64).map(|n| n as usize);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+
+    let slice = |s: &str| -> String {
+        let chars: Vec<char> = s.chars().collect();
+        let n = chars.len() as i64;
+        // Negative start counts from the end (clamped to 0).
+        let begin = if start < 0 {
+            (n + start).max(0) as usize
+        } else {
+            (start as usize).min(chars.len())
+        };
+        let end = match len {
+            Some(l) => (begin + l).min(chars.len()),
+            None => chars.len(),
+        };
+        chars[begin..end].iter().collect()
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                } else if let Some(h) = cells.get_mut(col) {
+                    *h = json!(base);
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).map(cell_to_string).unwrap_or_default();
+            let result = json!(slice(&src));
+            match &into {
+                Some(_) => cells.push(result),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = result;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = result;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into.unwrap_or(base) }))
+}
+
 /// Reverse the order of a sheet's data rows (e.g. show newest entries first).
 /// opts: path, output (default in place), sheet, header (default true; the header
 /// row stays on top, only the data rows are reversed), format. Returns
@@ -11619,6 +11712,7 @@ export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_pad, op_sheet_pad);
+export!(office__sheet_substr, op_sheet_substr);
 export!(office__sheet_reverse, op_sheet_reverse);
 export!(office__sheet_coalesce, op_sheet_coalesce);
 export!(office__sheet_recode, op_sheet_recode);

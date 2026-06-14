@@ -118,6 +118,7 @@ exports = [
     "office__sheet_cast",
     "office__sheet_strip",
     "office__sheet_pad",
+    "office__sheet_substr",
     "office__sheet_reverse",
     "office__sheet_coalesce",
     "office__sheet_recode",
