@@ -95,6 +95,13 @@ fn Office::sheet_describe ($path, %opts) {
         office__sheet_describe(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Infer each column's data type (pandas df.dtypes). opts: sheet, header. Returns
+## { sheet, rows, columns => [{ name, type, counts:{integer,float,bool,string,blank} }] }.
+fn Office::sheet_dtypes ($path, %opts) {
+    Office::_decode("sheet_dtypes",
+        office__sheet_dtypes(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Compute an arbitrary percentile of a numeric column ($q in 0.0..=1.0, e.g.
 ## 0.9 for p90). opts: sheet, header. Returns { column, q, value, count }.
 fn Office::sheet_quantile ($path, $column, $q, %opts) {

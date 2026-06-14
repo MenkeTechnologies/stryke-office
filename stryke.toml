@@ -18,6 +18,7 @@ exports = [
     "office__sheet_union",
     "office__sheet_stats",
     "office__sheet_describe",
+    "office__sheet_dtypes",
     "office__sheet_quantile",
     "office__sheet_agg",
     "office__sheet_corr",
