@@ -406,6 +406,16 @@ fn Office::images_to_pdf ($images, $output, %opts) {
         office__images_to_pdf(to_json({ images => $images, output => $output, page_size => $opts{page_size}, margin => $opts{margin} })))
 }
 
+## Render a spreadsheet as a bordered table in a PDF. opts: sheet => name/index,
+## title => optional heading, header => 0 to not shade/bold the first row,
+## size => font points, landscape => 1, margin. Returns { ok, path, pages,
+## bytes }. (pdf_build also accepts a { type => "table", rows => [[...]] } element
+## directly for tables inside larger documents.)
+fn Office::sheet_to_pdf ($path, $output, %opts) {
+    Office::_decode("sheet_to_pdf",
+        office__sheet_to_pdf(to_json({ path => $path, output => $output, sheet => $opts{sheet}, title => $opts{title}, header => $opts{header}, size => $opts{size}, landscape => $opts{landscape}, margin => $opts{margin} })))
+}
+
 ## Merge several PDFs into one (page order = $inputs order). Returns
 ## { pages, merged }.
 fn Office::pdf_merge ($inputs, $path) {

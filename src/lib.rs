@@ -3167,6 +3167,7 @@ export!(office__pdf_write, op_pdf_write);
 include!("pdf_build.rs");
 export!(office__pdf_build, op_pdf_build);
 export!(office__images_to_pdf, op_images_to_pdf);
+export!(office__sheet_to_pdf, op_sheet_to_pdf);
 
 // PDF manipulation (merge/split/rotate/info) via lopdf
 include!("pdf_ops.rs");
