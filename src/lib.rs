@@ -3964,6 +3964,7 @@ export!(office__img_draw_text_multiline, op_img_draw_text_multiline);
 export!(office__img_warp, op_img_warp);
 export!(office__img_to_base64, op_img_to_base64);
 export!(office__img_from_base64, op_img_from_base64);
+export!(office__img_data_uri, op_img_data_uri);
 
 // shapes, fills, masks, color analysis
 export!(office__img_draw_rounded_rect, op_img_draw_rounded_rect);
