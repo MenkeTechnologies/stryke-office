@@ -1059,3 +1059,46 @@ fn op_pdf_draw_rect(opts: Value) -> Result<Value> {
     doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
     Ok(json!({ "ok": true, "path": out, "pages": drawn, "rects": boxes.len() }))
 }
+
+/// Add text at a position on PDF pages (labels, stamps, annotations). opts:
+/// path, output, text, x/y => position in points (default 72,72; y from the
+/// bottom), size (default 12), color (default black), pages => [1-based subset]
+/// (default all). Returns `{ ok, path, pages }`.
+fn op_pdf_add_text(opts: Value) -> Result<Value> {
+    use lopdf::content::{Content, Operation};
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let text = req_str(&opts, "text")?.to_string();
+    let x = opts.get("x").and_then(Value::as_f64).unwrap_or(72.0);
+    let y = opts.get("y").and_then(Value::as_f64).unwrap_or(72.0);
+    let size = opts.get("size").and_then(Value::as_f64).unwrap_or(12.0);
+    let (r, g, b) = pdf_color01(opts.get("color"), [0, 0, 0]);
+    let subset: Option<std::collections::BTreeSet<u32>> = opts
+        .get("pages")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect());
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let mut added = 0usize;
+    for (num, page_id) in doc.get_pages() {
+        if let Some(set) = &subset {
+            if !set.contains(&num) {
+                continue;
+            }
+        }
+        ensure_helvetica(&mut doc, page_id, "SOFT")?;
+        let ops = vec![
+            Operation::new("BT", vec![]),
+            Operation::new("rg", vec![r.into(), g.into(), b.into()]),
+            Operation::new("Tf", vec!["SOFT".into(), size.into()]),
+            Operation::new("Td", vec![x.into(), y.into()]),
+            Operation::new("Tj", vec![Object::string_literal(text.clone())]),
+            Operation::new("ET", vec![]),
+        ];
+        doc.add_to_page_content(page_id, Content { operations: ops })
+            .map_err(|e| anyhow!("text page {num}: {e}"))?;
+        added += 1;
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "pages": added }))
+}

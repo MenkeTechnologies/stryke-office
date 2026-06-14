@@ -693,6 +693,15 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Add text at a position on PDF pages (labels, stamps, annotations). opts: x/y
+## => position in points (default 72,72; y from bottom), size (default 12),
+## color (default black), pages => [1-based subset] (default all). Returns
+## { ok, path, pages }.
+fn Office::pdf_add_text ($path, $text, $output, %opts) {
+    Office::_decode("pdf_add_text",
+        office__pdf_add_text(to_json({ path => $path, text => $text, output => $output, x => $opts{x}, y => $opts{y}, size => $opts{size}, color => $opts{color}, pages => $opts{pages} })))
+}
+
 ## Draw rectangles on PDF pages (color blocks, covering regions, highlights).
 ## $rects is an arrayref of [x, y, w, h] (points, y from bottom). opts: color
 ## (default black), fill => 0 to stroke instead, pages => [1-based subset]
