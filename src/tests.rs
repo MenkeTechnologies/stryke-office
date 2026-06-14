@@ -921,6 +921,49 @@ fn sheet_map_recodes_values() {
 }
 
 #[test]
+fn sheet_partition_by_column() {
+    let path = tmp("partition.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["east",5],
+                ["west",20]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let dir = tmp("partition_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__sheet_partition,
+        &format!(r#"{{"path":"{path}","column":"region","dir":"{dir}","prefix":"r-"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two partitions: {r}");
+
+    // the west file has the header + its 2 rows
+    let west = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{dir}/r-west.xlsx"}}"#),
+    );
+    let rows = west["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2 west rows: {west}");
+    assert_eq!(rows[0][0], "region", "header repeated: {west}");
+    assert_eq!(rows[1][0], "west", "west row: {west}");
+    assert_eq!(
+        rows[2][1].as_f64().unwrap(),
+        20.0,
+        "second west amt: {west}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
