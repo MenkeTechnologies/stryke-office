@@ -2813,6 +2813,61 @@ fn sheet_calc_arithmetic_column() {
 }
 
 #[test]
+fn sheet_where_multi_condition() {
+    let path = tmp("where.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","qty"],
+                ["west",10],
+                ["east",20],
+                ["west",30]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // AND: region == west AND qty >= 20  -> only west/30
+    let out = tmp("where_out.xlsx");
+    let r = call(
+        office__sheet_where,
+        &serde_json::json!({
+            "path": path, "output": out,
+            "conditions": [
+                {"column": "region", "op": "eq", "value": "west"},
+                {"column": "qty", "op": "ge", "value": 20}
+            ]
+        })
+        .to_string(),
+    );
+    assert_eq!(r["kept"], 1, "one row matches both: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "header + 1 row: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 30.0, "the west/30 row: {rd}");
+
+    // OR: region == east OR qty >= 30 -> east/20 and west/30
+    let outo = tmp("where_or.xlsx");
+    let ro = call(
+        office__sheet_where,
+        &serde_json::json!({
+            "path": path, "output": outo, "match": "any",
+            "conditions": [
+                {"column": "region", "op": "eq", "value": "east"},
+                {"column": "qty", "op": "ge", "value": 30}
+            ]
+        })
+        .to_string(),
+    );
+    assert_eq!(ro["kept"], 2, "two rows match either: {ro}");
+
+    for f in [&path, &out, &outo] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(

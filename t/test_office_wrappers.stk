@@ -235,6 +235,11 @@ unlink $mso
 # countif on the same file (g == x -> 2)
 val $cif = Office::sheet_countif($gcx, "g", op => "eq", value => "x")
 assert_eq $cif->{count}, 2, "sheet_countif: matched rows"
+# where: g == x -> 2 rows kept
+val $who = "$dir/$tag-where-out.xlsx"
+val $whr = Office::sheet_where($gcx, [{ column => "g", op => "eq", value => "x" }], $who)
+assert_eq $whr->{kept}, 2, "sheet_where: rows kept"
+unlink $who
 unlink $gcx
 unlink $gco2
 

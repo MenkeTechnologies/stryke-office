@@ -649,6 +649,13 @@ fn Office::sheet_calc ($path, $left, $op, $output, %opts) {
         office__sheet_calc(to_json({ path => $path, left => $left, op => $op, output => $output, right => $opts{right}, value => $opts{value}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Filter rows by multiple $conditions ([{ column, op?, value, ignore_case? }]).
+## opts: match (all/any), sheet, header, format. Returns { ok, path, kept }.
+fn Office::sheet_where ($path, $conditions, $output, %opts) {
+    Office::_decode("sheet_where",
+        office__sheet_where(to_json({ path => $path, conditions => $conditions, output => $output, match => $opts{match}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns
