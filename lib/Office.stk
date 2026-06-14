@@ -185,6 +185,15 @@ fn Office::sheet_anova ($path, %opts) {
         office__sheet_anova(to_json({ path => $path, columns => $opts{columns}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Pearson chi-square test of independence on a contingency table of counts
+## (each data row's numeric cells = one table row; non-numeric labels skipped).
+## opts: decimals, sheet, header. Returns { ok, chi2, df, p, rows, cols } with
+## the upper-tail chi-square p-value.
+fn Office::sheet_chisq ($path, %opts) {
+    Office::_decode("sheet_chisq",
+        office__sheet_chisq(to_json({ path => $path, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Render a spreadsheet as a GitHub-flavored Markdown table. opts: output (write
 ## to a .md file; omit to return the text), sheet, header. Returns { ok, rows,
 ## cols, markdown, path? }.

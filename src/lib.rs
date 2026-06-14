@@ -2767,6 +2767,143 @@ fn op_sheet_anova(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Lower regularized incomplete gamma P(a,x) via series (NR `gser`).
+fn gser(a: f64, x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let gln = gammln(a);
+    let mut ap = a;
+    let mut sum = 1.0 / a;
+    let mut del = sum;
+    for _ in 0..300 {
+        ap += 1.0;
+        del *= x / ap;
+        sum += del;
+        if del.abs() < sum.abs() * 1e-14 {
+            break;
+        }
+    }
+    sum * (-x + a * x.ln() - gln).exp()
+}
+
+/// Upper regularized incomplete gamma Q(a,x) via continued fraction (NR `gcf`).
+fn gcf(a: f64, x: f64) -> f64 {
+    const FPMIN: f64 = 1e-300;
+    let gln = gammln(a);
+    let mut b = x + 1.0 - a;
+    let mut c = 1.0 / FPMIN;
+    let mut d = 1.0 / b;
+    let mut h = d;
+    for i in 1..300 {
+        let an = -(i as f64) * (i as f64 - a);
+        b += 2.0;
+        d = an * d + b;
+        if d.abs() < FPMIN {
+            d = FPMIN;
+        }
+        c = b + an / c;
+        if c.abs() < FPMIN {
+            c = FPMIN;
+        }
+        d = 1.0 / d;
+        let del = d * c;
+        h *= del;
+        if (del - 1.0).abs() < 1e-14 {
+            break;
+        }
+    }
+    (-x + a * x.ln() - gln).exp() * h
+}
+
+/// Upper-tail regularized incomplete gamma Q(a,x) = 1 − P(a,x). Gives chi-square
+/// tail probabilities (`gammq` in Numerical Recipes).
+fn gammq(a: f64, x: f64) -> f64 {
+    if x < a + 1.0 {
+        1.0 - gser(a, x)
+    } else {
+        gcf(a, x)
+    }
+}
+
+/// Pearson chi-square test of independence on a contingency table of counts.
+/// Every data row's numeric cells form one table row (non-numeric cells such as
+/// a row label are skipped); the table must be rectangular and at least 2×2.
+/// opts: path, sheet, header (default true — first row treated as column labels),
+/// decimals. Returns `{ ok, chi2, df, p, rows, cols }` with the upper-tail
+/// chi-square p-value (regularized incomplete gamma).
+fn op_sheet_chisq(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    let mat: Vec<Vec<f64>> = rows[data_start..]
+        .iter()
+        .map(|r| {
+            r.as_array()
+                .map(|a| a.iter().filter_map(sheet_cell_num).collect::<Vec<f64>>())
+                .unwrap_or_default()
+        })
+        .filter(|v| !v.is_empty())
+        .collect();
+    let nr = mat.len();
+    let nc = mat.first().map_or(0, Vec::len);
+    if nr < 2 || nc < 2 {
+        return Err(anyhow!("contingency table must be at least 2x2"));
+    }
+    if mat.iter().any(|row| row.len() != nc) {
+        return Err(anyhow!(
+            "contingency table rows have unequal numeric widths"
+        ));
+    }
+    let row_tot: Vec<f64> = mat.iter().map(|r| r.iter().sum()).collect();
+    let col_tot: Vec<f64> = (0..nc).map(|c| mat.iter().map(|r| r[c]).sum()).collect();
+    let grand: f64 = row_tot.iter().sum();
+    if grand <= 0.0 {
+        return Err(anyhow!("contingency table total is zero"));
+    }
+    let mut chi2 = 0.0;
+    for i in 0..nr {
+        for c in 0..nc {
+            let e = row_tot[i] * col_tot[c] / grand;
+            if e > 0.0 {
+                chi2 += (mat[i][c] - e).powi(2) / e;
+            }
+        }
+    }
+    let df = ((nr - 1) * (nc - 1)) as f64;
+    let p = gammq(df / 2.0, chi2 / 2.0);
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    Ok(json!({
+        "ok": true,
+        "chi2": round(chi2),
+        "df": df,
+        "p": round(p),
+        "rows": nr,
+        "cols": nc,
+    }))
+}
+
 fn op_sheet_cov(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -14085,6 +14222,7 @@ export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_regress, op_sheet_regress);
 export!(office__sheet_ttest, op_sheet_ttest);
 export!(office__sheet_anova, op_sheet_anova);
+export!(office__sheet_chisq, op_sheet_chisq);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
 export!(office__sheet_to_latex, op_sheet_to_latex);

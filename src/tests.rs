@@ -739,6 +739,52 @@ fn sheet_anova_one_way() {
 }
 
 #[test]
+fn sheet_chisq_independence() {
+    // 2x2 table [[10,20],[30,40]] -> chi2 ~ 0.7937, df 1, p ~ 0.37
+    let path = tmp("chisq.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"X","rows":[
+                ["c1","c2"],
+                [10,20],
+                [30,40]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(office__sheet_chisq, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["rows"].as_u64().unwrap(), 2, "2 rows: {s}");
+    assert_eq!(s["cols"].as_u64().unwrap(), 2, "2 cols: {s}");
+    assert_eq!(s["df"].as_f64().unwrap(), 1.0, "df=(r-1)(c-1): {s}");
+    assert!(
+        (s["chi2"].as_f64().unwrap() - 0.79365).abs() < 1e-3,
+        "chi2 ~ 0.794: {s}"
+    );
+    assert!(
+        (0.30..0.45).contains(&s["p"].as_f64().unwrap()),
+        "p ~ 0.37: {s}"
+    );
+
+    // strong association -> tiny p
+    let path2 = tmp("chisq2.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path2}","sheets":[{{"name":"X","rows":[["a","b"],[50,5],[5,50]]}}]}}"#
+        ),
+    );
+    let s2 = call(office__sheet_chisq, &format!(r#"{{"path":"{path2}"}}"#));
+    assert!(
+        s2["p"].as_f64().unwrap() < 0.001,
+        "strong association tiny p: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_cov_matrix() {
     let path = tmp("cov.xlsx");
     // x = [1,2,3], y = 2x. Sample var(x) = 1; cov(x,y) = 2; var(y) = 4.

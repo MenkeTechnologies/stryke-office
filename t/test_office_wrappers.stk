@@ -1323,6 +1323,14 @@ assert_eq $anr->{df_between}, 2, "sheet_anova: df between"
 assert_ok ($anr->{p} < 0.001), "sheet_anova: significant p"
 unlink $anx
 
+# ── sheet_chisq: chi-square test of independence ────────────────────
+val $csx = "$dir/$tag-chisq.xlsx"
+Office::sheet_write($csx, [{ name => "X", rows => [["c1", "c2"], [50, 5], [5, 50]] }])
+val $csr = Office::sheet_chisq($csx)
+assert_eq $csr->{df}, 1, "sheet_chisq: df 1 for 2x2"
+assert_ok ($csr->{p} < 0.001), "sheet_chisq: strong association tiny p"
+unlink $csx
+
 # ── chart density (ggplot2 geom_density): KDE curve to SVG ───────────
 val $densvg = Office::chart_svg("density", [{ name => "a", data => [1, 2, 2, 3, 3, 3, 4, 4, 5] }])
 assert_ok ($densvg =~ /^<svg/), "chart density: svg document"

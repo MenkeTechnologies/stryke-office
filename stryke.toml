@@ -30,6 +30,7 @@ exports = [
     "office__sheet_regress",
     "office__sheet_ttest",
     "office__sheet_anova",
+    "office__sheet_chisq",
     "office__sheet_to_md",
     "office__sheet_to_sql",
     "office__sheet_to_latex",
