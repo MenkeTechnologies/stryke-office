@@ -222,6 +222,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_split_ranges($path, $ranges, $dir, %opts)` | `{count, files}` | split into one file per `[start,end]` range |
 | `Office::pdf_to_text($path, %opts)` | `{pages, chars}` or `{count, files}` | extract text to one file (`output`) or per-page files (`dir`) |
 | `Office::pdf_assemble($inputs, $output)` | `{inputs, pages}` | build one PDF from a mix of image files (→ pages) and PDFs (merged) |
+| `Office::pdf_stamp_image($path, $image, $output, %opts)` | `{stamped}` | overlay a logo/signature image on pages; `x`/`y`/`width`/`height`/`pages` |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |
