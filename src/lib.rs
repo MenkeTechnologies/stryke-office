@@ -7181,6 +7181,77 @@ fn op_sheet_append(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "added": added, "rows": total }))
 }
 
+/// Concatenate two row-aligned sheets side by side (pandas `concat(axis=1)`) —
+/// positional, no key, unlike `sheet_join`. opts: path (left), right => second
+/// spreadsheet path (required), output, sheet => left sheet selector, right_sheet
+/// => right sheet selector, format. Rows are paired by position; the shorter side
+/// is padded with blank cells so every output row spans both tables' full width.
+/// Returns `{ ok, path, rows, columns }`.
+fn op_sheet_hstack(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let right_path = req_str(&opts, "right")?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let pick = |read: &Value, sel: Option<&Value>| -> Vec<Value> {
+        let sheets = read.get("sheets").and_then(Value::as_array);
+        let sheet = sheets.and_then(|ss| match sel {
+            Some(Value::String(name)) => ss.iter().find(|s| s["name"] == *name),
+            Some(Value::Number(n)) => n.as_u64().and_then(|i| ss.get(i as usize)),
+            _ => ss.first(),
+        });
+        sheet
+            .and_then(|s| s["rows"].as_array())
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let lread = op_sheet_read(json!({ "path": path }))?;
+    let rread = op_sheet_read(json!({ "path": right_path }))?;
+    let lrows = pick(&lread, opts.get("sheet"));
+    let rrows = pick(&rread, opts.get("right_sheet"));
+
+    let width = |rows: &[Value]| {
+        rows.iter()
+            .map(|r| r.as_array().map_or(0, |a| a.len()))
+            .max()
+            .unwrap_or(0)
+    };
+    let lw = width(&lrows);
+    let rw = width(&rrows);
+    let n = lrows.len().max(rrows.len());
+
+    let mut out_rows: Vec<Value> = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut cells: Vec<Value> = Vec::with_capacity(lw + rw);
+        let mut push_side = |rows: &[Value], w: usize| {
+            let mut row = rows
+                .get(i)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            row.resize(w, Value::Null);
+            cells.append(&mut row);
+        };
+        push_side(&lrows, lw);
+        push_side(&rrows, rw);
+        out_rows.push(Value::Array(cells));
+    }
+
+    let name = lread
+        .get("sheets")
+        .and_then(Value::as_array)
+        .and_then(|s| s.first())
+        .and_then(|s| s["name"].as_str())
+        .unwrap_or("Sheet1")
+        .to_string();
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": name, "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n, "columns": lw + rw }))
+}
+
 /// Fill blank cells in a sheet. opts: path, output (default: in place),
 /// method => "ffill" (default; carry the last non-blank value down) | "value"
 /// (use a constant `value`), by => column name/index or array (default: all
@@ -10652,6 +10723,7 @@ export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_duplicates, op_sheet_duplicates);
 export!(office__sheet_append, op_sheet_append);
+export!(office__sheet_hstack, op_sheet_hstack);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_interpolate, op_sheet_interpolate);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);

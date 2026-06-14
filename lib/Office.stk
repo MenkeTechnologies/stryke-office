@@ -601,6 +601,14 @@ fn Office::sheet_append ($path, %opts) {
         office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Concatenate two row-aligned sheets side by side (pandas concat axis=1).
+## $right is the second spreadsheet path. opts: sheet (left selector), right_sheet
+## (right selector), format. Returns { ok, path, rows, columns }.
+fn Office::sheet_hstack ($path, $right, $output, %opts) {
+    Office::_decode("sheet_hstack",
+        office__sheet_hstack(to_json({ path => $path, right => $right, output => $output, sheet => $opts{sheet}, right_sheet => $opts{right_sheet}, format => $opts{format} })))
+}
+
 ## Validate a sheet's cells against per-column rules. $rules is an arrayref of
 ## { column => name/index, type => "number"|"int"|"nonempty", min, max,
 ## allowed => [values] }. opts: sheet, header => 0 if first row is data. Returns
