@@ -361,6 +361,12 @@ val $asr = Office::sheet_autosize($gcx, output => $aso)
 assert_ok $asr->{ok}, "sheet_autosize: ok"
 assert_ok ($asr->{sheets} >= 1), "sheet_autosize: at least one sheet autofit"
 unlink $aso
+# protect the worksheet with a password
+val $pwo = "$dir/$tag-protect-out.xlsx"
+val $pwr = Office::sheet_protect($gcx, output => $pwo, password => "s3cret")
+assert_ok $pwr->{ok}, "sheet_protect: ok"
+assert_ok ($pwr->{sheets} >= 1), "sheet_protect: at least one sheet protected"
+unlink $pwo
 # sheet_comments: round-trip a cell note
 val $cmtx = "$dir/$tag-cmt.xlsx"
 Office::sheet_write($cmtx, [{ name => "D", rows => [["a"], [1]], notes => [{ row => 0, col => 0, text => "needs review", author => "Jane" }] }])

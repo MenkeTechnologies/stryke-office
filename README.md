@@ -181,6 +181,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_freeze($path, $output, %opts)` | `{ok, path, row, col}` | freeze panes on a sheet (xlsx); `row` (default 1)/`col` opts |
 | `Office::sheet_autofilter($path, $output, %opts)` | `{ok, path, range}` | apply an autofilter over a sheet's range (xlsx); `range` opt (default used range) |
 | `Office::sheet_autosize($path, %opts)` | `{ok, path, sheets}` | auto-size columns to content (xlsx); `sheet` opt limits to one sheet (default all) |
+| `Office::sheet_protect($path, %opts)` | `{ok, path, sheets}` | enable worksheet protection (xlsx); `password`/`sheet` opts |
 | `Office::sheet_comments($path)` | `{comments:[{cell,author,text}], count}` | extract cell comments/notes from an xlsx (`xl/comments*.xml`) |
 | `Office::sheet_cast($path, $output, %opts)` | `{ok, path, cast}` | type-coerce column(s) (`number`/`int`/`string`/`bool`); `number` parses currency/commas/percent/accounting negatives; `by` opt |
 | `Office::sheet_strip($path, %opts)` | `{ok, path, trimmed}` | trim whitespace from every string cell (whole-sheet); `collapse` squeezes internal runs |
