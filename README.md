@@ -683,7 +683,9 @@ standard-normal quantiles with a quartile reference line), `ribbon` (ggplot2
 `geom_ribbon` — continuous filled band between `[[lo,hi],…]` per x, distinct
 from `range`'s discrete floating bars), `jitter`/`strip` (ggplot2 `geom_jitter`
 — per-series category strip of raw `data`, `jitter` spreads x with a seeded PRNG
-(`seed`/`jitter_width`), `strip` keeps points centered).
+(`seed`/`jitter_width`), `strip` keeps points centered), `rug` (ggplot2
+`geom_rug` — marginal tick per raw value along the value axis, one lane per
+series).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,

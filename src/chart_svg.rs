@@ -81,6 +81,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "ecdf" => svg_ecdf(&mut s, series, l, t, r, b),
         "qq" | "qqplot" => svg_qq(&mut s, series, l, t, r, b),
         "jitter" | "strip" => svg_jitter(&mut s, series, opts, l, t, r, b, kind == "jitter"),
+        "rug" => svg_rug(&mut s, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -1521,6 +1522,50 @@ fn svg_jitter(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r:
         }
         let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&name));
+    }
+}
+
+/// Rug plot (vector; ggplot2 `geom_rug`). A marginal tick per raw value along a
+/// shared value axis, one stacked lane per series.
+fn svg_rug(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let (mut xmin, mut xmax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            xmin = xmin.min(v);
+            xmax = xmax.max(v);
+        }
+    }
+    if !xmin.is_finite() || !xmax.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    let pad = (xmax - xmin) * 0.05;
+    let (xmin, xmax) = (xmin - pad, xmax + pad);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let xp = |v: f64| l + (v - xmin) / (xmax - xmin) * pw;
+    for i in 0..=5 {
+        let v = xmin + (xmax - xmin) * i as f64 / 5.0;
+        let x = xp(v);
+        let _ = write!(s, r##"<line x1="{x:.1}" y1="{t}" x2="{x:.1}" y2="{b}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, x - 10.0, b + 14.0, xml_escape(&fmt_num(v)));
+    }
+
+    let nser = series.len().max(1);
+    let band = ph / nser as f64;
+    let tick = (band * 0.7).min(28.0);
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let baseline = b - si as f64 * band;
+        for v in series_nums(ser) {
+            let x = xp(v);
+            let _ = write!(s, r##"<line x1="{x:.1}" y1="{baseline:.1}" x2="{x:.1}" y2="{:.1}" stroke="{col}" stroke-width="1.5"/>"##, baseline - tick);
+        }
+        let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, l + 4.0, baseline - tick - 4.0, xml_escape(&name));
     }
 }
 

@@ -1316,4 +1316,9 @@ val $jitsvg = Office::chart_svg("jitter", [{ name => "grp", data => [3, 3, 3, 4,
 assert_ok ($jitsvg =~ /^<svg/), "chart jitter: svg document"
 assert_ok ($jitsvg =~ /circle/), "chart jitter: point per value"
 
+# ── chart rug (ggplot2 geom_rug): marginal ticks to SVG ─────────────
+val $rugsvg = Office::chart_svg("rug", [{ name => "x", data => [1, 2, 4, 4, 7, 9] }])
+assert_ok ($rugsvg =~ /^<svg/), "chart rug: svg document"
+assert_ok ($rugsvg =~ /stroke-width="1.5"/), "chart rug: tick marks"
+
 test_run
