@@ -187,6 +187,12 @@ val $pr2 = Office::sheet_get_cell("$pdir/y.xlsx", "A2")
 assert_eq $pr2->{value}, "y", "sheet_partition: group file written"
 unlink "$pdir/x.xlsx"
 unlink "$pdir/y.xlsx"
+# multisort by g desc
+val $mso = "$dir/$tag-msort-out.xlsx"
+Office::sheet_multisort($gcx, [{ column => "g", descending => 1 }], $mso)
+val $msr = Office::sheet_get_cell($mso, "A2")
+assert_eq $msr->{value}, "y", "sheet_multisort: descending key orders y first"
+unlink $mso
 # countif on the same file (g == x -> 2)
 val $cif = Office::sheet_countif($gcx, "g", op => "eq", value => "x")
 assert_eq $cif->{count}, 2, "sheet_countif: matched rows"
