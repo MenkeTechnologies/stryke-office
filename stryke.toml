@@ -120,6 +120,7 @@ exports = [
     "office__sheet_pad",
     "office__sheet_substr",
     "office__sheet_extract",
+    "office__sheet_grep",
     "office__sheet_reverse",
     "office__sheet_coalesce",
     "office__sheet_recode",

@@ -817,6 +817,14 @@ fn Office::sheet_extract ($path, $output, $column, $pattern, %opts) {
         office__sheet_extract(to_json({ path => $path, output => $output, column => $column, pattern => $pattern, group => $opts{group}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Keep rows whose cell matches a regex (regex counterpart to sheet_filter).
+## $pattern is a regex. opts: column (default: any cell in the row), invert,
+## ignore_case, sheet, header, format. Returns { ok, path, kept, removed }.
+fn Office::sheet_grep ($path, $output, $pattern, %opts) {
+    Office::_decode("sheet_grep",
+        office__sheet_grep(to_json({ path => $path, output => $output, pattern => $pattern, column => $opts{column}, invert => $opts{invert}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Reverse the order of a sheet's data rows (header kept on top). opts: output
 ## (default in place), sheet, header, format. Returns { ok, path, rows }.
 fn Office::sheet_reverse ($path, %opts) {
