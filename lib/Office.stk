@@ -789,6 +789,13 @@ fn Office::slides_to_sheet ($path, $output, %opts) {
         office__slides_to_sheet(to_json({ path => $path, output => $output, sep => $opts{sep}, format => $opts{format} })))
 }
 
+## Extract a PDF's text into a spreadsheet (one row per non-blank line: page,
+## text). opts: format. Returns { ok, path, rows }.
+fn Office::pdf_to_sheet ($path, $output, %opts) {
+    Office::_decode("pdf_to_sheet",
+        office__pdf_to_sheet(to_json({ path => $path, output => $output, format => $opts{format} })))
+}
+
 ## Parse a Markdown outline into a presentation (inverse of slides_to_md).
 ## opts: markdown (text) or path (.md file), format. Returns { ok, path, slides }.
 fn Office::md_to_slides ($output, %opts) {

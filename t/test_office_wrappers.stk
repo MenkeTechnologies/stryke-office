@@ -271,6 +271,15 @@ assert_ok ($h2pr->{text} =~ /Widget/), "html_to_pdf: text renders into pdf"
 unlink $h2pin
 unlink $h2pout
 
+# ── pdf -> sheet ────────────────────────────────────────────────────
+val $p2sin = "$dir/$tag-p2s.pdf"
+Office::pdf_write($p2sin, ["alpha", "beta"])
+val $p2sout = "$dir/$tag-p2s.xlsx"
+val $p2sr = Office::pdf_to_sheet($p2sin, $p2sout)
+assert_ok ($p2sr->{rows} >= 1), "pdf_to_sheet: rows extracted"
+unlink $p2sin
+unlink $p2sout
+
 # ── md -> pdf (build the .md via sheet_to_md) ───────────────────────
 val $m2pin = "$dir/$tag-m2p.md"
 Office::sheet_to_md($h2sx, output => $m2pin)
