@@ -286,6 +286,40 @@ fn sheet_mode_most_frequent() {
 }
 
 #[test]
+fn sheet_nunique_cardinality() {
+    let path = tmp("nunique.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["color","n"],
+                ["red",1],
+                ["blue",1],
+                ["red",2],
+                ["",5]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_nunique, &format!(r#"{{"path":"{path}"}}"#));
+    let cols = r["columns"].as_array().unwrap();
+    // color: red, blue (blank dropped) = 2 ; n: 1, 2, 5 = 3
+    assert_eq!(cols[0]["name"], "color", "col0 name: {r}");
+    assert_eq!(cols[0]["nunique"], 2, "two distinct colors: {r}");
+    assert_eq!(cols[1]["nunique"], 3, "three distinct n: {r}");
+
+    // dropna=false counts the blank color as its own value -> 3
+    let rk = call(
+        office__sheet_nunique,
+        &format!(r#"{{"path":"{path}","dropna":false}}"#),
+    );
+    assert_eq!(rk["columns"][0]["nunique"], 3, "blank counted: {rk}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_quantile_arbitrary_percentile() {
     let path = tmp("quantile.xlsx");
     let w = call(
