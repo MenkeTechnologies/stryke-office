@@ -84,9 +84,20 @@ val $gpo = "$dir/$tag-paste-out.txt"
 val $gpr = Office::text_paste([$gpa, $gpb], delim => ",", output => $gpo)
 assert_eq $gpr->{count}, 3, "text_paste: three merged lines"
 assert_eq $gpr->{lines}[0], "1,x", "text_paste: first line paired"
+unlink $gpo
+# text_comm: set comparison of two files
+val $gca = "$dir/$tag-comm-a.txt"
+val $gcb = "$dir/$tag-comm-b.txt"
+spew $gca, "apple\nbanana\ncherry\n"
+spew $gcb, "banana\ncherry\ndate\n"
+val $gcr = Office::text_comm($gca, $gcb)
+assert_eq $gcr->{common}, 2, "text_comm: two common lines"
+assert_eq $gcr->{only_a}[0], "apple", "text_comm: only in a"
+assert_eq $gcr->{only_b}[0], "date", "text_comm: only in b"
 unlink $gpa
 unlink $gpb
-unlink $gpo
+unlink $gca
+unlink $gcb
 unlink $grx
 unlink $grt
 unlink $gso

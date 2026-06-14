@@ -923,3 +923,59 @@ fn op_text_paste(opts: Value) -> Result<Value> {
     }
     Ok(out)
 }
+
+/// Compare the lines of two files and bucket them three ways (a set-based take
+/// on Unix `comm`, order- and sort-independent). opts: a => first file, b =>
+/// second file, ignore_case => fold case before comparing (default false).
+/// Returns `{ only_a, only_b, both, a_count, b_count, common }` where the three
+/// arrays preserve first-seen order. Duplicate lines collapse to set membership.
+fn op_text_comm(opts: Value) -> Result<Value> {
+    use std::collections::HashSet;
+    let pa = req_str(&opts, "a")?;
+    let pb = req_str(&opts, "b")?;
+    let ic = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let fold = |s: &str| if ic { s.to_lowercase() } else { s.to_string() };
+
+    let read = |p: &str| -> std::io::Result<Vec<String>> {
+        Ok(String::from_utf8_lossy(&std::fs::read(p)?).lines().map(String::from).collect())
+    };
+    let la = read(pa)?;
+    let lb = read(pb)?;
+    let sa: HashSet<String> = la.iter().map(|s| fold(s)).collect();
+    let sb: HashSet<String> = lb.iter().map(|s| fold(s)).collect();
+
+    let mut only_a = Vec::new();
+    let mut both = Vec::new();
+    let mut seen_a: HashSet<String> = HashSet::new();
+    for line in &la {
+        let key = fold(line);
+        if !seen_a.insert(key.clone()) {
+            continue; // dedupe within a
+        }
+        if sb.contains(&key) {
+            both.push(line.clone());
+        } else {
+            only_a.push(line.clone());
+        }
+    }
+    let mut only_b = Vec::new();
+    let mut seen_b: HashSet<String> = HashSet::new();
+    for line in &lb {
+        let key = fold(line);
+        if !seen_b.insert(key.clone()) {
+            continue;
+        }
+        if !sa.contains(&key) {
+            only_b.push(line.clone());
+        }
+    }
+
+    Ok(json!({
+        "only_a": only_a,
+        "only_b": only_b,
+        "both": both,
+        "a_count": only_a.len(),
+        "b_count": only_b.len(),
+        "common": both.len(),
+    }))
+}

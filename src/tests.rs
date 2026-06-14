@@ -13137,6 +13137,53 @@ fn text_paste_side_by_side() {
 }
 
 #[test]
+fn text_comm_set_compare() {
+    let a = tmp("comm_a.txt");
+    let b = tmp("comm_b.txt");
+    std::fs::write(&a, "apple\nbanana\ncherry\n").unwrap();
+    std::fs::write(&b, "banana\ncherry\ndate\n").unwrap();
+    let r = call(office__text_comm, &format!(r#"{{"a":"{a}","b":"{b}"}}"#));
+    assert_eq!(
+        r["only_a"].as_array().unwrap().len(),
+        1,
+        "apple only in a: {r}"
+    );
+    assert_eq!(r["only_a"][0], "apple", "only_a content: {r}");
+    assert_eq!(r["only_b"][0], "date", "only_b content: {r}");
+    assert_eq!(
+        r["common"].as_u64().unwrap(),
+        2,
+        "banana+cherry common: {r}"
+    );
+    let both: Vec<&str> = r["both"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        both.contains(&"banana") && both.contains(&"cherry"),
+        "both: {r}"
+    );
+
+    // case-insensitive folds Apple==apple
+    std::fs::write(&b, "APPLE\nkiwi\n").unwrap();
+    let ri = call(
+        office__text_comm,
+        &format!(r#"{{"a":"{a}","b":"{b}","ignore_case":true}}"#),
+    );
+    assert_eq!(
+        ri["common"].as_u64().unwrap(),
+        1,
+        "apple matches APPLE: {ri}"
+    );
+
+    for f in [&a, &b] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

@@ -2115,6 +2115,14 @@ fn Office::text_paste ($paths, %opts) {
         office__text_paste(to_json({ paths => $paths, delim => $opts{delim}, output => $opts{output} })))
 }
 
+## Set-based line comparison of two files (Unix comm, order-independent). opts:
+## ignore_case. Returns { only_a, only_b, both, a_count, b_count, common };
+## arrays keep first-seen order, duplicates collapse to set membership.
+fn Office::text_comm ($a, $b, %opts) {
+    Office::_decode("text_comm",
+        office__text_comm(to_json({ a => $a, b => $b, ignore_case => $opts{ignore_case} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {
