@@ -6630,6 +6630,92 @@ fn op_sheet_dedupe(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "kept": kept_n, "removed": total - kept_n }))
 }
 
+/// Report duplicate rows by key (data-quality audit) — the find-and-report
+/// counterpart to `sheet_dedupe`, which removes them. opts: path, `by` => key
+/// column name/index or array (default: the whole row), sheet, header. Returns
+/// `{ duplicates, groups: [{ key, count, rows }] }` where each group is a key
+/// seen more than once, `rows` lists its 0-based data-row indices (first
+/// occurrence included), and `duplicates` totals the redundant rows (count − 1
+/// per group). Groups are ordered by first appearance.
+fn op_sheet_duplicates(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let cols: Option<Vec<usize>> = match opts.get("by") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(arr)) => Some(
+            arr.iter()
+                .map(|c| resolve_col(Some(c), hr))
+                .collect::<Result<_>>()?,
+        ),
+        Some(v) => Some(vec![resolve_col(Some(v), hr)?]),
+    };
+    let row_key = |row: &Value| -> String {
+        match &cols {
+            Some(cs) => cs
+                .iter()
+                .map(|&c| {
+                    cell_to_string(
+                        row.as_array()
+                            .and_then(|a| a.get(c))
+                            .unwrap_or(&Value::Null),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\u{1}"),
+            None => row.to_string(),
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Preserve first-seen order of keys while collecting member indices.
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: std::collections::HashMap<String, (String, Vec<usize>)> =
+        std::collections::HashMap::new();
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        let k = row_key(row);
+        let entry = groups.entry(k.clone()).or_insert_with(|| {
+            order.push(k.clone());
+            (k.clone(), Vec::new())
+        });
+        entry.1.push(i);
+    }
+
+    let mut dup_groups: Vec<Value> = Vec::new();
+    let mut duplicates = 0u64;
+    for k in &order {
+        let (_, idxs) = &groups[k];
+        if idxs.len() > 1 {
+            duplicates += (idxs.len() - 1) as u64;
+            dup_groups.push(json!({
+                "key": k.replace('\u{1}', " | "),
+                "count": idxs.len(),
+                "rows": idxs,
+            }));
+        }
+    }
+    Ok(json!({ "duplicates": duplicates, "groups": dup_groups }))
+}
+
 /// Append rows to an existing sheet. opts: path, output (default: in place),
 /// sheet => name/index (default first), and either `rows` => [[…], …] (raw rows)
 /// or `records` => [{…}] (mapped to the sheet's existing header field order),
@@ -10033,6 +10119,7 @@ export!(office__sheet_subtotal, op_sheet_subtotal);
 export!(office__sheet_replace, op_sheet_replace);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
+export!(office__sheet_duplicates, op_sheet_duplicates);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_interpolate, op_sheet_interpolate);

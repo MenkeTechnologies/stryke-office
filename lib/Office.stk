@@ -844,6 +844,14 @@ fn Office::sheet_dedupe ($path, $output, %opts) {
         office__sheet_dedupe(to_json({ path => $path, output => $output, by => $opts{by}, keep => $opts{keep}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Find/report duplicate rows by key (data-quality audit; counterpart to dedupe).
+## opts: by (key column(s); default whole row), sheet, header. Returns
+## { duplicates, groups => [{ key, count, rows }] }.
+fn Office::sheet_duplicates ($path, %opts) {
+    Office::_decode("sheet_duplicates",
+        office__sheet_duplicates(to_json({ path => $path, by => $opts{by}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 # ── documents ───────────────────────────────────────────────────────
 
 ## Read a word-processing document (docx/odt). Returns a list of paragraph

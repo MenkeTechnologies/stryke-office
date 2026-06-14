@@ -2408,6 +2408,48 @@ fn sheet_dedupe_rows() {
 }
 
 #[test]
+fn sheet_duplicates_by_key() {
+    let path = tmp("dups.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","qty"],
+                ["a",1],
+                ["b",2],
+                ["a",1],
+                ["a",3]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // by name: "a" appears at data rows 0,2,3 (3x); "b" once → one dup group
+    let r = call(
+        office__sheet_duplicates,
+        &format!(r#"{{"path":"{path}","by":"name"}}"#),
+    );
+    assert_eq!(r["duplicates"], 2, "two redundant rows (3 a's): {r}");
+    let groups = r["groups"].as_array().unwrap();
+    assert_eq!(groups.len(), 1, "one duplicated key: {r}");
+    assert_eq!(groups[0]["key"], "a", "duplicated key: {r}");
+    assert_eq!(groups[0]["count"], 3, "three occurrences: {r}");
+    let idxs: Vec<u64> = groups[0]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().unwrap())
+        .collect();
+    assert_eq!(idxs, vec![0, 2, 3], "0-based data-row indices: {r}");
+
+    // whole-row: only a/1 (rows 0,2) is an exact duplicate
+    let rw = call(office__sheet_duplicates, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(rw["duplicates"], 1, "one exact-row duplicate: {rw}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_transpose_swaps_axes() {
     let path = tmp("trans.xlsx");
     // 2 rows x 3 cols
