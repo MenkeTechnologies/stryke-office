@@ -8171,6 +8171,75 @@ fn op_slides_reorder(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": n }))
 }
 
+/// Delete one or more slides by 1-based number (the deck analogue of
+/// `pdf_delete`). opts: path (pptx/odp), output (default in-place), slides =>
+/// number or array of 1-based slide numbers to remove, format. Returns
+/// `{ ok, path, removed, slides }` (slides = remaining count).
+fn op_slides_delete(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let drop: std::collections::HashSet<usize> = match opts.get("slides") {
+        Some(Value::Array(a)) => a
+            .iter()
+            .filter_map(|v| v.as_u64().map(|n| n as usize))
+            .collect(),
+        Some(Value::Number(n)) => n.as_u64().map(|n| n as usize).into_iter().collect(),
+        _ => {
+            return Err(anyhow!(
+                "missing slides (number or array of 1-based slide numbers)"
+            ))
+        }
+    };
+    if drop.is_empty() {
+        return Err(anyhow!("slides must list at least one slide number"));
+    }
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let as_spec = |s: &Value| -> Value {
+        let text: Vec<String> = s
+            .get("text")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (title, body) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        json!({ "title": title, "body": body })
+    };
+    let out_slides: Vec<Value> = slides
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !drop.contains(&(i + 1)))
+        .map(|(_, s)| as_spec(s))
+        .collect();
+    if out_slides.is_empty() {
+        return Err(anyhow!("refusing to delete every slide"));
+    }
+    let removed = slides.len() - out_slides.len();
+
+    let n = out_slides.len();
+    let mut wopts = json!({ "path": output, "slides": out_slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "removed": removed, "slides": n }))
+}
+
 /// Split a deck into one file per slide (the presentation analogue of
 /// `doc_split`/`pdf_burst`). opts: path (pptx/odp), dir => output directory,
 /// format => extension override (default = source ext), prefix => file-name stem
@@ -8491,6 +8560,7 @@ export!(office__slides_set_notes, op_slides_set_notes);
 export!(office__slides_add_text, op_slides_add_text);
 export!(office__slides_merge, op_slides_merge);
 export!(office__slides_reorder, op_slides_reorder);
+export!(office__slides_delete, op_slides_delete);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);
 export!(office__slides_append, op_slides_append);

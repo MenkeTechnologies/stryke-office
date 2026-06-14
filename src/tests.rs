@@ -3864,6 +3864,42 @@ fn slides_reorder_and_subset() {
 }
 
 #[test]
+fn slides_delete_by_number() {
+    let deck = tmp("sdel.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{deck}","slides":[{{"title":"A","body":["a"]}},{{"title":"B","body":["b"]}},{{"title":"C","body":["c"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // delete slide 2 (B) → A, C remain
+    let out = tmp("sdel_out.pptx");
+    let r = call(
+        office__slides_delete,
+        &format!(r#"{{"path":"{deck}","slides":[2],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["removed"], 1, "one removed: {r}");
+    assert_eq!(r["slides"], 2, "two remain: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read 2 slides: {rd}");
+    assert_eq!(slides[0]["text"][0], "A", "first is A: {rd}");
+    assert_eq!(slides[1]["text"][0], "C", "second is C: {rd}");
+
+    // refusing to delete every slide
+    let all = call(
+        office__slides_delete,
+        &format!(r#"{{"path":"{deck}","slides":[1,2,3],"output":"{out}"}}"#),
+    );
+    assert!(all["error"].is_string(), "deleting all is rejected: {all}");
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn slides_split_one_file_per_slide() {
     let deck = tmp("splitdeck.pptx");
     let w = call(

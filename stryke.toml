@@ -108,6 +108,7 @@ exports = [
     "office__slides_add_text",
     "office__slides_merge",
     "office__slides_reorder",
+    "office__slides_delete",
     "office__slides_split",
     "office__slides_stats",
     "office__slides_append",
