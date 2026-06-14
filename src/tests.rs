@@ -479,6 +479,31 @@ fn sheet_npv_discount() {
 }
 
 #[test]
+fn sheet_sumproduct_weighted() {
+    let path = tmp("sumprod.xlsx");
+    // price * qty: 2*3 + 4*5 + 6*1 = 6 + 20 + 6 = 32
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["price","qty"],[2,3],[4,5],[6,1]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_sumproduct,
+        &format!(r#"{{"path":"{path}","columns":["price","qty"]}}"#),
+    );
+    assert_eq!(
+        s["sumproduct"].as_f64().unwrap(),
+        32.0,
+        "weighted total 32: {s}"
+    );
+    assert_eq!(s["n"].as_u64().unwrap(), 3, "three rows: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_irr_internal_rate() {
     let path = tmp("irr.xlsx");
     // -1000 then 600, 600: IRR is ~13.07%

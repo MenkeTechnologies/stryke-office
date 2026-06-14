@@ -1394,6 +1394,13 @@ assert_eq $npr->{n}, 3, "sheet_npv: three cashflows"
 assert_ok ($npr->{npv} > 481.59 && $npr->{npv} < 481.60), "sheet_npv: Excel NPV at 10%"
 unlink $npx
 
+# ── sheet_sumproduct: weighted total across columns ─────────────────
+val $spx = "$dir/$tag-sumprod.xlsx"
+Office::sheet_write($spx, [{ name => "D", rows => [["price", "qty"], [2, 3], [4, 5], [6, 1]] }])
+val $spr = Office::sheet_sumproduct($spx, ["price", "qty"])
+assert_eq $spr->{sumproduct}, 32, "sheet_sumproduct: 2*3 + 4*5 + 6*1 = 32"
+unlink $spx
+
 # ── sheet_irr: internal rate of return ──────────────────────────────
 val $irx = "$dir/$tag-irr.xlsx"
 Office::sheet_write($irx, [{ name => "C", rows => [["cf"], [-1000], [600], [600]] }])

@@ -148,6 +148,14 @@ fn Office::sheet_npv ($path, $column, $rate, %opts) {
         office__sheet_npv(to_json({ path => $path, column => $column, rate => $rate, start => $opts{start}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Sum of element-wise products across $columns (arrayref, >=2) — Excel
+## SUMPRODUCT. opts: decimals, sheet, header. Non-numeric cells count as 0.
+## Returns { ok, sumproduct, n }.
+fn Office::sheet_sumproduct ($path, $columns, %opts) {
+    Office::_decode("sheet_sumproduct",
+        office__sheet_sumproduct(to_json({ path => $path, columns => $columns, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Internal rate of return of a cashflow $column (Excel IRR; cashflows at
 ## periods 0,1,2,...). Must contain a sign change. opts: decimals (default 6),
 ## sheet, header. Returns { ok, irr, n }.
