@@ -960,6 +960,20 @@ fn op_html_to_pdf(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "elements": elements.len() }))
 }
 
+/// Render a Markdown file straight to a PDF (the direct path alongside
+/// `md_to_doc` + `doc_to_pdf`). opts: input (.md), output (pdf, required). ATX
+/// headings, bullet/ordered lists, and pipe tables map onto the `pdf_build`
+/// element model. Returns `{ ok, path, elements }`.
+fn op_md_to_pdf(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let text = std::fs::read_to_string(input)?;
+    let blocks = parse_markdown_blocks(&text);
+    let elements = blocks_to_pdf_elements(&blocks);
+    op_pdf_build(json!({ "path": output, "elements": elements }))?;
+    Ok(json!({ "ok": true, "path": output, "elements": elements.len() }))
+}
+
 /// Flatten a block into slide body lines (paragraph text, list items, or a
 /// table's rows joined by " | ").
 fn block_to_lines(b: &Value) -> Vec<String> {

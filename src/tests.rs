@@ -3312,6 +3312,29 @@ fn html_to_pdf_renders() {
 }
 
 #[test]
+fn md_to_pdf_renders() {
+    let md = tmp("m2p.md");
+    std::fs::write(&md, "# Heading\n\nbody para\n\n- alpha\n- beta\n").unwrap();
+
+    let out = tmp("m2p.pdf");
+    let r = call(
+        office__md_to_pdf,
+        &format!(r#"{{"input":"{md}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "convert: {r}");
+    assert!(r["elements"].as_u64().unwrap() >= 3, "elements mapped: {r}");
+
+    let pr = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let text = pr["text"].as_str().unwrap();
+    assert!(text.contains("Heading"), "heading in pdf: {text:?}");
+    assert!(text.contains("body para"), "paragraph in pdf: {text:?}");
+    assert!(text.contains("alpha"), "list item in pdf: {text:?}");
+
+    std::fs::remove_file(&md).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_write_footer_page_numbers() {
     use std::io::Read as _;
     let dx = tmp("pgnum.docx");

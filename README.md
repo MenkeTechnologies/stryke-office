@@ -222,6 +222,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_to_text($path, $output)` | `{chars}` | extract any readable document's plain text to a file (incl. pdf) |
 | `Office::doc_to_pdf($path, $output)` | `{ok, path, elements}` | render a docx/odt document to a PDF (headings/paras/lists/tables) |
 | `Office::html_to_pdf($input, $output)` | `{ok, path, elements}` | render an HTML file straight to a PDF (headings/paras/lists/tables) |
+| `Office::md_to_pdf($input, $output)` | `{ok, path, elements}` | render a Markdown file straight to a PDF (headings/lists/pipe tables) |
 | `Office::pdf_to_doc($path, $output, %opts)` | `{ok, path, pages, paragraphs}` | convert a PDF's text into a docx/odt (or md/html/txt) doc with page breaks |
 | `Office::pdf_to_slides($path, $output, %opts)` | `{ok, path, slides}` | convert a PDF into a deck, one slide per page (first line→title) |
 | `Office::doc_to_slides($path, $output, %opts)` | `{slides}` | turn a document into a deck — headings become slide titles, content becomes bullets |
