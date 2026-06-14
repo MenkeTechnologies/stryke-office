@@ -187,6 +187,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_to_doc($path, $output, %opts)` | `{ok, path, rows, cols}` | render a spreadsheet as a table inside a docx/odt; `sheet`/`title` opts |
 | `Office::sheet_to_md($path, %opts)` | `{ok, rows, cols, markdown, path?}` | render a spreadsheet as a GitHub-flavored Markdown table; `output`/`sheet`/`header` opts |
 | `Office::md_to_sheet($output, %opts)` | `{ok, path, rows, cols}` | parse a Markdown table into a spreadsheet file; `markdown`/`path`/`name` opts |
+| `Office::sheet_to_html($path, %opts)` | `{ok, rows, cols, html, path?}` | render a spreadsheet as an HTML table (thead/tbody, escaped); `output`/`title`/`full` opts |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_outline($path)` | `{outline:[{level,text}], count}` | heading outline of a docx/odt (document analogue of pdf_outline) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |

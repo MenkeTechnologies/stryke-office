@@ -21,6 +21,7 @@ exports = [
     "office__sheet_corr",
     "office__sheet_to_md",
     "office__md_to_sheet",
+    "office__sheet_to_html",
     "office__sheet_find",
     "office__sheet_records",
     "office__records_write",

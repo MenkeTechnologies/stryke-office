@@ -311,6 +311,38 @@ fn md_to_sheet_parses_table() {
 }
 
 #[test]
+fn sheet_to_html_table_with_escaping() {
+    let path = tmp("tohtml.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[
+                ["Item","Count"],
+                ["apples",5],
+                ["a<b","x&y"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_to_html,
+        &format!(r#"{{"path":"{path}","title":"Report"}}"#),
+    );
+    let html = r["html"].as_str().unwrap();
+    assert!(html.contains("<h2>Report</h2>"), "title heading: {html}");
+    assert!(html.contains("<thead>"), "thead present: {html}");
+    assert!(html.contains("<th>Item</th>"), "header cell: {html}");
+    assert!(html.contains("<td>apples</td>"), "body cell: {html}");
+    assert!(html.contains("<td>5</td>"), "integer cell no .0: {html}");
+    assert!(html.contains("<td>a&lt;b</td>"), "lt escaped: {html}");
+    assert!(html.contains("<td>x&amp;y</td>"), "amp escaped: {html}");
+    assert_eq!(r["rows"], 3, "row count: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
