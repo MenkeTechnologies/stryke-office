@@ -184,6 +184,27 @@ fn op_img_thumbnail(opts: Value) -> Result<Value> {
     with_image(handle, |img| Ok(info_json(handle, img)))
 }
 
+/// Resize by a scale factor, preserving aspect ratio — e.g. `factor: 0.5` halves
+/// the image, `2.0` doubles it. The proportional companion to `img_resize`
+/// (exact dimensions) and `img_thumbnail` (fit a box). opts: handle, factor =>
+/// positive multiplier (required), filter. New dimensions are rounded and floored
+/// at 1px. Returns the new geometry.
+fn op_img_scale(opts: Value) -> Result<Value> {
+    let handle = req_u64_img(&opts, "handle")?;
+    let factor = opts
+        .get("factor")
+        .and_then(Value::as_f64)
+        .filter(|&f| f > 0.0)
+        .ok_or_else(|| anyhow!("missing factor (a positive scale multiplier)"))?;
+    let filter = filter_of(&opts);
+    transform(handle, move |img| {
+        let w = ((img.width() as f64 * factor).round() as u32).max(1);
+        let h = ((img.height() as f64 * factor).round() as u32).max(1);
+        Ok(img.resize_exact(w, h, filter))
+    })?;
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
 /// Letterbox-fit into an exact `width`×`height` canvas: scale the image down (or
 /// up) to fit entirely within the box preserving aspect ratio, then center it on
 /// a background-filled canvas of the exact target size. Unlike `img_thumbnail`

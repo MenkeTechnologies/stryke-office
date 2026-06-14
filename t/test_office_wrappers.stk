@@ -1008,6 +1008,12 @@ Office::img_save($im->{handle}, $logo)
 val $fitr = Office::img_fit($im->{handle}, 20, 20)
 assert_eq $fitr->{width}, 20, "img_fit: exact canvas width"
 assert_eq $fitr->{height}, 20, "img_fit: exact canvas height"
+# img_scale: resize by factor
+val $scl = Office::img_new(40, 20, color => [1, 2, 3, 255])
+val $sclr = Office::img_scale($scl->{handle}, 0.5)
+assert_eq $sclr->{width}, 20, "img_scale: half width"
+assert_eq $sclr->{height}, 10, "img_scale: half height"
+Office::img_close($scl->{handle})
 # img_concat: stitch two images horizontally
 val $ca = Office::img_new(16, 8, color => [255, 0, 0, 255])
 val $cb = Office::img_new(10, 8, color => [0, 0, 255, 255])

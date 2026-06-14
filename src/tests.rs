@@ -7820,6 +7820,37 @@ fn image_resize_crop_convert() {
 }
 
 #[test]
+fn image_scale_by_factor() {
+    let n = call(
+        office__img_new,
+        r#"{"width":40,"height":20,"color":[1,2,3,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    // halve
+    let r = call(
+        office__img_scale,
+        &format!(r#"{{"handle":{h},"factor":0.5}}"#),
+    );
+    assert_eq!(r["width"], 20, "half width: {r}");
+    assert_eq!(r["height"], 10, "half height: {r}");
+    // double (from the now-20x10)
+    let r2 = call(
+        office__img_scale,
+        &format!(r#"{{"handle":{h},"factor":2.0}}"#),
+    );
+    assert_eq!(r2["width"], 40, "doubled width: {r2}");
+    assert_eq!(r2["height"], 20, "doubled height: {r2}");
+    // a non-positive factor errors
+    let bad = call(
+        office__img_scale,
+        &format!(r#"{{"handle":{h},"factor":0}}"#),
+    );
+    assert!(bad["error"].is_string(), "zero factor rejected: {bad}");
+
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn image_fit_letterbox() {
     // 100x40 (wide) fit into a 50x50 box → scaled to 50x20, centered.
     let n = call(

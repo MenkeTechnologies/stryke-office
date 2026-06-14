@@ -711,6 +711,7 @@ in any format.)
 | `Office::img_save($handle, $path, %opts)` | hashref | format from extension |
 | `Office::img_info($handle)` | `{handle, width, height, mode}` | |
 | `Office::img_resize($h, $w, $ht, %opts)` / `img_thumbnail($h, $max)` | info | `filter` opt |
+| `Office::img_scale($h, $factor, %opts)` | info | resize by a scale factor (preserve aspect); `filter` opt |
 | `Office::img_fit($h, $w, $ht, %opts)` | info | letterbox-fit into an exact canvas (preserve aspect, center on background); `color`/`filter` opts |
 | `Office::img_crop($h, $x, $y, $w, $ht)` / `img_rotate($h, $deg)` / `img_flip($h, $dir)` | info / hashref | rotate 90/180/270 exact |
 | `Office::img_convert($h, $mode)` | info | `L` / `LA` / `RGB` / `RGBA` |
