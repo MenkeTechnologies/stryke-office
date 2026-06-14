@@ -1461,6 +1461,59 @@ fn op_pdf_to_sheet(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": data }))
 }
 
+/// Extract a document into a spreadsheet — one row per block with its heading
+/// level (0 = body paragraph/list item/table row, 1–9 = heading) and text.
+/// Completes the `*_to_sheet` family (doc/slides/pdf). opts: path (docx/odt/
+/// html/md/...), output (xlsx/ods/csv, required), format => override. Returns
+/// `{ ok, path, rows }` (data rows written, excluding the header).
+fn op_doc_to_sheet(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let blocks = doc_blocks_or_paras(path)?;
+
+    let mut rows: Vec<Value> = vec![json!(["level", "text"])];
+    for b in &blocks {
+        match b.get("kind").and_then(Value::as_str) {
+            Some("heading") => {
+                let level = b.get("level").and_then(Value::as_u64).unwrap_or(1);
+                rows.push(json!([level, b.get("text").and_then(Value::as_str).unwrap_or("")]));
+            }
+            Some("list") => {
+                if let Some(items) = b.get("items").and_then(Value::as_array) {
+                    for it in items {
+                        rows.push(json!([0, cell_to_string(it)]));
+                    }
+                }
+            }
+            Some("table") => {
+                if let Some(trows) = b.get("rows").and_then(Value::as_array) {
+                    for tr in trows {
+                        let joined = tr
+                            .as_array()
+                            .map(|cs| cs.iter().map(cell_to_string).collect::<Vec<_>>().join(" | "))
+                            .unwrap_or_default();
+                        rows.push(json!([0, joined]));
+                    }
+                }
+            }
+            Some("pagebreak") => {}
+            _ => {
+                if let Some(t) = b.get("text").and_then(Value::as_str) {
+                    rows.push(json!([0, t]));
+                }
+            }
+        }
+    }
+
+    let data = rows.len() - 1;
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Document", "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": data }))
+}
+
 /// Parse a Markdown outline into a presentation (the inverse of `slides_to_md`).
 /// opts: markdown => outline text, or path => a `.md` file; output (required) =>
 /// pptx/odp; format => override. Each heading line (`#`..`######`) starts a new
