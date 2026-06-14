@@ -1509,6 +1509,91 @@ fn op_sheet_agg(opts: Value) -> Result<Value> {
     Ok(json!({ "column": col_name, "agg": agg, "value": value, "count": n }))
 }
 
+/// Histogram of a numeric column: bucket values into `bins` (default 10) equal-
+/// width intervals spanning [min, max], returning each bin's range and count.
+/// Distinct from sheet_freq (which counts exact categorical values). opts: path,
+/// column, bins, sheet, header. Returns
+/// `{ column, count, min, max, bins: [{lo, hi, count}, ...] }`.
+fn op_sheet_histogram(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let nbins = opts
+        .get("bins")
+        .and_then(Value::as_u64)
+        .filter(|&n| n > 0)
+        .unwrap_or(10) as usize;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let n = vals.len();
+    if n == 0 {
+        return Ok(
+            json!({ "column": col_name, "count": 0, "min": Value::Null, "max": Value::Null, "bins": [] }),
+        );
+    }
+    let lo = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let width = (hi - lo) / nbins as f64;
+
+    let mut counts = vec![0u64; nbins];
+    for &x in &vals {
+        // Place each value; the maximum (and a zero-width span) lands in the last bin.
+        let idx = if width <= 0.0 {
+            0
+        } else {
+            (((x - lo) / width) as usize).min(nbins - 1)
+        };
+        counts[idx] += 1;
+    }
+    let bins: Vec<Value> = counts
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| {
+            let blo = lo + width * i as f64;
+            let bhi = if i + 1 == nbins {
+                hi
+            } else {
+                lo + width * (i + 1) as f64
+            };
+            json!({ "lo": blo, "hi": bhi, "count": c })
+        })
+        .collect();
+    Ok(json!({ "column": col_name, "count": n, "min": lo, "max": hi, "bins": bins }))
+}
+
 /// Pearson correlation coefficient over paired observations. Returns None when
 /// fewer than two points or either side has zero variance.
 fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
@@ -8192,6 +8277,7 @@ export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_round, op_sheet_round);
+export!(office__sheet_histogram, op_sheet_histogram);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
