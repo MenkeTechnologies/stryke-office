@@ -2549,6 +2549,52 @@ fn sheet_substr_extract() {
 }
 
 #[test]
+fn sheet_extract_regex() {
+    let path = tmp("extract.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["email"],["bob@acme.com"],["sue@x.org"],["nope"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // capture the domain (group 1)
+    let out = tmp("extract_out.xlsx");
+    let r = call(
+        office__sheet_extract,
+        &serde_json::json!({
+            "path": path, "output": out, "column": "email",
+            "pattern": "@(.+)$", "group": 1, "into": "domain"
+        })
+        .to_string(),
+    );
+    assert_eq!(r["column"], "domain", "new column: {r}");
+    assert_eq!(r["matched"], 2, "two emails matched: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1], "acme.com", "domain extracted: {rd}");
+    assert_eq!(rows[2][1], "x.org", "second domain: {rd}");
+    assert_eq!(
+        rows[3][1].as_str().unwrap_or(""),
+        "",
+        "no match -> blank: {rd}"
+    );
+
+    // invalid regex errors
+    let bad = call(
+        office__sheet_extract,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","column":"email","pattern":"([","into":"x"}}"#
+        ),
+    );
+    assert!(bad["error"].is_string(), "invalid regex rejected: {bad}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_reverse_data_rows() {
     let path = tmp("reverse.xlsx");
     let w = call(

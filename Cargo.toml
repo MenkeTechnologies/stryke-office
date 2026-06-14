@@ -27,6 +27,7 @@ quick-xml = "0.40"         # parse/emit the XML inside those containers
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
 once_cell = "1"
+regex = "1"                # regex matching/extraction for text + sheet ops (foundational, vendorable)
 image = { version = "0.25", features = ["avif"] }   # all raster codecs incl AVIF decode (PIL core)
 imageproc = "0.27"       # drawing: text, lines, rects, circles
 ab_glyph = "0.2"         # font rasterization for text drawing

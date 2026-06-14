@@ -569,6 +569,16 @@ val $ssb = Office::sheet_read($sso2)
 assert_eq $ssb->[0]{rows}[1][1], "ABC", "sheet_substr: ABC123 -> ABC"
 unlink $ssx
 unlink $sso2
+# sheet_extract: regex capture group
+val $exx = "$dir/$tag-extract.xlsx"
+Office::sheet_write($exx, [{ name => "D", rows => [["email"], ["bob\@acme.com"], ["nope"]] }])
+val $exo = "$dir/$tag-extract-out.xlsx"
+val $exr = Office::sheet_extract($exx, $exo, "email", '@(.+)$', group => 1, into => "domain")
+assert_eq $exr->{matched}, 1, "sheet_extract: one match"
+val $exb = Office::sheet_read($exo)
+assert_eq $exb->[0]{rows}[1][1], "acme.com", "sheet_extract: domain captured"
+unlink $exx
+unlink $exo
 # sheet_reverse: flip data-row order, header on top
 val $rvx = "$dir/$tag-reverse.xlsx"
 Office::sheet_write($rvx, [{ name => "D", rows => [["n"], [1], [2], [3]] }])
