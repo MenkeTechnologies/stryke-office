@@ -238,3 +238,64 @@ fn op_replace_text(opts: Value) -> Result<Value> {
     std::fs::write(&output, new_bytes)?;
     Ok(json!({"ok": true, "path": output, "replaced": total}))
 }
+
+/// Mail-merge: fill a `{{field}}`-placeholder template once per data record,
+/// writing one document per record. opts: template (docx/pptx/xlsx/odf),
+/// data => spreadsheet path (read as records) or records => [objects],
+/// dir => output directory, sheet => source sheet selector, prefix => filename
+/// prefix, name_field => field whose value names each file (default: 1-based
+/// index). Returns `{ count, files }`.
+fn op_mail_merge(opts: Value) -> Result<Value> {
+    let template = req_str(&opts, "template")?;
+    let dir = req_str(&opts, "dir")?;
+    let ext = ext_of(template);
+    let prefix = opts.get("prefix").and_then(Value::as_str).unwrap_or("");
+    let name_field = opts.get("name_field").and_then(Value::as_str);
+
+    let records: Vec<Value> = if let Some(r) = opts.get("records").and_then(Value::as_array) {
+        r.clone()
+    } else if let Some(data) = opts.get("data").and_then(Value::as_str) {
+        op_sheet_records(json!({ "path": data, "sheet": opts.get("sheet") }))?
+            .get("records")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        return Err(anyhow!("need data (spreadsheet path) or records (array)"));
+    };
+
+    let mut files = Vec::new();
+    for (i, rec) in records.iter().enumerate() {
+        let mut map = serde_json::Map::new();
+        if let Some(o) = rec.as_object() {
+            for (k, v) in o {
+                map.insert(format!("{{{{{k}}}}}"), Value::String(cell_to_string(v)));
+            }
+        }
+        let label = match name_field.and_then(|f| rec.get(f)) {
+            Some(v) => {
+                let safe: String = cell_to_string(v)
+                    .chars()
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect();
+                let safe = safe.trim().to_string();
+                if safe.is_empty() {
+                    (i + 1).to_string()
+                } else {
+                    safe
+                }
+            }
+            None => (i + 1).to_string(),
+        };
+        let out = format!("{dir}/{prefix}{label}.{ext}");
+        op_replace_text(json!({ "path": template, "replace": Value::Object(map), "output": out }))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
