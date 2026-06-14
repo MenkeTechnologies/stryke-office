@@ -83,6 +83,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "jitter" | "strip" => svg_jitter(&mut s, series, opts, l, t, r, b, kind == "jitter"),
         "rug" => svg_rug(&mut s, series, l, t, r, b),
         "beeswarm" => svg_beeswarm(&mut s, series, opts, l, t, r, b),
+        "contour" | "density2d" => svg_contour(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1614,6 +1615,74 @@ fn svg_beeswarm(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, 
         }
         let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&name));
+    }
+}
+
+/// 2-D density contour plot (vector; ggplot2 `geom_density_2d`). Iso-density
+/// contour lines from a 2-D Gaussian KDE of each series' scatter `[[x,y],…]`
+/// over the faint points. opts: `grid` (KDE resolution, default 48), `levels`
+/// (contour count, default 6).
+fn svg_contour(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for (x, y) in series_points(ser) {
+            xmin = xmin.min(x);
+            xmax = xmax.max(x);
+            ymin = ymin.min(y);
+            ymax = ymax.max(y);
+        }
+    }
+    if !xmin.is_finite() || !ymin.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let (px0, py0) = ((xmax - xmin) * 0.05, (ymax - ymin) * 0.05);
+    let (xmin, xmax, ymin, ymax) = (xmin - px0, xmax + px0, ymin - py0, ymax + py0);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let xp = |x: f64| l + (x - xmin) / (xmax - xmin) * pw;
+    let yp = |y: f64| b - (y - ymin) / (ymax - ymin) * ph;
+    for i in 0..=5 {
+        let yv = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(yv);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(yv)));
+    }
+    let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(xmin)));
+    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(xmax)));
+
+    let g = opts.get("grid").and_then(Value::as_u64).unwrap_or(48).clamp(8, 120) as usize;
+    let nlev = opts.get("levels").and_then(Value::as_u64).unwrap_or(6).clamp(1, 20) as usize;
+    let gpx = |col: f64| l + col / (g - 1) as f64 * pw;
+    let gpy = |row: f64| t + row / (g - 1) as f64 * ph;
+    for (si, ser) in series.iter().enumerate() {
+        let pts = series_points(ser);
+        if pts.len() < 3 {
+            continue;
+        }
+        let col = svg_palette(si);
+        for (x, y) in &pts {
+            let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="2" fill="{col}" fill-opacity="0.3"/>"##, xp(*x), yp(*y));
+        }
+        let dens = kde2d_grid(&pts, xmin, xmax, ymin, ymax, g, g);
+        let maxd = dens.iter().cloned().fold(f64::EPSILON, f64::max);
+        for li in 1..=nlev {
+            let level = maxd * li as f64 / (nlev + 1) as f64;
+            let mut path = String::new();
+            marching_squares(&dens, g, g, level, |c0, r0, c1, r1| {
+                let _ = write!(path, "M {:.1},{:.1} L {:.1},{:.1} ", gpx(c0), gpy(r0), gpx(c1), gpy(r1));
+            });
+            if !path.is_empty() {
+                let _ = write!(s, r##"<path d="{path}" fill="none" stroke="{col}" stroke-width="1.2"/>"##);
+            }
+        }
     }
 }
 
