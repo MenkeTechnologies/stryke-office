@@ -94,10 +94,20 @@ val $gcr = Office::text_comm($gca, $gcb)
 assert_eq $gcr->{common}, 2, "text_comm: two common lines"
 assert_eq $gcr->{only_a}[0], "apple", "text_comm: only in a"
 assert_eq $gcr->{only_b}[0], "date", "text_comm: only in b"
-unlink $gpa
-unlink $gpb
 unlink $gca
 unlink $gcb
+# text_join: relational join on a key field
+val $gja = "$dir/$tag-join-a.txt"
+val $gjb = "$dir/$tag-join-b.txt"
+spew $gja, "1,alice\n2,bob\n3,carol\n"
+spew $gjb, "1,90\n3,75\n4,50\n"
+val $gjr = Office::text_join($gja, $gjb, field => 1, delim => ",")
+assert_eq $gjr->{count}, 2, "text_join: two matched keys"
+assert_eq $gjr->{lines}[0], "1,alice,90", "text_join: joined first row"
+unlink $gpa
+unlink $gpb
+unlink $gja
+unlink $gjb
 unlink $grx
 unlink $grt
 unlink $gso

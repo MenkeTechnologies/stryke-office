@@ -2123,6 +2123,15 @@ fn Office::text_comm ($a, $b, %opts) {
         office__text_comm(to_json({ a => $a, b => $b, ignore_case => $opts{ignore_case} })))
 }
 
+## Relational inner join of two delimited files on a key field (Unix join).
+## opts: field (1-based key, default 1), delim (default tab), output. Output is
+## "key a-rest b-rest"; multiple matches cross-product. Returns { count, lines,
+## path? }.
+fn Office::text_join ($a, $b, %opts) {
+    Office::_decode("text_join",
+        office__text_join(to_json({ a => $a, b => $b, field => $opts{field}, delim => $opts{delim}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {
