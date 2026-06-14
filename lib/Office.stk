@@ -863,6 +863,14 @@ fn Office::sheet_sample ($path, $output, %opts) {
         office__sheet_sample(to_json({ path => $path, output => $output, n => $opts{n}, seed => $opts{seed}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Stratified random sample preserving each $group's share of rows (sklearn
+## stratify). opts: ratio (fraction per group, default 0.1) OR n_per_group (fixed
+## count per group), seed, header, sheet, format. Returns { ok, path, rows, groups }.
+fn Office::sheet_stratified_sample ($path, $group, $output, %opts) {
+    Office::_decode("sheet_stratified_sample",
+        office__sheet_stratified_sample(to_json({ path => $path, group => $group, output => $output, ratio => $opts{ratio}, n_per_group => $opts{n_per_group}, seed => $opts{seed}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Reproducibly shuffle data rows (seeded Fisher–Yates). Same seed => same order.
 ## opts: seed, output (default in place), header, sheet, format. Returns
 ## { ok, path, rows }.
