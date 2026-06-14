@@ -1584,6 +1584,69 @@ fn op_sheet_mode(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// Count the distinct values in each column (cardinality; pandas `nunique`) —
+/// profiling that complements `sheet_mode` (the single most-common value) and
+/// `sheet_freq` (the full breakdown). opts: path, sheet, header, dropna => skip
+/// blank cells (default true). Returns `{ sheet, rows, columns: [{ name,
+/// nunique }] }`.
+fn op_sheet_nunique(opts: Value) -> Result<Value> {
+    use std::collections::HashSet;
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let dropna = opts.get("dropna").and_then(flag_of).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    let mut columns = Vec::new();
+    for c in 0..ncols {
+        let mut seen: HashSet<String> = HashSet::new();
+        for row in data {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(c))
+                .cloned()
+                .unwrap_or(Value::Null);
+            if dropna && sheet_cell_blank(&cell) {
+                continue;
+            }
+            seen.insert(cell_to_string(&cell));
+        }
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        columns.push(json!({ "name": cname, "nunique": seen.len() }));
+    }
+    Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
+}
+
 /// Compute an arbitrary percentile of a numeric column (generalizes the fixed
 /// quartiles in `sheet_describe`). opts: path, column => name or 0-based index
 /// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
@@ -11852,6 +11915,7 @@ export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_dtypes, op_sheet_dtypes);
 export!(office__sheet_mode, op_sheet_mode);
+export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);

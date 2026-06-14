@@ -109,6 +109,14 @@ fn Office::sheet_mode ($path, %opts) {
         office__sheet_mode(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Count distinct values per column (cardinality; pandas nunique). opts: dropna
+## (skip blanks, default 1), sheet, header. Returns { sheet, rows, columns =>
+## [{ name, nunique }] }.
+fn Office::sheet_nunique ($path, %opts) {
+    Office::_decode("sheet_nunique",
+        office__sheet_nunique(to_json({ path => $path, dropna => $opts{dropna}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Compute an arbitrary percentile of a numeric column ($q in 0.0..=1.0, e.g.
 ## 0.9 for p90). opts: sheet, header. Returns { column, q, value, count }.
 fn Office::sheet_quantile ($path, $column, $q, %opts) {
