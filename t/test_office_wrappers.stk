@@ -260,6 +260,11 @@ val $who = "$dir/$tag-where-out.xlsx"
 val $whr = Office::sheet_where($gcx, [{ column => "g", op => "eq", value => "x" }], $who)
 assert_eq $whr->{kept}, 2, "sheet_where: rows kept"
 unlink $who
+# freeze the header row
+val $fzo = "$dir/$tag-freeze-out.xlsx"
+val $fzr = Office::sheet_freeze($gcx, $fzo, row => 1)
+assert_ok $fzr->{ok}, "sheet_freeze: ok"
+unlink $fzo
 unlink $gcx
 unlink $gco2
 
