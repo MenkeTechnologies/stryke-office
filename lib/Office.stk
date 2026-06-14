@@ -537,6 +537,13 @@ fn Office::slides_to_md ($path, %opts) {
         office__slides_to_md(to_json({ path => $path, output => $opts{output}, level => $opts{level}, notes => $opts{notes} })))
 }
 
+## Parse a Markdown outline into a presentation (inverse of slides_to_md).
+## opts: markdown (text) or path (.md file), format. Returns { ok, path, slides }.
+fn Office::md_to_slides ($output, %opts) {
+    Office::_decode("md_to_slides",
+        office__md_to_slides(to_json({ output => $output, markdown => $opts{markdown}, path => $opts{path}, format => $opts{format} })))
+}
+
 ## Split a document into multiple files at headings of a given level, written to
 ## $dir as {prefix}-{n}.{ext}. opts: level => heading level to split at (default
 ## 1), format => output extension (default: the source's), prefix => filename

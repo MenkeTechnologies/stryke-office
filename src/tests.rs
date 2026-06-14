@@ -2175,6 +2175,35 @@ fn slides_to_md_outline() {
 }
 
 #[test]
+fn md_to_slides_from_outline() {
+    // Preamble before the first heading is dropped; bullets and plain lines
+    // become body items.
+    let md = "intro paragraph\n\n# One\n\n- a\n- b\n\n# Two\n\n* c\nplain line";
+    let out = tmp("md2s.pptx");
+    let r = call(
+        office__md_to_slides,
+        &serde_json::json!({ "markdown": md, "output": out }).to_string(),
+    );
+    assert_eq!(r["ok"], true, "convert: {r}");
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read two slides: {rd}");
+    assert_eq!(slides[0]["text"][0], "One", "first title: {rd}");
+    let s0 = slides[0]["text"].to_string();
+    assert!(s0.contains("a") && s0.contains("b"), "first body: {rd}");
+    assert_eq!(slides[1]["text"][0], "Two", "second title: {rd}");
+    let s1 = slides[1]["text"].to_string();
+    assert!(
+        s1.contains("c") && s1.contains("plain line"),
+        "second body (bullet + plain): {rd}"
+    );
+
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_slides_from_headings() {
     let dx = tmp("d2s.docx");
     let w = call(
