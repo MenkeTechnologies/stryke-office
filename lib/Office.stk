@@ -746,6 +746,13 @@ fn Office::sheet_pad ($path, $output, $column, $width, %opts) {
         office__sheet_pad(to_json({ path => $path, output => $output, column => $column, width => $width, fill => $opts{fill}, side => $opts{side}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Reverse the order of a sheet's data rows (header kept on top). opts: output
+## (default in place), sheet, header, format. Returns { ok, path, rows }.
+fn Office::sheet_reverse ($path, %opts) {
+    Office::_decode("sheet_reverse",
+        office__sheet_reverse(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a column with the first non-blank value across $columns (SQL COALESCE).
 ## opts: into (default "coalesce"), default (when all blank), sheet, header,
 ## format. Returns { ok, path, column, filled }.

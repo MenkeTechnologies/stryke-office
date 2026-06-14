@@ -8743,6 +8743,44 @@ fn op_sheet_pad(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "padded": padded }))
 }
 
+/// Reverse the order of a sheet's data rows (e.g. show newest entries first).
+/// opts: path, output (default in place), sheet, header (default true; the header
+/// row stays on top, only the data rows are reversed), format. Returns
+/// `{ ok, path, rows }` (data-row count).
+fn op_sheet_reverse(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    rows[data_start..].reverse();
+    let n = rows.len() - data_start;
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n }))
+}
+
 /// Append a column holding the first non-blank value across several columns, in
 /// priority order (SQL `COALESCE`). Distinct from `sheet_fill` (fills within one
 /// column) and `sheet_concat_columns` (joins values together). opts: path,
@@ -10878,6 +10916,7 @@ export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_pad, op_sheet_pad);
+export!(office__sheet_reverse, op_sheet_reverse);
 export!(office__sheet_coalesce, op_sheet_coalesce);
 export!(office__sheet_recode, op_sheet_recode);
 export!(office__sheet_top, op_sheet_top);

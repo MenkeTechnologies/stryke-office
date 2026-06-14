@@ -487,6 +487,17 @@ assert_eq $pdb->[0]{rows}[1][0], "0005", "sheet_pad: 5 -> 0005"
 assert_eq $pdb->[0]{rows}[2][0], "0042", "sheet_pad: 42 -> 0042"
 unlink $pdx
 unlink $pdo
+# sheet_reverse: flip data-row order, header on top
+val $rvx = "$dir/$tag-reverse.xlsx"
+Office::sheet_write($rvx, [{ name => "D", rows => [["n"], [1], [2], [3]] }])
+val $rvo = "$dir/$tag-reverse-out.xlsx"
+val $rvr = Office::sheet_reverse($rvx, output => $rvo)
+assert_eq $rvr->{rows}, 3, "sheet_reverse: three data rows"
+val $rvb = Office::sheet_read($rvo)
+assert_eq $rvb->[0]{rows}[1][0], 3, "sheet_reverse: first data now 3"
+assert_eq $rvb->[0]{rows}[3][0], 1, "sheet_reverse: last data now 1"
+unlink $rvx
+unlink $rvo
 # sheet_coalesce: first non-blank across columns
 val $cox = "$dir/$tag-coalesce.xlsx"
 Office::sheet_write($cox, [{ name => "D", rows => [["primary", "fallback"], ["", "alt1"], ["main2", "alt2"]] }])
