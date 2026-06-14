@@ -2550,6 +2550,58 @@ fn sheet_sample_deterministic() {
 }
 
 #[test]
+fn sheet_stratified_sample_proportional() {
+    let path = tmp("strat.xlsx");
+    // 4 rows of group "a", 2 rows of group "b"
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["g","v"],["a",1],["a",2],["a",3],["a",4],["b",5],["b",6]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // ratio 0.5: round(4*0.5)=2 from a, round(2*0.5)=1 from b -> 3 rows, 2 groups
+    let out = tmp("strat_out.xlsx");
+    let r = call(
+        office__sheet_stratified_sample,
+        &format!(r#"{{"path":"{path}","output":"{out}","group":"g","ratio":0.5,"seed":7}}"#),
+    );
+    assert_eq!(r["groups"], 2, "two groups: {r}");
+    assert_eq!(r["rows"], 3, "2 from a + 1 from b: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    let a = rows[1..].iter().filter(|r| r[0] == "a").count();
+    let b = rows[1..].iter().filter(|r| r[0] == "b").count();
+    assert_eq!(a, 2, "two from a: {rd}");
+    assert_eq!(b, 1, "one from b: {rd}");
+
+    // determinism: same seed -> identical output
+    let out2 = tmp("strat_out2.xlsx");
+    call(
+        office__sheet_stratified_sample,
+        &format!(r#"{{"path":"{path}","output":"{out2}","group":"g","ratio":0.5,"seed":7}}"#),
+    );
+    let rd2 = call(office__sheet_read, &format!(r#"{{"path":"{out2}"}}"#));
+    assert_eq!(
+        rd["sheets"][0]["rows"], rd2["sheets"][0]["rows"],
+        "same seed reproducible"
+    );
+
+    // n_per_group: fixed 1 per group -> 2 rows
+    let out3 = tmp("strat_out3.xlsx");
+    let r3 = call(
+        office__sheet_stratified_sample,
+        &format!(r#"{{"path":"{path}","output":"{out3}","group":"g","n_per_group":1,"seed":7}}"#),
+    );
+    assert_eq!(r3["rows"], 2, "1 per group x2: {r3}");
+
+    for f in [&path, &out, &out2, &out3] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_shuffle_reproducible() {
     let path = tmp("shuffle.xlsx");
     let w = call(

@@ -131,6 +131,7 @@ exports = [
     "office__sheet_chunk",
     "office__sheet_head",
     "office__sheet_sample",
+    "office__sheet_stratified_sample",
     "office__sheet_shuffle",
     "office__sheet_train_test_split",
     "office__sheet_transform",

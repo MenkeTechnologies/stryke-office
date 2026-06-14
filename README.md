@@ -235,6 +235,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
 | `Office::sheet_top($path, $by, $output, %opts)` | `{rows}` | top-N rows by a column (sort + limit); `n`/`ascending` |
 | `Office::sheet_sample($path, $output, %opts)` | `{ok, path, rows}` | randomly sample N data rows (header kept), reproducible via `seed`; `n` opt |
+| `Office::sheet_stratified_sample($path, $group, $output, %opts)` | `{ok, path, rows, groups}` | stratified sample preserving each group's row share (sklearn stratify); `ratio` or `n_per_group`, `seed` opts |
 | `Office::sheet_shuffle($path, %opts)` | `{ok, path, rows}` | reproducibly shuffle data rows (seeded Fisher–Yates); `seed` opt |
 | `Office::sheet_train_test_split($path, $train, $test, %opts)` | `{ok, train, test, train_rows, test_rows}` | split rows into train/test files (sklearn `train_test_split`); `ratio`/`shuffle`/`seed` opts |
 | `Office::sheet_transform($path, $column, $op, $output, %opts)` | `{ok, path, transformed}` | apply a per-column op (upper/lower/trim/title/round/floor/ceil/abs/int); `digits`/`into` opts |

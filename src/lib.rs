@@ -10498,6 +10498,92 @@ fn op_sheet_sample(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": kept }))
 }
 
+/// Stratified random sampling — draw a reproducible sample that preserves each
+/// group's share of the rows (the per-group counterpart to `sheet_sample`'s
+/// uniform draw; sklearn `train_test_split(stratify=...)` style). opts: path,
+/// output (required), group => column name/index (required), and ONE of `ratio`
+/// (fraction kept per group, default 0.1; rounded per group) or `n_per_group`
+/// (fixed count per group, capped at group size). seed => PRNG seed (default a
+/// fixed constant for deterministic output), sheet, header (default true; carried
+/// to the output), format. Selected rows are written in their original order.
+/// Returns `{ ok, path, rows, groups }`.
+fn op_sheet_stratified_sample(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let keep_header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .filter(|&s| s != 0)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+    let n_per_group = opts.get("n_per_group").and_then(Value::as_u64);
+    let ratio = opts.get("ratio").and_then(Value::as_f64).unwrap_or(0.1);
+    if n_per_group.is_none() && !(0.0..=1.0).contains(&ratio) {
+        return Err(anyhow!("ratio must be in [0, 1]"));
+    }
+
+    let rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let header_row = if keep_header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let gcol = resolve_col(opts.get("group"), header_row)?;
+    let data_start = if keep_header && !rows.is_empty() {
+        1
+    } else {
+        0
+    };
+
+    // Bucket data-row indices by group key (BTreeMap → deterministic order).
+    let mut groups: std::collections::BTreeMap<String, Vec<usize>> =
+        std::collections::BTreeMap::new();
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        let key = cell_to_string(
+            row.as_array()
+                .and_then(|a| a.get(gcol))
+                .unwrap_or(&Value::Null),
+        );
+        groups.entry(key).or_default().push(data_start + i);
+    }
+
+    // Within each group, key rows from one shared PRNG stream and take the
+    // smallest-keyed k — reproducible for a given seed + data.
+    let mut state = seed;
+    let mut selected: Vec<usize> = Vec::new();
+    for members in groups.values() {
+        let len = members.len();
+        let k = match n_per_group {
+            Some(n) => (n as usize).min(len),
+            None => ((len as f64) * ratio).round() as usize,
+        };
+        let mut keyed: Vec<(u64, usize)> = members
+            .iter()
+            .map(|&idx| (xorshift64(&mut state), idx))
+            .collect();
+        keyed.sort_unstable();
+        for &(_, idx) in keyed.iter().take(k) {
+            selected.push(idx);
+        }
+    }
+    selected.sort_unstable();
+
+    let mut out_rows: Vec<Value> = Vec::with_capacity(selected.len() + 1);
+    if keep_header && !rows.is_empty() {
+        out_rows.push(rows[0].clone());
+    }
+    for &idx in &selected {
+        out_rows.push(rows[idx].clone());
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Sheet1", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": selected.len(), "groups": groups.len() }))
+}
+
 /// Reproducibly shuffle a sheet's data rows (seeded Fisher–Yates) — randomize
 /// order for train/test splits, A/B assignment, etc. Same `seed` always yields
 /// the same permutation. opts: path, output (default in place), seed => PRNG seed
@@ -13622,6 +13708,7 @@ export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_sample, op_sheet_sample);
+export!(office__sheet_stratified_sample, op_sheet_stratified_sample);
 export!(office__sheet_shuffle, op_sheet_shuffle);
 export!(office__sheet_train_test_split, op_sheet_train_test_split);
 export!(office__sheet_transform, op_sheet_transform);
