@@ -1875,7 +1875,43 @@ fn sheet_to_ndjson_lines() {
     let o1: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     assert_eq!(o1["qty"], 2.0, "line1 qty numeric: {text:?}");
 
+    // round-trip: import the .jsonl back into a sheet
+    let back = tmp("nd_back.xlsx");
+    let ri = call(
+        office__ndjson_to_sheet,
+        &format!(r#"{{"input":"{out}","output":"{back}"}}"#),
+    );
+    assert_eq!(ri["ok"], true, "ndjson_to_sheet: {ri}");
+    assert_eq!(ri["rows"], 2, "two rows imported: {ri}");
+    let rb = call(office__sheet_read, &format!(r#"{{"path":"{back}"}}"#));
+    let rows = rb["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "name", "header from keys: {rb}");
+    assert_eq!(rows[1][0], "a", "value a: {rb}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 2.0, "numeric survives: {rb}");
+
     std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&back).ok();
+}
+
+#[test]
+fn ndjson_to_sheet_from_text() {
+    // inline ndjson string (blank line skipped)
+    let out = tmp("nd_text.xlsx");
+    let r = call(
+        office__ndjson_to_sheet,
+        &serde_json::json!({
+            "ndjson": "{\"k\":\"x\",\"n\":1}\n\n{\"k\":\"y\",\"n\":2}\n",
+            "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["rows"], 2, "blank line skipped, 2 rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "k", "first field: {rd}");
+    assert_eq!(rows[2][0], "y", "second record: {rd}");
+
     std::fs::remove_file(&out).ok();
 }
 
