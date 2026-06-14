@@ -2191,8 +2191,38 @@ fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
 /// 1.0 and undefined cells (fewer than two shared points or zero variance) are
 /// `null`. Only columns with at least one numeric value are included. Returns
 /// `{ sheet, columns: [name], matrix: [[r]] }`.
+/// Convert values to 1-based ranks, averaging ranks within tie groups (the
+/// fractional-rank convention Spearman's correlation uses).
+fn average_ranks(v: &[f64]) -> Vec<f64> {
+    let n = v.len();
+    let mut idx: Vec<usize> = (0..n).collect();
+    idx.sort_by(|&a, &b| v[a].partial_cmp(&v[b]).unwrap_or(std::cmp::Ordering::Equal));
+    let mut ranks = vec![0.0; n];
+    let mut i = 0;
+    while i < n {
+        let mut j = i;
+        while j + 1 < n && v[idx[j + 1]] == v[idx[i]] {
+            j += 1;
+        }
+        let avg = (i + j) as f64 / 2.0 + 1.0; // mean of 1-based ranks i+1..=j+1
+        for &k in &idx[i..=j] {
+            ranks[k] = avg;
+        }
+        i = j + 1;
+    }
+    ranks
+}
+
 fn op_sheet_corr(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
+    let method = opts
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("pearson");
+    if !matches!(method, "pearson" | "spearman") {
+        return Err(anyhow!("unknown method: {method} (pearson|spearman)"));
+    }
+    let spearman = method == "spearman";
     let read = op_sheet_read(json!({ "path": path }))?;
     let sheets = read
         .get("sheets")
@@ -2260,6 +2290,11 @@ fn op_sheet_corr(opts: Value) -> Result<Value> {
                     xs.push(*a);
                     ys.push(*b);
                 }
+            }
+            // Spearman = Pearson on the values' average ranks.
+            if spearman {
+                xs = average_ranks(&xs);
+                ys = average_ranks(&ys);
             }
             rowv.push(pearson(&xs, &ys).map_or(Value::Null, |r| json!(r)));
         }
