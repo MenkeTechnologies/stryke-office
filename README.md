@@ -164,6 +164,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_split($path, $dir, %opts)` | `{count, files}` | explode a workbook into one file per sheet; `format`/`prefix` opts |
 | `Office::sheet_diff($left, $right, %opts)` | `{count, changed:[{ref,row,col,left,right}], left_rows, right_rows}` | cell-by-cell diff of two sheets |
 | `Office::sheet_to_slides($path, $output, %opts)` | `{slides}` | one slide per row; `title_field` titles each, other fields → body lines |
+| `Office::sheet_validate($path, $rules, %opts)` | `{valid, count, violations:[{ref,column,rule,value}]}` | per-column rules: type/min/max/allowed/nonempty |
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |

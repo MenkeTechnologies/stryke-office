@@ -2602,6 +2602,108 @@ fn op_sheet_to_slides(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": records.len() }))
 }
 
+/// Validate a sheet's cells against per-column rules. opts: path, rules =>
+/// [{ column (name/index), type? ("number"|"int"|"nonempty"), min?, max?,
+/// allowed? [values] }], sheet, header (default true). Returns `{ valid, count,
+/// violations: [{ ref, row, col, column, rule, value }] }`.
+fn op_sheet_validate(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let rules = opts
+        .get("rules")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing rules (expected array)"))?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let cell = |row: &Value, c: usize| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+
+    let mut violations = Vec::new();
+    for rule in rules {
+        let col = resolve_col(rule.get("column"), hr)?;
+        let cname = hr
+            .and_then(|h| h.get(col))
+            .map(cell_to_string)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("Col{}", col + 1));
+        for (ri, row) in rows[data_start..].iter().enumerate() {
+            let c = cell(row, col);
+            let blank = sheet_cell_blank(&c);
+            let num = sheet_cell_num(&c);
+            let mut bad: Option<String> = None;
+            match rule.get("type").and_then(Value::as_str) {
+                Some("nonempty") if blank => bad = Some("nonempty".into()),
+                Some("number") if !blank && num.is_none() => bad = Some("number".into()),
+                Some("int") if !blank && num.is_none_or(|x| x.fract() != 0.0) => {
+                    bad = Some("int".into())
+                }
+                _ => {}
+            }
+            if bad.is_none() {
+                if let Some(min) = rule.get("min").and_then(Value::as_f64) {
+                    if num.is_some_and(|x| x < min) {
+                        bad = Some(format!("min {min}"));
+                    }
+                }
+            }
+            if bad.is_none() {
+                if let Some(max) = rule.get("max").and_then(Value::as_f64) {
+                    if num.is_some_and(|x| x > max) {
+                        bad = Some(format!("max {max}"));
+                    }
+                }
+            }
+            if bad.is_none() {
+                if let Some(allowed) = rule.get("allowed").and_then(Value::as_array) {
+                    let v = cell_to_string(&c);
+                    if !blank && !allowed.iter().any(|a| cell_to_string(a) == v) {
+                        bad = Some("allowed".into());
+                    }
+                }
+            }
+            if let Some(b) = bad {
+                let rownum = data_start + ri + 1;
+                violations.push(json!({
+                    "ref": format!("{}{}", col_letters(col), rownum),
+                    "row": rownum,
+                    "col": col + 1,
+                    "column": cname,
+                    "rule": b,
+                    "value": c,
+                }));
+            }
+        }
+    }
+    Ok(json!({
+        "valid": violations.is_empty(),
+        "count": violations.len(),
+        "violations": violations,
+    }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -3370,6 +3472,7 @@ export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_to_slides, op_sheet_to_slides);
+export!(office__sheet_validate, op_sheet_validate);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

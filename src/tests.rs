@@ -227,6 +227,38 @@ fn sheet_write_html_and_markdown_tables() {
 }
 
 #[test]
+fn sheet_validate_rules() {
+    let path = tmp("val.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","age"],["Alice",30],["",17],["Bob","x"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_validate,
+        &format!(
+            r#"{{"path":"{path}","rules":[{{"column":"name","type":"nonempty"}},{{"column":"age","type":"number","min":18}}]}}"#
+        ),
+    );
+    assert_eq!(r["valid"], false, "invalid: {r}");
+    assert_eq!(r["count"], 3, "three violations: {r}");
+    let refs: Vec<&str> = r["violations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v["ref"].as_str().unwrap())
+        .collect();
+    assert!(refs.contains(&"A3"), "name blank at A3: {r}");
+    assert!(refs.contains(&"B3"), "age<18 at B3: {r}");
+    assert!(refs.contains(&"B4"), "age not number at B4: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_to_slides_per_row() {
     let path = tmp("s2s.xlsx");
     let w = call(
