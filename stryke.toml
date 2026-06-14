@@ -271,6 +271,7 @@ exports = [
     "office__img_info",
     "office__img_resize",
     "office__img_thumbnail",
+    "office__img_scale",
     "office__img_fit",
     "office__img_crop",
     "office__img_rotate",
