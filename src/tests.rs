@@ -2271,6 +2271,31 @@ fn sheet_pad_fixed_width() {
 }
 
 #[test]
+fn sheet_reverse_data_rows() {
+    let path = tmp("reverse.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["n"],[1],[2],[3]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("reverse_out.xlsx");
+    let r = call(
+        office__sheet_reverse,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["rows"], 3, "three data rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "n", "header stays on top: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 3.0, "first data now 3: {rd}");
+    assert_eq!(rows[3][0].as_f64().unwrap(), 1.0, "last data now 1: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_coalesce_first_nonblank() {
     let path = tmp("coalesce.xlsx");
     // primary blank in row1, present in row2; secondary fallback used in row1.
