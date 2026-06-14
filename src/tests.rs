@@ -4927,6 +4927,68 @@ fn sheet_calc_arithmetic_column() {
 }
 
 #[test]
+fn sheet_row_stats_horizontal() {
+    let path = tmp("rowstats.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["q1","q2","q3"],[1,2,3],[10,20,30]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // sum across the three columns
+    let out = tmp("rowstats_sum.xlsx");
+    let r = call(
+        office__sheet_row_stats,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","columns":["q1","q2","q3"],"agg":"sum","into":"total"}}"#
+        ),
+    );
+    assert_eq!(r["column"], "total", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][3], "total", "header appended: {rd}");
+    assert_eq!(rows[1][3].as_f64().unwrap(), 6.0, "1+2+3=6: {rd}");
+    assert_eq!(rows[2][3].as_f64().unwrap(), 60.0, "10+20+30=60: {rd}");
+
+    // mean across columns, default column name row_mean
+    let outm = tmp("rowstats_mean.xlsx");
+    let rm = call(
+        office__sheet_row_stats,
+        &format!(
+            r#"{{"path":"{path}","output":"{outm}","columns":["q1","q2","q3"],"agg":"mean"}}"#
+        ),
+    );
+    assert_eq!(rm["column"], "row_mean", "default name: {rm}");
+    let rdm = call(office__sheet_read, &format!(r#"{{"path":"{outm}"}}"#));
+    assert_eq!(
+        rdm["sheets"][0]["rows"][2][3].as_f64().unwrap(),
+        20.0,
+        "mean 10,20,30 = 20: {rdm}"
+    );
+
+    // range across columns = max - min
+    let outr = tmp("rowstats_range.xlsx");
+    call(
+        office__sheet_row_stats,
+        &format!(
+            r#"{{"path":"{path}","output":"{outr}","columns":["q1","q2","q3"],"agg":"range"}}"#
+        ),
+    );
+    let rdr = call(office__sheet_read, &format!(r#"{{"path":"{outr}"}}"#));
+    assert_eq!(
+        rdr["sheets"][0]["rows"][2][3].as_f64().unwrap(),
+        20.0,
+        "range 10..30 = 20: {rdr}"
+    );
+
+    for f in [&path, &out, &outm, &outr] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_where_multi_condition() {
     let path = tmp("where.xlsx");
     let w = call(

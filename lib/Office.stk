@@ -1036,6 +1036,15 @@ fn Office::sheet_calc ($path, $left, $op, $output, %opts) {
         office__sheet_calc(to_json({ path => $path, left => $left, op => $op, output => $output, right => $opts{right}, value => $opts{value}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Row-wise reduction across $columns (arrayref) into a new column (pandas
+## df[cols].agg(axis=1)). opts: agg => sum (default)|mean|min|max|count|product|
+## range, into (default row_{agg}), decimals, sheet, header, format. Returns
+## { ok, path, column }.
+fn Office::sheet_row_stats ($path, $columns, $output, %opts) {
+    Office::_decode("sheet_row_stats",
+        office__sheet_row_stats(to_json({ path => $path, columns => $columns, output => $output, agg => $opts{agg}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Filter rows by multiple $conditions ([{ column, op?, value, ignore_case? }]).
 ## opts: match (all/any), sheet, header, format. Returns { ok, path, kept }.
 fn Office::sheet_where ($path, $conditions, $output, %opts) {
