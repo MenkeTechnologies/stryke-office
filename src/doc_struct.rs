@@ -770,6 +770,48 @@ fn op_slides_to_doc(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": slides.len() }))
 }
 
+/// Render a presentation to a PDF handout — one slide per page (title as a
+/// heading, body lines as paragraphs). opts: path (pptx/odp), output (pdf),
+/// notes => bool (append speaker notes). Returns `{ ok, path, slides }`.
+fn op_slides_to_pdf(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let strs = |s: &Value, field: &str| -> Vec<String> {
+        s.get(field)
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|t| t.as_str().map(str::to_string)).collect())
+            .unwrap_or_default()
+    };
+    let mut elements: Vec<Value> = Vec::new();
+    for (i, s) in slides.iter().enumerate() {
+        if i > 0 {
+            elements.push(json!({ "type": "pagebreak" }));
+        }
+        let text = strs(s, "text");
+        if let Some((title, rest)) = text.split_first() {
+            elements.push(json!({ "type": "heading", "level": 1, "text": title }));
+            for line in rest {
+                elements.push(json!({ "type": "paragraph", "text": line }));
+            }
+        }
+        if want_notes {
+            for n in strs(s, "notes").iter().filter(|n| !n.trim().is_empty()) {
+                elements.push(json!({ "type": "paragraph", "text": n }));
+            }
+        }
+    }
+    op_pdf_build(json!({ "path": output, "elements": elements }))?;
+    Ok(json!({ "ok": true, "path": output, "slides": slides.len() }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via

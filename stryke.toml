@@ -86,6 +86,7 @@ exports = [
     "office__doc_to_html",
     "office__doc_to_slides",
     "office__slides_to_doc",
+    "office__slides_to_pdf",
     "office__html_to_doc",
     "office__doc_wordfreq",
     "office__doc_find",

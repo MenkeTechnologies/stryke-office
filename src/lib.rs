@@ -3302,6 +3302,7 @@ export!(office__doc_to_md, op_doc_to_md);
 export!(office__doc_to_html, op_doc_to_html);
 export!(office__doc_to_slides, op_doc_to_slides);
 export!(office__slides_to_doc, op_slides_to_doc);
+export!(office__slides_to_pdf, op_slides_to_pdf);
 export!(office__html_to_doc, op_html_to_doc);
 export!(office__doc_wordfreq, op_doc_wordfreq);
 export!(office__doc_find, op_doc_find);
