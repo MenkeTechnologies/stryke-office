@@ -3609,6 +3609,34 @@ fn pdf_draw_rect_on_pages() {
 }
 
 #[test]
+fn pdf_add_text_on_pages() {
+    let src = tmp("addt.pdf");
+    call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"heading","level":1,"text":"Body"}}]}}"#),
+    );
+    let out = tmp("addt_out.pdf");
+    let r = call(
+        office__pdf_add_text,
+        &format!(r#"{{"path":"{src}","text":"CONFIDENTIAL","x":72,"y":700,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["pages"], 1, "added on 1 page: {r}");
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 1, "valid pdf: {info}");
+    // the added text is extractable
+    let rd = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert!(
+        rd["text"].as_str().unwrap_or("").contains("CONFIDENTIAL"),
+        "added text extractable: {}",
+        rd["text"].as_str().unwrap_or("")
+    );
+
+    for f in [&src, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(
