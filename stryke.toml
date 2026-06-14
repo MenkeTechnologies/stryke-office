@@ -68,6 +68,7 @@ exports = [
     "office__slides_read",
     "office__slides_write",
     "office__slides_add_image",
+    "office__slides_set_notes",
     "office__slides_merge",
     "office__slides_split",
     "office__slides_stats",
