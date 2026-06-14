@@ -11895,6 +11895,7 @@ include!("textops.rs");
 export!(office__replace_text, op_replace_text);
 export!(office__mail_merge, op_mail_merge);
 export!(office__text_replace, op_text_replace);
+export!(office__text_sed, op_text_sed);
 export!(office__text_grep, op_text_grep);
 export!(office__text_stats, op_text_stats);
 export!(office__text_sort, op_text_sort);

@@ -74,6 +74,16 @@ Office::text_replace($csv, { foo => "baz" })
 val $cs = Office::sheet_read($csv)
 assert_eq $cs->[0]{rows}[1][0], "baz", "text_replace: csv cell replaced"
 unlink $csv
+# text_sed: regex find/replace with backreferences
+val $sedx = "$dir/$tag-sed.txt"
+spew $sedx, "2026-06-14\n"
+val $sedo = "$dir/$tag-sed-out.txt"
+val $sedr = Office::text_sed($sedx, '(\d{4})-(\d{2})-(\d{2})', '$2/$3/$1', output => $sedo)
+assert_eq $sedr->{replaced}, 1, "text_sed: one date rewritten"
+val $sedt = slurp $sedo
+assert_ok ($sedt =~ /06\/14\/2026/), "text_sed: backreferences reorder date"
+unlink $sedx
+unlink $sedo
 
 # ── meta_write / meta_read: hashref props ───────────────────────────
 val $mx = "$dir/$tag-meta.docx"

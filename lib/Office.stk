@@ -1803,6 +1803,14 @@ fn Office::text_replace ($path, $replace, %opts) {
         office__text_replace(to_json({ path => $path, replace => $replace, output => $opts{output}, ignore_case => $opts{ignore_case} })))
 }
 
+## Regex find/replace over a text file (sed s/…/…/g). $pattern is a regex;
+## $replacement may use $1/${name} backreferences. opts: global (default 1),
+## ignore_case, output (default in place). Returns { ok, path, replaced }.
+fn Office::text_sed ($path, $pattern, $replacement, %opts) {
+    Office::_decode("text_sed",
+        office__text_sed(to_json({ path => $path, pattern => $pattern, replacement => $replacement, global => $opts{global}, ignore_case => $opts{ignore_case}, output => $opts{output} })))
+}
+
 ## Grep matching lines from a text file. opts: ignore_case, invert, max.
 ## Returns { count, matches => [{ line, text }] } (1-based line numbers).
 fn Office::text_grep ($path, $query, %opts) {

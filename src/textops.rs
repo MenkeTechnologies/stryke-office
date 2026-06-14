@@ -337,6 +337,44 @@ fn op_text_replace(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "replaced": total }))
 }
 
+/// Regex find/replace over a text file (the `sed s/…/…/g` analogue) — unlike
+/// `text_replace` (literal substring) this matches a regular expression and the
+/// replacement may use capture-group backreferences (`$1`, `${name}`). opts:
+/// path, output (default in place), pattern => regex (required), replacement =>
+/// substitution string (default ""), global => replace every match (default
+/// true; false replaces only the first), ignore_case (default false). Returns
+/// `{ ok, path, replaced }` (number of matches substituted).
+fn op_text_sed(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let pattern = req_str(&opts, "pattern")?;
+    let replacement = opts
+        .get("replacement")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let global = opts.get("global").and_then(flag_of).unwrap_or(true);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+
+    let re = regex::RegexBuilder::new(pattern)
+        .case_insensitive(ignore_case)
+        .build()
+        .map_err(|e| anyhow!("invalid regex: {e}"))?;
+    let text = std::fs::read_to_string(path)?;
+    let total = re.find_iter(&text).count();
+    let new = if global {
+        re.replace_all(&text, replacement).into_owned()
+    } else {
+        re.replace(&text, replacement).into_owned()
+    };
+    let replaced = if global { total } else { total.min(1) };
+    std::fs::write(&output, new)?;
+    Ok(json!({ "ok": true, "path": output, "replaced": replaced }))
+}
+
 /// Grep matching lines from a text file (the line-oriented complement of
 /// `doc_find`). opts: path, query (required, literal substring), ignore_case
 /// (default false), invert => return lines that do NOT match (default false),
