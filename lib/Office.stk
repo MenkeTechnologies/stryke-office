@@ -641,6 +641,15 @@ fn Office::sheet_fill ($path, %opts) {
         office__sheet_fill(to_json({ path => $path, method => $opts{method}, value => $opts{value}, by => $opts{by}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Fill internal blank cells in numeric column(s) by linear interpolation between
+## known neighbors (pandas Series.interpolate). opts: by (column(s); default all),
+## decimals, output (default in place), sheet, header, format. Leading/trailing
+## gaps stay blank. Returns { ok, path, filled }.
+fn Office::sheet_interpolate ($path, %opts) {
+    Office::_decode("sheet_interpolate",
+        office__sheet_interpolate(to_json({ path => $path, by => $opts{by}, decimals => $opts{decimals}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Drop fully-empty rows and/or columns. opts: rows (default 1), cols (default
 ## 0), output, sheet, header, format. Returns { ok, path, rows_removed, cols_removed }.
 fn Office::sheet_drop_empty ($path, $output, %opts) {

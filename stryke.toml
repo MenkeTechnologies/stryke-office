@@ -74,6 +74,7 @@ exports = [
     "office__sheet_dedupe",
     "office__sheet_append",
     "office__sheet_fill",
+    "office__sheet_interpolate",
     "office__sheet_drop_empty",
     "office__sheet_add_header",
     "office__sheet_calc",

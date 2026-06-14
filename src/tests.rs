@@ -1857,6 +1857,45 @@ fn sheet_fill_blanks() {
 }
 
 #[test]
+fn sheet_interpolate_linear() {
+    let path = tmp("interp.xlsx");
+    // gap of two blanks between 10 and 40 → 20, 30; a trailing gap stays blank.
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["v"],
+                [10],
+                [""],
+                [""],
+                [40],
+                [""]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("interp_out.xlsx");
+    let r = call(
+        office__sheet_interpolate,
+        &format!(r#"{{"path":"{path}","by":"v","output":"{out}"}}"#),
+    );
+    assert_eq!(r["filled"], 2, "two internal blanks filled: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[2][0].as_f64().unwrap(), 20.0, "interp 1/3 -> 20: {rd}");
+    assert_eq!(rows[3][0].as_f64().unwrap(), 30.0, "interp 2/3 -> 30: {rd}");
+    // trailing gap (no right neighbor) left blank — never a number
+    assert!(
+        rows[5][0].as_f64().is_none(),
+        "trailing gap not filled: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_append_rows_and_records() {
     let path = tmp("app.xlsx");
     let w = call(
@@ -3202,7 +3241,11 @@ fn sheet_bin_equal_width_index() {
     // bin indices round-trip through xlsx as floats.
     assert_eq!(rows[1][1].as_f64().unwrap(), 0.0, "0 -> bin 0: {rd}");
     assert_eq!(rows[2][1].as_f64().unwrap(), 1.0, "5 -> bin 1: {rd}");
-    assert_eq!(rows[3][1].as_f64().unwrap(), 1.0, "10 (max) -> last bin: {rd}");
+    assert_eq!(
+        rows[3][1].as_f64().unwrap(),
+        1.0,
+        "10 (max) -> last bin: {rd}"
+    );
 
     std::fs::remove_file(&path).ok();
     std::fs::remove_file(&out).ok();

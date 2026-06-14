@@ -6049,6 +6049,120 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "filled": filled }))
 }
 
+/// Fill internal blank cells in numeric column(s) by linear interpolation
+/// between the nearest known neighbors (pandas `Series.interpolate`). Unlike
+/// `sheet_fill` (which carries the last value forward), this draws a straight
+/// line across each gap. opts: path, output (default in place), `by` => column
+/// name/index or array (default: every column with numeric data), decimals =>
+/// round results, sheet, header (default true), format. Leading/trailing gaps
+/// (no neighbor on one side) are left blank. Returns `{ ok, path, filled }`.
+fn op_sheet_interpolate(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let target_cols: Vec<usize> = match opts.get("by") {
+        None | Some(Value::Null) => (0..ncols).collect(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), hr))
+            .collect::<Result<_>>()?,
+        Some(v) => vec![resolve_col(Some(v), hr)?],
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    for row in rows[data_start..].iter_mut() {
+        if let Some(arr) = row.as_array_mut() {
+            while arr.len() < ncols {
+                arr.push(Value::Null);
+            }
+        }
+    }
+
+    let round = |x: f64| match decimals {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (x * f).round() / f
+        }
+        None => x,
+    };
+
+    let mut filled = 0u64;
+    for &c in &target_cols {
+        // Indices (within data region) of cells holding a numeric value.
+        let known: Vec<usize> = (data_start..rows.len())
+            .filter(|&ri| {
+                rows[ri]
+                    .as_array()
+                    .and_then(|a| a.get(c))
+                    .and_then(sheet_cell_num)
+                    .is_some()
+            })
+            .collect();
+        // Interpolate across each consecutive known pair that has a gap.
+        for pair in known.windows(2) {
+            let (i0, i1) = (pair[0], pair[1]);
+            if i1 - i0 < 2 {
+                continue;
+            }
+            let v0 = rows[i0]
+                .as_array()
+                .and_then(|a| a.get(c))
+                .and_then(sheet_cell_num)
+                .unwrap();
+            let v1 = rows[i1]
+                .as_array()
+                .and_then(|a| a.get(c))
+                .and_then(sheet_cell_num)
+                .unwrap();
+            let span = (i1 - i0) as f64;
+            for ri in (i0 + 1)..i1 {
+                if let Some(arr) = rows[ri].as_array_mut() {
+                    if c < arr.len() && sheet_cell_blank(&arr[c]) {
+                        let t = (ri - i0) as f64 / span;
+                        arr[c] = json!(round(v0 + (v1 - v0) * t));
+                        filled += 1;
+                    }
+                }
+            }
+        }
+    }
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "filled": filled }))
+}
+
 /// Drop fully-empty rows and/or columns (clean up sparse/scraped data). opts:
 /// path, output (default in place), rows => drop all-blank rows (default true),
 /// cols => drop columns whose data cells are all blank (default false; the
@@ -8661,6 +8775,7 @@ export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
+export!(office__sheet_interpolate, op_sheet_interpolate);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_calc, op_sheet_calc);
