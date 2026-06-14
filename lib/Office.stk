@@ -693,6 +693,15 @@ fn Office::pdf_burst ($path, $dir, %opts) {
         office__pdf_burst(to_json({ path => $path, dir => $dir, prefix => $opts{prefix} })))
 }
 
+## Draw lines on PDF pages (dividers, underlines, signature lines). $lines is an
+## arrayref of [x0, y0, x1, y1] (points, y from bottom). opts: color (default
+## black), width (default 1), pages => [1-based subset] (default all). Returns
+## { ok, path, pages, lines }.
+fn Office::pdf_draw_line ($path, $lines, $output, %opts) {
+    Office::_decode("pdf_draw_line",
+        office__pdf_draw_line(to_json({ path => $path, lines => $lines, output => $output, color => $opts{color}, width => $opts{width}, pages => $opts{pages} })))
+}
+
 ## Add text at a position on PDF pages (labels, stamps, annotations). opts: x/y
 ## => position in points (default 72,72; y from bottom), size (default 12),
 ## color (default black), pages => [1-based subset] (default all). Returns

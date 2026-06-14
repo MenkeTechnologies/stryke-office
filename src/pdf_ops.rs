@@ -1102,3 +1102,55 @@ fn op_pdf_add_text(opts: Value) -> Result<Value> {
     doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
     Ok(json!({ "ok": true, "path": out, "pages": added }))
 }
+
+/// Draw lines on PDF pages (dividers, underlines, signature lines). opts: path,
+/// output, lines => [[x0, y0, x1, y1], …] (points; y from the bottom), color
+/// (default black), width (line width in points, default 1), pages => [1-based
+/// subset] (default all). Returns `{ ok, path, pages, lines }`.
+fn op_pdf_draw_line(opts: Value) -> Result<Value> {
+    use lopdf::content::{Content, Operation};
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let segs: Vec<[f64; 4]> = opts
+        .get("lines")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing lines (expected [[x0,y0,x1,y1],…])"))?
+        .iter()
+        .filter_map(four_floats)
+        .collect();
+    if segs.is_empty() {
+        return Err(anyhow!("no valid lines"));
+    }
+    let (r, g, b) = pdf_color01(opts.get("color"), [0, 0, 0]);
+    let width = opts.get("width").and_then(Value::as_f64).unwrap_or(1.0);
+    let subset: Option<std::collections::BTreeSet<u32>> = opts
+        .get("pages")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect());
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let mut drawn = 0usize;
+    for (num, page_id) in doc.get_pages() {
+        if let Some(set) = &subset {
+            if !set.contains(&num) {
+                continue;
+            }
+        }
+        let mut ops = vec![
+            Operation::new("q", vec![]),
+            Operation::new("RG", vec![r.into(), g.into(), b.into()]),
+            Operation::new("w", vec![width.into()]),
+        ];
+        for s in &segs {
+            ops.push(Operation::new("m", vec![s[0].into(), s[1].into()]));
+            ops.push(Operation::new("l", vec![s[2].into(), s[3].into()]));
+            ops.push(Operation::new("S", vec![]));
+        }
+        ops.push(Operation::new("Q", vec![]));
+        doc.add_to_page_content(page_id, Content { operations: ops })
+            .map_err(|e| anyhow!("line page {num}: {e}"))?;
+        drawn += 1;
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "pages": drawn, "lines": segs.len() }))
+}
