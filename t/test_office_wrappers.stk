@@ -942,6 +942,15 @@ assert_eq $ddb->[0]{rows}[1][2], 7, "sheet_date_diff: one week = 7 days"
 assert_eq $ddb->[0]{rows}[2][2], 0, "sheet_date_diff: same date = 0"
 unlink $ddx
 unlink $ddo
+# sheet_date_add: shift a date column by days / months
+val $dax = "$dir/$tag-dateadd.xlsx"
+Office::sheet_write($dax, [{ name => "D", rows => [["d"], ["2026-01-31"]] }])
+val $dao = "$dir/$tag-dateadd-out.xlsx"
+Office::sheet_date_add($dax, "d", 1, $dao, unit => "months", into => "next")
+val $dab = Office::sheet_read($dao)
+assert_eq $dab->[0]{rows}[1][1], "2026-02-28", "sheet_date_add: Jan31 +1mo clamps to Feb28"
+unlink $dax
+unlink $dao
 # sheet_running: group-wise running total
 val $rnx2 = "$dir/$tag-running.xlsx"
 Office::sheet_write($rnx2, [{ name => "D", rows => [["region", "amt"], ["west", 10], ["east", 5], ["west", 30]] }])

@@ -284,6 +284,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_group_stats($path, $group, $value, $output, %opts)` | `{ok, path, groups}` | per-group `[group, count, mean, std, min, max]` for a numeric column (pandas `groupby.describe`; sample std) |
 | `Office::sheet_date_part($path, $output, $column, %opts)` | `{ok, path, column}` | extract year/month/day/ym from an ISO-date column into a new column; `part`/`into` opts |
 | `Office::sheet_date_diff($path, $start, $end, $output, %opts)` | `{ok, path, column}` | append signed difference (`end − start`) between two ISO-date columns; `unit` days/weeks |
+| `Office::sheet_date_add($path, $column, $amount, $output, %opts)` | `{ok, path, column}` | append an ISO-date column shifted by `amount` (negative ok); `unit` days/weeks/months (month-end clamped) |
 | `Office::sheet_standardize($path, $output, %opts)` | `{ok, path, columns}` | z-score numeric column(s) in place (whole-sheet); `by`/`decimals` opts |
 | `Office::sheet_running($path, $output, $group, $value, %opts)` | `{ok, path, column}` | append a group-wise running total column (running balance per group; pandas `groupby.cumsum`); `into`/`decimals` opts |
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |

@@ -4627,6 +4627,52 @@ fn sheet_date_diff_days_between() {
 }
 
 #[test]
+fn sheet_date_add_shift() {
+    let path = tmp("dateadd.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["d"],
+                ["2026-01-31"],
+                ["2026-12-30"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // +5 days: Jan 31 -> Feb 5; Dec 30 -> Jan 4 next year (rollover)
+    let out = tmp("dateadd_days.xlsx");
+    let r = call(
+        office__sheet_date_add,
+        &format!(r#"{{"path":"{path}","column":"d","amount":5,"output":"{out}","into":"plus"}}"#),
+    );
+    assert_eq!(r["column"], "plus", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1], "2026-02-05", "Jan31 +5d: {rd}");
+    assert_eq!(rows[2][1], "2027-01-04", "Dec30 +5d rolls year: {rd}");
+
+    // +1 month: Jan 31 clamps to Feb 28 (2026 not leap)
+    let outm = tmp("dateadd_mon.xlsx");
+    call(
+        office__sheet_date_add,
+        &format!(
+            r#"{{"path":"{path}","column":"d","amount":1,"unit":"months","output":"{outm}"}}"#
+        ),
+    );
+    let rdm = call(office__sheet_read, &format!(r#"{{"path":"{outm}"}}"#));
+    assert_eq!(
+        rdm["sheets"][0]["rows"][1][1], "2026-02-28",
+        "Jan31 +1mo clamps to Feb28: {rdm}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outm).ok();
+}
+
+#[test]
 fn sheet_group_stats_per_group() {
     let path = tmp("grpstats.xlsx");
     let w = call(
