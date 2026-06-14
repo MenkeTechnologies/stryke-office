@@ -19,8 +19,16 @@ fn call(f: extern "C" fn(*const c_char) -> *const c_char, arg: &str) -> Value {
 }
 
 fn tmp(name: &str) -> String {
+    // A per-call atomic counter makes every temp path unique even when two tests
+    // pass the same `name`, so concurrent tests never collide on a shared file.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let mut p = std::env::temp_dir();
-    p.push(format!("stryke-office-test-{}-{name}", std::process::id()));
+    p.push(format!(
+        "stryke-office-test-{}-{n}-{name}",
+        std::process::id()
+    ));
     p.to_string_lossy().into_owned()
 }
 
