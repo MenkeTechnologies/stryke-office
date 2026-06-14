@@ -227,6 +227,35 @@ fn sheet_write_html_and_markdown_tables() {
 }
 
 #[test]
+fn sheet_to_slides_per_row() {
+    let path = tmp("s2s.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","role","city"],["Alice","Eng","NYC"],["Bob","PM","LA"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("s2s.pptx");
+    let r = call(
+        office__sheet_to_slides,
+        &format!(r#"{{"path":"{path}","output":"{out}","title_field":"name"}}"#),
+    );
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let s0 = rd["slides"][0]["text"].to_string();
+    assert!(s0.contains("Alice"), "title: {s0}");
+    assert!(
+        s0.contains("role: Eng") && s0.contains("city: NYC"),
+        "body fields: {s0}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_diff_cells() {
     let a = tmp("diffa.xlsx");
     let b = tmp("diffb.xlsx");

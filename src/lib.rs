@@ -2456,6 +2456,55 @@ fn op_sheet_diff(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Turn each spreadsheet row into a slide. opts: path, output (pptx/odp),
+/// title_field => column whose value titles each slide (default: first column),
+/// sheet, format. The remaining fields become `"field: value"` body lines.
+/// Returns `{ ok, path, slides }`.
+fn op_sheet_to_slides(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let recs = op_sheet_records(json!({ "path": path, "sheet": opts.get("sheet") }))?;
+    let fields: Vec<String> = recs["fields"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|f| f.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let title_field = opts
+        .get("title_field")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| fields.first().cloned().unwrap_or_default());
+    let empty: Vec<Value> = Vec::new();
+    let records = recs["records"].as_array().unwrap_or(&empty);
+
+    let mut slides: Vec<Value> = Vec::new();
+    for rec in records {
+        let title = rec
+            .get(&title_field)
+            .map(cell_to_string)
+            .unwrap_or_default();
+        let body: Vec<Value> = fields
+            .iter()
+            .filter(|f| **f != title_field)
+            .map(|f| {
+                let v = cell_to_string(rec.get(f).unwrap_or(&Value::Null));
+                json!(format!("{f}: {v}"))
+            })
+            .collect();
+        slides.push(json!({ "title": title, "body": body }));
+    }
+
+    let mut wopts = json!({ "path": output, "slides": slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": records.len() }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -3222,6 +3271,7 @@ export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_diff, op_sheet_diff);
+export!(office__sheet_to_slides, op_sheet_to_slides);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);

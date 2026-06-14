@@ -190,6 +190,15 @@ fn Office::sheet_append ($path, %opts) {
         office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Turn each spreadsheet row into a slide. $output is a pptx/odp path. opts:
+## title_field => column whose value titles each slide (default: first column),
+## sheet, format. Remaining fields become "field: value" body lines. Returns
+## { ok, path, slides }.
+fn Office::sheet_to_slides ($path, $output, %opts) {
+    Office::_decode("sheet_to_slides",
+        office__sheet_to_slides(to_json({ path => $path, output => $output, title_field => $opts{title_field}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Compare two sheets cell by cell. opts: sheet => selector for both, left_sheet
 ## / right_sheet => per-side override. Returns { count, changed => [{ ref, row,
 ## col, left, right }], left_rows, right_rows } for cells that differ.
