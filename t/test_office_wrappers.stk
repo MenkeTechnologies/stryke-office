@@ -75,6 +75,18 @@ unlink $gtx
 unlink $gto
 unlink $gtsx
 unlink $gtso
+# text_paste: merge two files side by side
+val $gpa = "$dir/$tag-paste-a.txt"
+val $gpb = "$dir/$tag-paste-b.txt"
+spew $gpa, "1\n2\n3\n"
+spew $gpb, "x\ny\n"
+val $gpo = "$dir/$tag-paste-out.txt"
+val $gpr = Office::text_paste([$gpa, $gpb], delim => ",", output => $gpo)
+assert_eq $gpr->{count}, 3, "text_paste: three merged lines"
+assert_eq $gpr->{lines}[0], "1,x", "text_paste: first line paired"
+unlink $gpa
+unlink $gpb
+unlink $gpo
 unlink $grx
 unlink $grt
 unlink $gso

@@ -13114,6 +13114,29 @@ fn text_tr_translate_delete_squeeze() {
 }
 
 #[test]
+fn text_paste_side_by_side() {
+    let a = tmp("paste_a.txt");
+    let b = tmp("paste_b.txt");
+    std::fs::write(&a, "1\n2\n3\n").unwrap();
+    std::fs::write(&b, "x\ny\n").unwrap(); // shorter -> padded
+    let out = tmp("paste_out.txt");
+    let r = call(
+        office__text_paste,
+        &format!(r#"{{"paths":["{a}","{b}"],"delim":",","output":"{out}"}}"#),
+    );
+    assert_eq!(r["count"].as_u64().unwrap(), 3, "three merged lines: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    let lines: Vec<&str> = t.lines().collect();
+    assert_eq!(lines[0], "1,x", "line 1 paired");
+    assert_eq!(lines[1], "2,y", "line 2 paired");
+    assert_eq!(lines[2], "3,", "shorter file padded with empty field");
+
+    for f in [&a, &b, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
