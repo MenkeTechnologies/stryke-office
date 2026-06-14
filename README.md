@@ -231,6 +231,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_insert($path, $insert, $output, %opts)` | `{pages}` | splice another PDF's pages in after `position` |
 | `Office::pdf_draw_rect($path, $rects, $output, %opts)` | `{pages, rects}` | draw filled/stroked rectangles on pages; `color`/`fill`/`pages` |
 | `Office::pdf_add_text($path, $text, $output, %opts)` | `{pages}` | place text at `x`/`y` on pages (labels/stamps); `size`/`color`/`pages` |
+| `Office::pdf_draw_line($path, $lines, $output, %opts)` | `{pages, lines}` | draw lines on pages (dividers/signature lines); `color`/`width`/`pages` |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |

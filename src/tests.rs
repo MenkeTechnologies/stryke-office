@@ -3637,6 +3637,28 @@ fn pdf_add_text_on_pages() {
 }
 
 #[test]
+fn pdf_draw_line_on_pages() {
+    let src = tmp("line.pdf");
+    call(
+        office__pdf_build,
+        &format!(r#"{{"path":"{src}","elements":[{{"type":"heading","level":1,"text":"H"}}]}}"#),
+    );
+    let out = tmp("line_out.pdf");
+    let r = call(
+        office__pdf_draw_line,
+        &format!(r#"{{"path":"{src}","lines":[[50,50,300,50]],"width":2,"output":"{out}"}}"#),
+    );
+    assert_eq!(r["pages"], 1, "drawn on 1 page: {r}");
+    assert_eq!(r["lines"], 1, "one line: {r}");
+    let info = call(office__pdf_info, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(info["pages"], 1, "valid pdf: {info}");
+
+    for f in [&src, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn pdf_attach_list_and_extract() {
     let src = tmp("att_src.pdf");
     let b = call(
