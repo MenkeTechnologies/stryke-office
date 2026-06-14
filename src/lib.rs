@@ -4532,6 +4532,7 @@ export!(office__text_replace, op_text_replace);
 // structured document reads (tables) — read-side mirror of doc_write blocks
 include!("doc_struct.rs");
 export!(office__doc_tables, op_doc_tables);
+export!(office__doc_table_to_sheet, op_doc_table_to_sheet);
 export!(office__doc_blocks, op_doc_blocks);
 export!(office__doc_outline, op_doc_outline);
 export!(office__doc_links, op_doc_links);

@@ -114,6 +114,49 @@ fn op_doc_tables(opts: Value) -> Result<Value> {
     Ok(json!({ "tables": tables, "count": tables.len() }))
 }
 
+/// Extract one table from a document (docx/odt) into a spreadsheet file
+/// (xlsx/ods/csv). opts: path, output (required), index => which table (0-based,
+/// default 0), name => sheet name (default "Table"), format => output override.
+/// Returns `{ ok, path, rows, cols }`.
+fn op_doc_table_to_sheet(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let index = opts.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let name = opts
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("Table")
+        .to_string();
+
+    let read = op_doc_tables(json!({ "path": path }))?;
+    let tables = read
+        .get("tables")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let table = tables
+        .get(index)
+        .ok_or_else(|| anyhow!("table index {index} out of range ({} tables)", tables.len()))?;
+    let rows = table
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let cols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let nrows = rows.len();
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": name, "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": nrows, "cols": cols }))
+}
+
 // ── ordered structural read (headings + paragraphs + tables in document order) ─
 
 /// Map a paragraph style name to a heading level. `Heading1`..`Heading9` →

@@ -397,6 +397,13 @@ fn Office::doc_tables ($path) {
     Office::_decode("doc_tables", office__doc_tables(to_json({ path => $path })))
 }
 
+## Extract one table from a docx/odt into a spreadsheet file (xlsx/ods/csv).
+## opts: index (0-based, default 0), name, format. Returns { ok, path, rows, cols }.
+fn Office::doc_table_to_sheet ($path, $output, %opts) {
+    Office::_decode("doc_table_to_sheet",
+        office__doc_table_to_sheet(to_json({ path => $path, output => $output, index => $opts{index}, name => $opts{name}, format => $opts{format} })))
+}
+
 ## Heading outline of a docx/odt: returns { outline => [{ level, text }], count }
 ## in document order — the document analogue of pdf_outline.
 fn Office::doc_outline ($path) {

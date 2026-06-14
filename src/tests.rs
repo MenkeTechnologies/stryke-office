@@ -1701,6 +1701,40 @@ fn doc_tables_extracted_from_docx_and_odt() {
 }
 
 #[test]
+fn doc_table_to_sheet_extracts_grid() {
+    let dx = tmp("t2s.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"para","text":"before"}},
+                {{"kind":"table","rows":[["Name","Qty"],["Widget","3"],["Gadget","7"]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "docx write: {w}");
+
+    let out = tmp("t2s.xlsx");
+    let r = call(
+        office__doc_table_to_sheet,
+        &format!(r#"{{"path":"{dx}","output":"{out}","name":"Grid"}}"#),
+    );
+    assert_eq!(r["ok"], true, "extract: {r}");
+    assert_eq!(r["rows"], 3, "three rows: {r}");
+    assert_eq!(r["cols"], 2, "two columns: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let sheet = &rd["sheets"][0];
+    assert_eq!(sheet["name"], "Grid", "sheet name carried: {rd}");
+    let rows = sheet["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "Name", "header cell: {rd}");
+    assert_eq!(rows[2][0], "Gadget", "last row: {rd}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_stats_word_count_across_formats() {
     // docx: heading "Title" (1 word) + paragraph "one two three four" (4 words)
     let dx = tmp("stats.docx");
