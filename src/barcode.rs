@@ -157,3 +157,30 @@ fn op_barcode_1d(opts: Value) -> Result<Value> {
     let handle = insert_image(image::DynamicImage::ImageRgba8(img));
     Ok(json!({"handle": handle, "width": w, "height": height, "symbology": sym, "bars": bars.len()}))
 }
+
+/// Generate a barcode straight to an image file. opts: output (path; format by
+/// extension), kind => "qr" (default) | "1d", data, plus the matching generator
+/// options (ec/scale/quiet for qr; symbology/scale/height for 1d; fg/bg both).
+/// Returns `{ ok, path, kind, width, height }`.
+fn op_barcode_save(opts: Value) -> Result<Value> {
+    let output = req_str(&opts, "output")?.to_string();
+    let kind = opts.get("kind").and_then(Value::as_str).unwrap_or("qr");
+    let res = if kind == "1d" {
+        op_barcode_1d(opts.clone())?
+    } else {
+        op_barcode_qr(opts.clone())?
+    };
+    let handle = res
+        .get("handle")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("barcode produced no image"))?;
+    op_img_save(json!({ "handle": handle, "path": output }))?;
+    let _ = op_img_close(json!({ "handle": handle }));
+    Ok(json!({
+        "ok": true,
+        "path": output,
+        "kind": kind,
+        "width": res.get("width").cloned().unwrap_or(json!(0)),
+        "height": res.get("height").cloned().unwrap_or(json!(0)),
+    }))
+}

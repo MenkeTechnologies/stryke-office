@@ -4488,6 +4488,36 @@ fn barcode_1d_symbologies() {
 }
 
 #[test]
+fn barcode_save_to_files() {
+    // QR straight to a PNG
+    let qr = tmp("bc_qr.png");
+    let r = call(
+        office__barcode_save,
+        &format!(r#"{{"data":"hello world","output":"{qr}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "qr save: {r}");
+    assert_eq!(r["kind"], "qr", "kind: {r}");
+    let i = call(office__img_open, &format!(r#"{{"path":"{qr}"}}"#));
+    let h = i["handle"].as_u64().expect("qr opens as image");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    // 1D barcode straight to a PNG
+    let bc = tmp("bc_1d.png");
+    let r2 = call(
+        office__barcode_save,
+        &format!(r#"{{"data":"STRYKE-2026","output":"{bc}","kind":"1d","symbology":"code128"}}"#),
+    );
+    assert_eq!(r2["ok"], true, "1d save: {r2}");
+    assert!(
+        std::fs::metadata(&bc).map(|m| m.len() > 0).unwrap_or(false),
+        "1d file written"
+    );
+
+    std::fs::remove_file(&qr).ok();
+    std::fs::remove_file(&bc).ok();
+}
+
+#[test]
 fn meta_xlsx_round_trips() {
     let path = tmp("meta.xlsx");
     let w = call(

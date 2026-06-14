@@ -636,6 +636,7 @@ in a PDF (`pdf_build`) or docx. No separate output path.
 |---|---|
 | `barcode_qr(%opts)` | QR code; `data`, `ec` (L/M/Q/H, default M), `scale` px/module (6), `quiet` modules (4), `fg`/`bg` → `{handle, width, height, modules}` |
 | `barcode_1d(%opts)` | 1D barcode; `data`, `symbology` (default `code128`), `scale` px/bar (2), `height` px (80), `quiet` px, `fg`/`bg`, `set` (Code128 A/B/C) → `{handle, width, height, symbology, bars}` |
+| `barcode_save($data, $output, %opts)` | generate a barcode straight to an image file; `kind` qr/1d, plus the matching generator options → `{ok, path, kind, width, height}` |
 
 Supported `symbology` values: `code128`, `code39`, `code93`, `code11`,
 `codabar`, `ean13`, `ean8`, `upca`, `itf` (interleaved 2-of-5), `std2of5`.
