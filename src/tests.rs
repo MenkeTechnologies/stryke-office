@@ -343,6 +343,48 @@ fn sheet_to_html_table_with_escaping() {
 }
 
 #[test]
+fn sheet_to_text_aligned_table() {
+    let path = tmp("totext.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[
+                ["name","qty"],
+                ["apple",5],
+                ["banana",12]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // plain aligned: every line must have identical visual width
+    let r = call(office__sheet_to_text, &format!(r#"{{"path":"{path}"}}"#));
+    let text = r["text"].as_str().unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(lines[0].starts_with("name"), "header first: {text:?}");
+    assert!(lines[1].contains("---"), "header underline: {text:?}");
+    assert!(lines[2].starts_with("apple"), "first data row: {text:?}");
+    let w0 = lines[0].chars().count();
+    assert!(
+        lines.iter().all(|l| l.chars().count() == w0),
+        "all rows same width: {text:?}"
+    );
+    // integer cell rendered without .0
+    assert!(lines[3].contains("12"), "banana qty: {text:?}");
+
+    // border mode draws an ASCII grid
+    let rb = call(
+        office__sheet_to_text,
+        &format!(r#"{{"path":"{path}","border":true}}"#),
+    );
+    let bt = rb["text"].as_str().unwrap();
+    assert!(bt.contains("+--"), "grid corner/rule: {bt:?}");
+    assert!(bt.contains("| name"), "bordered header cell: {bt:?}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

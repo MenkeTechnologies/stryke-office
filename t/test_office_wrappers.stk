@@ -61,6 +61,10 @@ unlink $back
 val $html = Office::sheet_to_html($xl, title => "Report")
 assert_ok ($html->{html} =~ /<th>Item<\/th>/), "sheet_to_html: header cell"
 
+# ── spreadsheet -> aligned text table ───────────────────────────────
+val $txt = Office::sheet_to_text($xl)
+assert_ok ($txt->{text} =~ /Item/), "sheet_to_text: header rendered"
+
 # ── analytics: describe + freq ──────────────────────────────────────
 val $desc = Office::sheet_describe($xl)
 assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"

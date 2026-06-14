@@ -1734,6 +1734,126 @@ fn op_sheet_to_html(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Render a sheet as an aligned plain-text table (terminal-friendly). opts:
+/// path, output => write to a file (omit to return the text), sheet => selector,
+/// header => underline the first row with dashes (default true), border => draw
+/// an ASCII grid with `+`/`-`/`|` (default false = space-aligned columns).
+/// Columns are padded to their widest cell; whole-number floats lose the
+/// trailing `.0`. Returns `{ ok, rows, cols, text, path? }`.
+fn op_sheet_to_text(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let border = opts.get("border").and_then(Value::as_bool).unwrap_or(false);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+
+    let cell_text = |c: &Value| -> String {
+        match c.as_f64() {
+            Some(x) if c.is_number() && x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+            _ => cell_to_string(c),
+        }
+    };
+    // Stringify the whole grid and measure each column's display width (chars).
+    let grid: Vec<Vec<String>> = rows
+        .iter()
+        .map(|row| {
+            (0..ncols)
+                .map(|c| {
+                    cell_text(
+                        row.as_array()
+                            .and_then(|a| a.get(c))
+                            .unwrap_or(&Value::Null),
+                    )
+                })
+                .collect()
+        })
+        .collect();
+    let widths: Vec<usize> = (0..ncols)
+        .map(|c| grid.iter().map(|r| r[c].chars().count()).max().unwrap_or(0))
+        .collect();
+    let pad = |s: &str, w: usize| -> String {
+        let mut out = s.to_string();
+        out.push_str(&" ".repeat(w.saturating_sub(s.chars().count())));
+        out
+    };
+
+    let mut lines: Vec<String> = Vec::new();
+    if border {
+        let rule = format!(
+            "+{}+",
+            widths
+                .iter()
+                .map(|&w| "-".repeat(w + 2))
+                .collect::<Vec<_>>()
+                .join("+")
+        );
+        let fmt_row = |r: &[String]| {
+            format!(
+                "| {} |",
+                r.iter()
+                    .enumerate()
+                    .map(|(c, cell)| pad(cell, widths[c]))
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            )
+        };
+        lines.push(rule.clone());
+        for (i, r) in grid.iter().enumerate() {
+            lines.push(fmt_row(r));
+            if i == 0 && header {
+                lines.push(rule.clone());
+            }
+        }
+        lines.push(rule);
+    } else {
+        let fmt_row = |r: &[String]| {
+            r.iter()
+                .enumerate()
+                .map(|(c, cell)| pad(cell, widths[c]))
+                .collect::<Vec<_>>()
+                .join("  ")
+        };
+        for (i, r) in grid.iter().enumerate() {
+            lines.push(fmt_row(r));
+            if i == 0 && header {
+                lines.push(
+                    widths
+                        .iter()
+                        .map(|&w| "-".repeat(w))
+                        .collect::<Vec<_>>()
+                        .join("  "),
+                );
+            }
+        }
+    }
+    let text = format!("{}\n", lines.join("\n"));
+
+    let mut out = json!({ "ok": true, "rows": rows.len(), "cols": ncols, "text": text });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, &text)?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -5711,6 +5831,7 @@ export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__md_to_sheet, op_md_to_sheet);
 export!(office__sheet_to_html, op_sheet_to_html);
+export!(office__sheet_to_text, op_sheet_to_text);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

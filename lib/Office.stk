@@ -126,6 +126,13 @@ fn Office::sheet_to_html ($path, %opts) {
         office__sheet_to_html(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, title => $opts{title}, full => $opts{full} })))
 }
 
+## Render a sheet as an aligned plain-text table (terminal-friendly). opts:
+## output, sheet, header, border (ASCII grid). Returns { ok, rows, cols, text, path? }.
+fn Office::sheet_to_text ($path, %opts) {
+    Office::_decode("sheet_to_text",
+        office__sheet_to_text(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, border => $opts{border} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
