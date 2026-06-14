@@ -161,6 +161,20 @@ fn Office::sheet_set_range ($path, $cell, $values, %opts) {
         office__sheet_set_range(to_json({ path => $path, cell => $cell, values => $values, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Insert blank rows at a 1-based position (shifts later rows down). opts: at
+## (default 1), count (default 1), output, sheet, format. Returns { ok, path, inserted }.
+fn Office::sheet_insert_rows ($path, %opts) {
+    Office::_decode("sheet_insert_rows",
+        office__sheet_insert_rows(to_json({ path => $path, at => $opts{at}, count => $opts{count}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
+## Delete rows starting at a 1-based position. opts: at (required), count
+## (default 1), output, sheet, format. Returns { ok, path, deleted }.
+fn Office::sheet_delete_rows ($path, $at, %opts) {
+    Office::_decode("sheet_delete_rows",
+        office__sheet_delete_rows(to_json({ path => $path, at => $at, count => $opts{count}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

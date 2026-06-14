@@ -494,6 +494,53 @@ fn sheet_get_set_range_a1() {
 }
 
 #[test]
+fn sheet_insert_delete_rows() {
+    let path = tmp("rowops.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["h"],[1],[2],[3]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // delete rows 2..3 (the "1" and "2" data rows) -> header + "3"
+    let d = call(
+        office__sheet_delete_rows,
+        &format!(r#"{{"path":"{path}","at":2,"count":2}}"#),
+    );
+    assert_eq!(d["deleted"], 2, "two rows deleted: {d}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "header + 1 row: {rd}");
+    assert_eq!(rows[0][0], "h", "header kept: {rd}");
+    assert_eq!(
+        rows[1][0].as_f64().unwrap(),
+        3.0,
+        "remaining row is 3: {rd}"
+    );
+
+    // insert a blank row at position 2, fill it, confirm the shift
+    let i = call(
+        office__sheet_insert_rows,
+        &format!(r#"{{"path":"{path}","at":2,"count":1}}"#),
+    );
+    assert_eq!(i["inserted"], 1, "one row inserted: {i}");
+    call(
+        office__sheet_set_cell,
+        &format!(r#"{{"path":"{path}","cell":"A2","value":"new"}}"#),
+    );
+    let rd2 = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    let rows2 = rd2["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows2[1][0], "new", "inserted row filled at A2: {rd2}");
+    assert_eq!(
+        rows2[2][0].as_f64().unwrap(),
+        3.0,
+        "old row shifted down: {rd2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
