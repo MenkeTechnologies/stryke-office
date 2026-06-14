@@ -28,6 +28,16 @@ assert_ok ($gsr->{lines} >= 3), "text_sort: line count"
 # head: first line
 val $ghd = Office::text_head($grt, n => 1)
 assert_eq $ghd->{count}, 1, "text_head: one line"
+# uniq: collapse adjacent duplicate lines
+val $guq = "$dir/$tag-uniq.txt"
+spew $guq, "a\na\nb\nc\nb\n"
+val $guo = "$dir/$tag-uniq-out.txt"
+val $gur = Office::text_uniq($guq, output => $guo)
+assert_eq $gur->{lines}, 4, "text_uniq: adjacent collapse keeps 4"
+val $gurg = Office::text_uniq($guq, output => $guo, global => 1)
+assert_eq $gurg->{lines}, 3, "text_uniq: global dedupe keeps 3"
+unlink $guq
+unlink $guo
 unlink $grx
 unlink $grt
 unlink $gso

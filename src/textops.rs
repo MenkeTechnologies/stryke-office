@@ -438,6 +438,71 @@ fn op_text_sort(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "lines": lines.len() }))
 }
 
+/// Collapse duplicate lines (the `uniq(1)` analogue). By default only *adjacent*
+/// duplicates are merged, preserving order; `global => true` removes every later
+/// duplicate (keeping first occurrence) regardless of position. opts: path,
+/// output (default in place), count => prefix each kept line with its occurrence
+/// count and a tab (like `uniq -c`), ignore_case, global. Returns
+/// `{ ok, path, lines }` (kept line count).
+fn op_text_uniq(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let count = opts.get("count").and_then(flag_of).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let global = opts.get("global").and_then(flag_of).unwrap_or(false);
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let lines: Vec<&str> = text.lines().collect();
+    let key = |s: &str| -> String {
+        if ignore_case {
+            s.to_lowercase()
+        } else {
+            s.to_string()
+        }
+    };
+
+    // Each kept entry is (display line, occurrence count).
+    let mut kept: Vec<(String, u64)> = Vec::new();
+    if global {
+        let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for &line in &lines {
+            let k = key(line);
+            match seen.get(&k) {
+                Some(&idx) => kept[idx].1 += 1,
+                None => {
+                    seen.insert(k, kept.len());
+                    kept.push((line.to_string(), 1));
+                }
+            }
+        }
+    } else {
+        for &line in &lines {
+            match kept.last_mut() {
+                Some(last) if key(&last.0) == key(line) => last.1 += 1,
+                _ => kept.push((line.to_string(), 1)),
+            }
+        }
+    }
+
+    let rendered: Vec<String> = kept
+        .iter()
+        .map(|(line, c)| {
+            if count {
+                format!("{c}\t{line}")
+            } else {
+                line.clone()
+            }
+        })
+        .collect();
+    let out = format!("{}\n", rendered.join("\n"));
+    std::fs::write(&output, out)?;
+    Ok(json!({ "ok": true, "path": output, "lines": kept.len() }))
+}
+
 /// First (or last) N lines of a text file (`head`/`tail`). opts: path, n =>
 /// number of lines (default 10), tail => take from the end (default false),
 /// output => also write the slice to a file (omit to just return it). Returns

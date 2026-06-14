@@ -169,6 +169,7 @@ exports = [
     "office__text_grep",
     "office__text_stats",
     "office__text_sort",
+    "office__text_uniq",
     "office__text_head",
     "office__doc_tables",
     "office__doc_table_to_sheet",
