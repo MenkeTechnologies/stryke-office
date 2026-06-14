@@ -1364,6 +1364,13 @@ assert_eq $npr->{n}, 3, "sheet_npv: three cashflows"
 assert_ok ($npr->{npv} > 481.59 && $npr->{npv} < 481.60), "sheet_npv: Excel NPV at 10%"
 unlink $npx
 
+# ── sheet_irr: internal rate of return ──────────────────────────────
+val $irx = "$dir/$tag-irr.xlsx"
+Office::sheet_write($irx, [{ name => "C", rows => [["cf"], [-1000], [600], [600]] }])
+val $irr = Office::sheet_irr($irx, "cf")
+assert_ok ($irr->{irr} > 0.130 && $irr->{irr} < 0.131), "sheet_irr: ~13.07%"
+unlink $irx
+
 # ── sheet_moments: skewness + kurtosis of a column ──────────────────
 val $mmx = "$dir/$tag-moments.xlsx"
 Office::sheet_write($mmx, [{ name => "M", rows => [["v"], [1], [2], [3], [4], [5]] }])

@@ -25,6 +25,7 @@ exports = [
     "office__sheet_quantile",
     "office__sheet_moments",
     "office__sheet_npv",
+    "office__sheet_irr",
     "office__sheet_autocorr",
     "office__sheet_agg",
     "office__sheet_sparkline",
