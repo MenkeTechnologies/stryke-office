@@ -3233,6 +3233,7 @@ export!(office__doc_split, op_doc_split);
 export!(office__md_to_doc, op_md_to_doc);
 export!(office__doc_to_md, op_doc_to_md);
 export!(office__doc_to_html, op_doc_to_html);
+export!(office__doc_to_slides, op_doc_to_slides);
 export!(office__html_to_doc, op_html_to_doc);
 export!(office__doc_wordfreq, op_doc_wordfreq);
 export!(office__doc_find, op_doc_find);
