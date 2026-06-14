@@ -4280,6 +4280,71 @@ fn op_sheet_freq(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Distinct values of a column as an ordered list (SQL `DISTINCT`). Unlike
+/// `sheet_freq` (which returns counts sorted by frequency), this returns just the
+/// values. opts: path, column => name or 0-based index (required), sorted =>
+/// sort ascending instead of first-seen order (default false), ignore_case =>
+/// dedupe case-insensitively (default false), sheet, header (default true).
+/// Blank cells are skipped. Returns `{ column, count, values }`.
+fn op_sheet_unique(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let sorted = opts.get("sorted").and_then(flag_of).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut values: Vec<String> = Vec::new();
+    for row in &rows[data_start..] {
+        let cell = row
+            .as_array()
+            .and_then(|a| a.get(col))
+            .unwrap_or(&Value::Null);
+        if sheet_cell_blank(cell) {
+            continue;
+        }
+        let display = cell_to_string(cell);
+        let key = if ignore_case {
+            display.to_lowercase()
+        } else {
+            display.clone()
+        };
+        if seen.insert(key) {
+            values.push(display);
+        }
+    }
+    if sorted {
+        values.sort();
+    }
+    Ok(json!({ "column": col_name, "count": values.len(), "values": values }))
+}
+
 /// Split one column into several by a delimiter (Excel "Text to Columns" /
 /// pandas `str.split(expand=True)`). opts: path, output, column => name or
 /// 0-based index (required), delimiter => separator (default ","), into =>
@@ -7956,6 +8021,7 @@ export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);
 export!(office__sheet_sumif, op_sheet_sumif);
 export!(office__sheet_freq, op_sheet_freq);
+export!(office__sheet_unique, op_sheet_unique);
 export!(office__sheet_split_column, op_sheet_split_column);
 export!(office__sheet_concat_columns, op_sheet_concat_columns);
 export!(office__sheet_pivot, op_sheet_pivot);

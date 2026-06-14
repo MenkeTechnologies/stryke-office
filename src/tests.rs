@@ -2316,6 +2316,38 @@ fn sheet_freq_value_counts() {
 }
 
 #[test]
+fn sheet_unique_distinct_values() {
+    let path = tmp("unique.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["c"],["b"],["a"],["b"],["c"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // first-seen order: b, a, c
+    let r = call(
+        office__sheet_unique,
+        &format!(r#"{{"path":"{path}","column":"c"}}"#),
+    );
+    assert_eq!(r["count"], 3, "three distinct: {r}");
+    assert_eq!(r["values"][0], "b", "first-seen b: {r}");
+    assert_eq!(r["values"][1], "a", "then a: {r}");
+    assert_eq!(r["values"][2], "c", "then c: {r}");
+
+    // sorted: a, b, c
+    let s = call(
+        office__sheet_unique,
+        &format!(r#"{{"path":"{path}","column":"c","sorted":true}}"#),
+    );
+    assert_eq!(s["values"][0], "a", "sorted first a: {s}");
+    assert_eq!(s["values"][2], "c", "sorted last c: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_split_column_text_to_columns() {
     let path = tmp("splitcol.xlsx");
     let w = call(

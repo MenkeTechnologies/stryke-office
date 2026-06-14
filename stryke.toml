@@ -58,6 +58,7 @@ exports = [
     "office__sheet_countif",
     "office__sheet_sumif",
     "office__sheet_freq",
+    "office__sheet_unique",
     "office__sheet_split_column",
     "office__sheet_concat_columns",
     "office__sheet_pivot",

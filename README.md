@@ -160,6 +160,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_multisort($path, $keys, $output, %opts)` | `{ok, path, sorted}` | sort by multiple columns; `keys` = `[{column, descending?}]` in priority order |
 | `Office::sheet_rank($path, $by, $output, %opts)` | `{ok, path, ranked}` | append a rank column by a column without reordering (Excel `RANK`); `ascending`/`dense`/`name` opts |
 | `Office::sheet_freq($path, $column, %opts)` | `{column, total, distinct, values}` | value-counts of a column sorted by frequency (pandas `value_counts`); `ignore_case`/`top` opts |
+| `Office::sheet_unique($path, $column, %opts)` | `{column, count, values}` | distinct values of a column (SQL `DISTINCT`); `sorted`/`ignore_case` opts |
 | `Office::sheet_group_concat($path, $group_by, $value, $output, %opts)` | `{ok, path, groups}` | group by a column, concatenate another's values (SQL `GROUP_CONCAT`); `sep`/`distinct` opts |
 | `Office::sheet_explode($path, $column, $output, %opts)` | `{ok, path, rows}` | split a delimited column into multiple rows (SQL `unnest`); `sep`/`trim` opts |
 | `Office::sheet_map($path, $column, $mapping, $output, %opts)` | `{ok, path, mapped}` | recode a column's values via a lookup map; `default`/`into` opts |
