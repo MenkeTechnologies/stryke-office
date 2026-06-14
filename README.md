@@ -146,6 +146,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_merge($inputs, $output, %opts)` | `{sources, sheets}` | combine workbooks into one; `mode => "rows"` stacks; target ext converts |
 | `Office::sheet_union($inputs, $output, %opts)` | `{sources, rows, fields}` | concatenate sheets aligned by column name (SQL UNION) |
 | `Office::sheet_stats($path, %opts)` | `{sheet, rows, columns:[{name,count,numeric,blanks,sum?,min?,max?,mean?}]}` | per-column descriptive stats; `sheet`/`header` opts |
+| `Office::sheet_describe($path, %opts)` | `{sheet, rows, columns:[{name,count,mean,std,min,p25,p50,p75,max}]}` | pandas-style numeric summary (std + quartiles); `sheet`/`header` opts |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |
 | `Office::records_write($path, $records, %opts)` | `{rows, fields}` | write objects to a sheet (header + rows); `fields`/`sheet_name` opts |

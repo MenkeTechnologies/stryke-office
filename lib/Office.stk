@@ -88,6 +88,13 @@ fn Office::sheet_stats ($path, %opts) {
         office__sheet_stats(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Pandas-style numeric summary: per numeric column count/mean/std/min/25%/
+## 50%/75%/max. opts: sheet, header.
+fn Office::sheet_describe ($path, %opts) {
+    Office::_decode("sheet_describe",
+        office__sheet_describe(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
