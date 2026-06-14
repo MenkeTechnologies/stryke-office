@@ -1330,6 +1330,54 @@ fn sheet_partition_by_column() {
 }
 
 #[test]
+fn sheet_split_by_into_tabs() {
+    let path = tmp("splitby.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["east",5],
+                ["west",20]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("splitby_out.xlsx");
+    let r = call(
+        office__sheet_split_by,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"region"}}"#),
+    );
+    assert_eq!(r["sheets"], 2, "two tabs: {r}");
+    let groups: Vec<String> = r["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(groups, vec!["west", "east"], "first-seen tab order: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let sheets = rd["sheets"].as_array().unwrap();
+    assert_eq!(sheets[0]["name"], "west", "first tab named west: {rd}");
+    // west tab: header + 2 west rows
+    let wrows = sheets[0]["rows"].as_array().unwrap();
+    assert_eq!(wrows.len(), 3, "header + 2 west rows: {rd}");
+    assert_eq!(wrows[2][1].as_f64().unwrap(), 20.0, "second west amt: {rd}");
+    // east tab: header + 1 row
+    assert_eq!(
+        sheets[1]["rows"].as_array().unwrap().len(),
+        2,
+        "header + 1 east: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_multisort_two_keys() {
     let path = tmp("msort.xlsx");
     let w = call(

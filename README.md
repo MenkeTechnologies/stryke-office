@@ -168,6 +168,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_explode($path, $column, $output, %opts)` | `{ok, path, rows}` | split a delimited column into multiple rows (SQL `unnest`); `sep`/`trim` opts |
 | `Office::sheet_map($path, $column, $mapping, $output, %opts)` | `{ok, path, mapped}` | recode a column's values via a lookup map; `default`/`into` opts |
 | `Office::sheet_partition($path, $column, $dir, %opts)` | `{count, files}` | split a sheet into one file per distinct value of a column; `prefix`/`format` opts |
+| `Office::sheet_split_by($path, $output, $column, %opts)` | `{ok, path, sheets, groups}` | split a sheet into one tab per distinct value of a column, in a single workbook; `header` opt |
 | `Office::sheet_lookup($path, $lookup, $key, $result, %opts)` | `{found, value, row}` | VLOOKUP — find a key in one column, return the cell from another; `ignore_case` opt |
 | `Office::sheet_countif($path, $column, %opts)` | `{count}` | count rows where a column matches a predicate (COUNTIF); `op`/`value`/`ignore_case` opts |
 | `Office::sheet_sumif($path, $column, %opts)` | `{sum, count}` | sum a column over rows matching a predicate (SUMIF); `op`/`value`/`sum` opts |
