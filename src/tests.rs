@@ -714,6 +714,50 @@ fn sheet_cumsum_running_total() {
 }
 
 #[test]
+fn sheet_cumulative_max_and_prod() {
+    let path = tmp("cumul.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[3],[1],[4],[2]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // running max → 3, 3, 4, 4
+    let out = tmp("cumul_max.xlsx");
+    let r = call(
+        office__sheet_cumulative,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_cummax", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1].as_f64().unwrap(), 3.0, "cummax 1: {rd}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 3.0, "cummax 2 (1<3): {rd}");
+    assert_eq!(rows[3][1].as_f64().unwrap(), 4.0, "cummax 3: {rd}");
+    assert_eq!(rows[4][1].as_f64().unwrap(), 4.0, "cummax 4 (2<4): {rd}");
+
+    // running product → 3, 3, 12, 24
+    let outp = tmp("cumul_prod.xlsx");
+    let rp = call(
+        office__sheet_cumulative,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{outp}","agg":"prod"}}"#),
+    );
+    assert_eq!(rp["column"], "v_cumprod", "prod column name: {rp}");
+    let rdp = call(office__sheet_read, &format!(r#"{{"path":"{outp}"}}"#));
+    let rowsp = rdp["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        rowsp[3][1].as_f64().unwrap(),
+        12.0,
+        "cumprod 3*1*4=12: {rdp}"
+    );
+    assert_eq!(rowsp[4][1].as_f64().unwrap(), 24.0, "cumprod *2=24: {rdp}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outp).ok();
+}
+
+#[test]
 fn sheet_pct_of_total() {
     let path = tmp("pct.xlsx");
     let w = call(
