@@ -183,6 +183,13 @@ fn Office::sheet_insert_column ($path, %opts) {
         office__sheet_insert_column(to_json({ path => $path, at => $opts{at}, name => $opts{name}, value => $opts{value}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a running-total (cumulative sum) column for a numeric column. opts:
+## into (new header), sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_cumsum ($path, $column, $output, %opts) {
+    Office::_decode("sheet_cumsum",
+        office__sheet_cumsum(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
