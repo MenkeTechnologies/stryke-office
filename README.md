@@ -229,6 +229,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_assemble($inputs, $output)` | `{inputs, pages}` | build one PDF from a mix of image files (→ pages) and PDFs (merged) |
 | `Office::pdf_stamp_image($path, $image, $output, %opts)` | `{stamped}` | overlay a logo/signature image on pages; `x`/`y`/`width`/`height`/`pages` |
 | `Office::pdf_insert($path, $insert, $output, %opts)` | `{pages}` | splice another PDF's pages in after `position` |
+| `Office::pdf_draw_rect($path, $rects, $output, %opts)` | `{pages, rects}` | draw filled/stroked rectangles on pages; `color`/`fill`/`pages` |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |

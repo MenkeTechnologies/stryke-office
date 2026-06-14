@@ -1005,3 +1005,57 @@ fn op_pdf_insert(opts: Value) -> Result<Value> {
     let pages = Document::load(&output).map(|d| d.get_pages().len()).unwrap_or(0);
     Ok(json!({ "ok": true, "path": output, "pages": pages }))
 }
+
+/// Draw filled or stroked rectangles on PDF pages — for color blocks, covering
+/// regions, or highlights. opts: path, output, rects => [[x, y, w, h], …]
+/// (points; y from the bottom), color (default black), fill (default true),
+/// pages => [1-based subset] (default all). Returns `{ ok, path, pages, rects }`.
+fn op_pdf_draw_rect(opts: Value) -> Result<Value> {
+    use lopdf::content::{Content, Operation};
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let boxes: Vec<[f64; 4]> = opts
+        .get("rects")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing rects (expected [[x,y,w,h],…])"))?
+        .iter()
+        .filter_map(four_floats)
+        .collect();
+    if boxes.is_empty() {
+        return Err(anyhow!("no valid rects"));
+    }
+    let (r, g, b) = pdf_color01(opts.get("color"), [0, 0, 0]);
+    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let subset: Option<std::collections::BTreeSet<u32>> = opts
+        .get("pages")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect());
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let mut drawn = 0usize;
+    for (num, page_id) in doc.get_pages() {
+        if let Some(set) = &subset {
+            if !set.contains(&num) {
+                continue;
+            }
+        }
+        let mut ops = vec![Operation::new("q", vec![])];
+        for bx in &boxes {
+            ops.push(Operation::new(
+                if fill { "rg" } else { "RG" },
+                vec![r.into(), g.into(), b.into()],
+            ));
+            ops.push(Operation::new(
+                "re",
+                vec![bx[0].into(), bx[1].into(), bx[2].into(), bx[3].into()],
+            ));
+            ops.push(Operation::new(if fill { "f" } else { "S" }, vec![]));
+        }
+        ops.push(Operation::new("Q", vec![]));
+        doc.add_to_page_content(page_id, Content { operations: ops })
+            .map_err(|e| anyhow!("draw page {num}: {e}"))?;
+        drawn += 1;
+    }
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "pages": drawn, "rects": boxes.len() }))
+}

@@ -79,6 +79,7 @@ exports = [
     "office__pdf_assemble",
     "office__pdf_stamp_image",
     "office__pdf_insert",
+    "office__pdf_draw_rect",
     "office__pdf_attach",
     "office__pdf_attachments",
     "office__pdf_form_fields",
