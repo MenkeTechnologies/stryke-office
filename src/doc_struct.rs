@@ -1015,6 +1015,74 @@ fn op_slides_to_md(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Parse a Markdown outline into a presentation (the inverse of `slides_to_md`).
+/// opts: markdown => outline text, or path => a `.md` file; output (required) =>
+/// pptx/odp; format => override. Each heading line (`#`..`######`) starts a new
+/// slide whose title is the heading text; following list items (`-`/`*`/`+`) and
+/// non-blank lines become the slide body. Content before the first heading is
+/// dropped. Returns `{ ok, path, slides }`.
+fn op_md_to_slides(opts: Value) -> Result<Value> {
+    let text = match opts.get("markdown").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            let path = req_str(&opts, "path")?;
+            String::from_utf8_lossy(&std::fs::read(path)?).into_owned()
+        }
+    };
+    let output = req_str(&opts, "output")?.to_string();
+
+    // A heading line: 1–6 leading '#' followed by whitespace.
+    let heading_text = |line: &str| -> Option<String> {
+        let t = line.trim_start();
+        let hashes = t.chars().take_while(|&c| c == '#').count();
+        if (1..=6).contains(&hashes) {
+            let rest = &t[hashes..];
+            if rest.starts_with(char::is_whitespace) || rest.is_empty() {
+                return Some(rest.trim().to_string());
+            }
+        }
+        None
+    };
+    let strip_bullet = |line: &str| -> String {
+        let t = line.trim_start();
+        for m in ["- ", "* ", "+ "] {
+            if let Some(rest) = t.strip_prefix(m) {
+                return rest.trim().to_string();
+            }
+        }
+        t.trim().to_string()
+    };
+
+    let mut slides: Vec<Value> = Vec::new();
+    let mut title: Option<String> = None;
+    let mut body: Vec<String> = Vec::new();
+    let flush = |title: &mut Option<String>, body: &mut Vec<String>, slides: &mut Vec<Value>| {
+        if let Some(t) = title.take() {
+            slides.push(json!({ "title": t, "body": std::mem::take(body) }));
+        }
+    };
+    for line in text.lines() {
+        if let Some(h) = heading_text(line) {
+            flush(&mut title, &mut body, &mut slides);
+            title = Some(h);
+        } else if title.is_some() && !line.trim().is_empty() {
+            body.push(strip_bullet(line));
+        }
+    }
+    flush(&mut title, &mut body, &mut slides);
+    if slides.is_empty() {
+        return Err(anyhow!("no Markdown headings found (nothing to slice into slides)"));
+    }
+
+    let n = slides.len();
+    let mut wopts = json!({ "path": output, "slides": slides });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_slides_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "slides": n }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via
