@@ -541,6 +541,32 @@ fn sheet_insert_delete_rows() {
 }
 
 #[test]
+fn sheet_insert_column_shifts_right() {
+    let path = tmp("colins.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b"],[1,2],[3,4]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // insert a "mid" column at position 2, fill data rows with 0
+    let r = call(
+        office__sheet_insert_column,
+        &format!(r#"{{"path":"{path}","at":2,"name":"mid","value":0}}"#),
+    );
+    assert_eq!(r["at"], 2, "inserted at col 2: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "a", "col a stays: {rd}");
+    assert_eq!(rows[0][1], "mid", "new header inserted: {rd}");
+    assert_eq!(rows[0][2], "b", "col b shifted right: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 0.0, "data fill: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 2.0, "b value shifted: {rd}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
