@@ -112,10 +112,22 @@ spew $gsx, "a\nb\nc\nd\ne\n"
 val $gso2 = "$dir/$tag-shuf-out.txt"
 val $gsr = Office::text_shuf($gsx, output => $gso2, seed => 7)
 assert_eq $gsr->{lines}, 5, "text_shuf: all lines kept"
-unlink $gpa
-unlink $gpb
 unlink $gsx
 unlink $gso2
+# text_base64: encode then decode roundtrip
+val $b64in = "$dir/$tag-b64.txt"
+spew $b64in, "Hello base64"
+val $b64enc = "$dir/$tag-b64-enc.txt"
+val $b64e = Office::text_base64($b64in, output => $b64enc)
+assert_ok ($b64e->{base64} =~ /^[A-Za-z0-9+\/=]+$/), "text_base64: encoded alphabet"
+val $b64dec = "$dir/$tag-b64-dec.txt"
+Office::text_base64($b64enc, decode => 1, output => $b64dec)
+assert_eq slurp($b64dec), "Hello base64", "text_base64: roundtrip"
+unlink $gpa
+unlink $gpb
+unlink $b64in
+unlink $b64enc
+unlink $b64dec
 unlink $grx
 unlink $grt
 unlink $gso

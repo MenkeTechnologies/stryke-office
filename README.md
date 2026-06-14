@@ -355,6 +355,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::text_comm($a, $b, %opts)` | `{only_a, only_b, both, a_count, b_count, common}` | set-based line comparison of two files (`comm`); `ignore_case` opt |
 | `Office::text_join($a, $b, %opts)` | `{count, lines, path?}` | relational inner join of two delimited files on a key `field` (`join`); `delim`/`output` opts |
 | `Office::text_shuf($path, %opts)` | `{ok, path, lines}` | reproducibly shuffle a file's lines (seeded Fisher–Yates, `shuf`); `seed`/`output` opts |
+| `Office::text_base64($path, %opts)` | `{ok, bytes, base64?, path?}` | base64-encode (default) or `decode` a file (RFC 4648); `output` opt (required for decode) |
 | `Office::text_head($path, %opts)` | `{count, lines, path?}` | first (or last) N lines of a text file (`head`/`tail`); `n`/`tail`/`output` opts |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}`; opts `header`/`footer`/`page_numbers`/`page_size` |

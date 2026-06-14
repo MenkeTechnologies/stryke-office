@@ -2196,6 +2196,14 @@ fn Office::text_shuf ($path, %opts) {
         office__text_shuf(to_json({ path => $path, output => $opts{output}, seed => $opts{seed} })))
 }
 
+## Base64-encode (default) or decode a file. opts: decode => 1 to decode,
+## output => destination (required for decode). Encode returns { ok, bytes,
+## base64, path? }; decode writes bytes and returns { ok, bytes, path }.
+fn Office::text_base64 ($path, %opts) {
+    Office::_decode("text_base64",
+        office__text_base64(to_json({ path => $path, decode => $opts{decode}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {
