@@ -2471,6 +2471,51 @@ fn slides_split_one_file_per_slide() {
 }
 
 #[test]
+fn slides_add_image_embeds_picture() {
+    let deck = tmp("imgdeck.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(r#"{{"path":"{deck}","slides":[{{"title":"Cover","body":["x"]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "deck write: {w}");
+
+    // make a 20x10 png to embed
+    let png = tmp("logo.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":20,"height":10,"color":[0,128,255,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{png}"}}"#),
+    );
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let r = call(
+        office__slides_add_image,
+        &format!(r#"{{"path":"{deck}","image":"{png}","slide":1}}"#),
+    );
+    assert_eq!(r["ok"], true, "add_image: {r}");
+
+    // the embedded media is recoverable via extract_images at its native size
+    let ex = call(office__extract_images, &format!(r#"{{"path":"{deck}"}}"#));
+    assert_eq!(ex["count"], 1, "one embedded image: {ex}");
+    assert_eq!(ex["images"][0]["width"], 20, "image width: {ex}");
+    assert_eq!(ex["images"][0]["height"], 10, "image height: {ex}");
+
+    // deck still parses: slide text intact (no corruption from the injection)
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{deck}"}}"#));
+    assert_eq!(
+        rd["slides"][0]["text"][0], "Cover",
+        "title still reads: {rd}"
+    );
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_file(&png).ok();
+}
+
+#[test]
 fn slides_to_pdf_one_per_page() {
     let px = tmp("s2pdf.pptx");
     let w = call(

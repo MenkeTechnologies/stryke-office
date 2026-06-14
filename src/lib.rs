@@ -5123,6 +5123,160 @@ fn op_slides_write(opts: Value) -> Result<Value> {
     Ok(json!({"ok": true, "path": path, "slides": slides.len()}))
 }
 
+/// Image content type for a file extension (PresentationML media).
+fn image_content_type(ext: &str) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "tif" | "tiff" => "image/tiff",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Insert a picture onto a slide of an existing pptx (the deck analogue of
+/// `pdf_stamp_image`). Embeds the image as a `ppt/media` part, adds the slide
+/// relationship + content-type, and injects a `p:pic` shape into the slide's
+/// shape tree. opts: path (pptx), image => image file (png/jpeg/gif/bmp/tiff),
+/// output => target (default in place), slide => 1-based slide number (default
+/// 1), x/y => offset in pixels (default 96 = 1 inch), width/height => size in
+/// pixels (default the image's native size). Pixels convert to EMU at 96 dpi.
+/// Returns `{ ok, path, slide, image }`.
+fn op_slides_add_image(opts: Value) -> Result<Value> {
+    const EMU_PER_PX: i64 = 9525;
+    let path = req_str(&opts, "path")?;
+    let image = req_str(&opts, "image")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let slide_no = opts.get("slide").and_then(Value::as_u64).unwrap_or(1);
+    let ext = ext_of(image);
+    if image_content_type(&ext) == "application/octet-stream" {
+        return Err(anyhow!("unsupported image format: {ext}"));
+    }
+
+    let (iw, ih) =
+        image::image_dimensions(image).map_err(|e| anyhow!("read image {image}: {e}"))?;
+    let x = opts.get("x").and_then(Value::as_i64).unwrap_or(96) * EMU_PER_PX;
+    let y = opts.get("y").and_then(Value::as_i64).unwrap_or(96) * EMU_PER_PX;
+    let cx = opts
+        .get("width")
+        .and_then(Value::as_i64)
+        .unwrap_or(iw as i64)
+        * EMU_PER_PX;
+    let cy = opts
+        .get("height")
+        .and_then(Value::as_i64)
+        .unwrap_or(ih as i64)
+        * EMU_PER_PX;
+    let img_bytes = std::fs::read(image)?;
+
+    // Read every entry of the source pptx into memory.
+    let src = std::fs::read(path)?;
+    let mut zip = zip::ZipArchive::new(Cursor::new(&src))?;
+    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..zip.len() {
+        let mut f = zip.by_index(i)?;
+        let name = f.name().to_string();
+        if name.ends_with('/') {
+            continue;
+        }
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf)?;
+        entries.push((name, buf));
+    }
+
+    let slide_name = format!("ppt/slides/slide{slide_no}.xml");
+    if !entries.iter().any(|(n, _)| n == &slide_name) {
+        return Err(anyhow!("slide {slide_no} not found in {path}"));
+    }
+
+    // Next free media index and image part name.
+    let mut max_img = 0u32;
+    for (n, _) in &entries {
+        if let Some(rest) = n.strip_prefix("ppt/media/image") {
+            let num: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            if let Ok(v) = num.parse::<u32>() {
+                max_img = max_img.max(v);
+            }
+        }
+    }
+    let img_idx = max_img + 1;
+    let media_name = format!("ppt/media/image{img_idx}.{ext}");
+
+    // Slide rels: append an image relationship, picking the next rId.
+    let rels_name = format!("ppt/slides/_rels/slide{slide_no}.xml.rels");
+    let rel_target = format!("../media/image{img_idx}.{ext}");
+    let rel = |rid: u32| {
+        format!(
+            "<Relationship Id=\"rId{rid}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"{rel_target}\"/>"
+        )
+    };
+    let mut rid = 1u32;
+    if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| n == &rels_name) {
+        let s = String::from_utf8_lossy(bytes).into_owned();
+        for cap in s.split("Id=\"rId").skip(1) {
+            let num: String = cap.chars().take_while(char::is_ascii_digit).collect();
+            if let Ok(v) = num.parse::<u32>() {
+                rid = rid.max(v + 1);
+            }
+        }
+        let new_s = s.replacen(
+            "</Relationships>",
+            &format!("{}</Relationships>", rel(rid)),
+            1,
+        );
+        *bytes = new_s.into_bytes();
+    } else {
+        let rels = format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">{}</Relationships>\n",
+            rel(rid)
+        );
+        entries.push((rels_name, rels.into_bytes()));
+    }
+
+    // Inject a p:pic shape into the slide's shape tree.
+    let pic = format!(
+        "<p:pic><p:nvPicPr><p:cNvPr id=\"{cid}\" name=\"Picture {img_idx}\"/><p:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed=\"rId{rid}\"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x=\"{x}\" y=\"{y}\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>",
+        cid = 1000 + img_idx,
+    );
+    if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| n == &slide_name) {
+        let s = String::from_utf8_lossy(bytes).into_owned();
+        let new_s = s.replacen("</p:spTree>", &format!("{pic}</p:spTree>"), 1);
+        *bytes = new_s.into_bytes();
+    }
+
+    // Ensure [Content_Types].xml declares the image extension.
+    if let Some((_, bytes)) = entries.iter_mut().find(|(n, _)| n == "[Content_Types].xml") {
+        let s = String::from_utf8_lossy(bytes).into_owned();
+        if !s.contains(&format!("Extension=\"{ext}\"")) {
+            let decl = format!(
+                "<Default Extension=\"{ext}\" ContentType=\"{}\"/>",
+                image_content_type(&ext)
+            );
+            let new_s = s.replacen("</Types>", &format!("{decl}</Types>"), 1);
+            *bytes = new_s.into_bytes();
+        }
+    }
+
+    // Add the media part and rewrite the package.
+    entries.push((media_name, img_bytes));
+    let mut zw = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let zopt = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, bytes) in &entries {
+        zw.start_file(name.as_str(), zopt)?;
+        zw.write_all(bytes)?;
+    }
+    let cursor = zw.finish()?;
+    std::fs::write(&output, cursor.into_inner())?;
+
+    Ok(json!({ "ok": true, "path": output, "slide": slide_no, "image": image }))
+}
+
 /// Concatenate presentations into one deck. opts: inputs => [paths],
 /// output => path, format => override. Each source slide's first text line
 /// becomes the title and the rest the body; the target format follows the
@@ -5453,6 +5607,7 @@ export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
+export!(office__slides_add_image, op_slides_add_image);
 export!(office__slides_merge, op_slides_merge);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);

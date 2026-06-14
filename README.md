@@ -225,6 +225,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |
 | `Office::slides_read($path)` | arrayref of `{text => [...], notes => [...]}` | pptx/odp; `notes` = speaker notes |
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
+| `Office::slides_add_image($path, $image, %opts)` | `{ok, path, slide, image}` | embed a picture onto a pptx slide; `slide`/`x`/`y`/`width`/`height` (px) opts |
 | `Office::slides_merge($inputs, $output, %opts)` | `{sources, slides}` | concatenate decks into one (pptx/odp); target ext converts |
 | `Office::slides_stats($path)` | `{slides, words, notes_words, per_slide:[{words,notes_words}]}` | per-deck statistics |
 | `Office::slides_append($path, $slides, %opts)` | `{slides, added}` | append slides to an existing deck (in place by default) |

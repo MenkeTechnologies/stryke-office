@@ -716,6 +716,15 @@ fn Office::slides_write ($path, $slides, %opts) {
     Office::_decode("slides_write", office__slides_write(to_json($r)))
 }
 
+## Insert a picture onto a slide of an existing pptx (deck analogue of
+## pdf_stamp_image). opts: output (default in place), slide (1-based, default 1),
+## x/y (px, default 96), width/height (px, default native). Returns
+## { ok, path, slide, image }.
+fn Office::slides_add_image ($path, $image, %opts) {
+    Office::_decode("slides_add_image",
+        office__slides_add_image(to_json({ path => $path, image => $image, output => $opts{output}, slide => $opts{slide}, x => $opts{x}, y => $opts{y}, width => $opts{width}, height => $opts{height} })))
+}
+
 ## Concatenate presentations into one deck. $inputs is an arrayref of paths; the
 ## target format follows $output's extension (so this also converts pptx<->odp).
 ## Each source slide's first text line becomes the title, the rest the body
