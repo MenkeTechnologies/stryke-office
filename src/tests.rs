@@ -688,6 +688,57 @@ fn sheet_ttest_welch() {
 }
 
 #[test]
+fn sheet_anova_one_way() {
+    // three groups, clearly separated means -> large F, tiny p
+    let path = tmp("anova.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"A","rows":[
+                ["g1","g2","g3"],
+                [1,11,21],
+                [2,12,22],
+                [3,13,23],
+                [4,14,24]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let s = call(office__sheet_anova, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["groups"].as_u64().unwrap(), 3, "three groups: {s}");
+    assert_eq!(s["n"].as_u64().unwrap(), 12, "twelve obs: {s}");
+    assert_eq!(s["df_between"].as_f64().unwrap(), 2.0, "df1=k-1: {s}");
+    assert_eq!(s["df_within"].as_f64().unwrap(), 9.0, "df2=N-k: {s}");
+    assert!(
+        s["f"].as_f64().unwrap() > 50.0,
+        "large F for separated groups: {s}"
+    );
+    assert!(s["p"].as_f64().unwrap() < 0.001, "tiny p: {s}");
+
+    // identical groups -> F ~ 0, p ~ 1
+    let path2 = tmp("anova_eq.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path2}","sheets":[{{"name":"A","rows":[["a","b"],[1,1],[2,2],[3,3]]}}]}}"#
+        ),
+    );
+    let s2 = call(office__sheet_anova, &format!(r#"{{"path":"{path2}"}}"#));
+    assert!(
+        s2["f"].as_f64().unwrap() < 1e-9,
+        "F~0 identical groups: {s2}"
+    );
+    assert!(
+        (s2["p"].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "p~1 identical: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_cov_matrix() {
     let path = tmp("cov.xlsx");
     // x = [1,2,3], y = 2x. Sample var(x) = 1; cov(x,y) = 2; var(y) = 4.

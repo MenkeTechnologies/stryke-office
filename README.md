@@ -154,6 +154,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | correlation matrix between numeric columns (pandas `df.corr()`); `method` pearson (default), spearman (rank), or kendall (tau-b) |
 | `Office::sheet_regress($path, $x, $y, %opts)` | `{ok, slope, intercept, r2, n, path?}` | simple OLS regression `lm(y ~ x)`; `output` appends predicted/residual columns, `decimals` rounds coefficients |
 | `Office::sheet_ttest($path, $a, $b, %opts)` | `{ok, t, df, p, mean_a, mean_b, n_a, n_b}` | Welch's two-sample t-test between columns; two-sided Student-t p-value; `decimals` opt |
+| `Office::sheet_anova($path, %opts)` | `{ok, f, df_between, df_within, p, groups, n}` | one-way ANOVA across group columns (`columns` default all numeric); upper-tail F p-value |
 | `Office::sheet_dtypes($path, %opts)` | `{sheet, rows, columns:[{name,type,counts}]}` | infer each column's data type (integer/float/bool/string/mixed/empty; pandas `df.dtypes`) |
 | `Office::sheet_mode($path, %opts)` | `{sheet, rows, columns:[{name,mode,count}]}` | most-frequent value (mode) of each column (text or numeric) |
 | `Office::sheet_nunique($path, %opts)` | `{sheet, rows, columns:[{name,nunique}]}` | count distinct values per column (cardinality; pandas `nunique`); `dropna` opt |

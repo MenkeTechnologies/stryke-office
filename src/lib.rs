@@ -2659,6 +2659,114 @@ fn op_sheet_ttest(opts: Value) -> Result<Value> {
     }))
 }
 
+/// One-way analysis of variance across two or more groups, each group a numeric
+/// column. opts: path, columns => array of column names/indices (default: every
+/// column that holds numeric data), sheet, header (default true), decimals =>
+/// round reported stats. Returns `{ ok, f, df_between, df_within, p, groups, n }`
+/// where `p` is the upper-tail F p-value (regularized incomplete beta). `f` is
+/// null when within-group variance is zero (degenerate F → p reported as 0).
+fn op_sheet_anova(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+
+    // Group columns: explicit list, or every column with numeric data.
+    let col_idx: Vec<usize> = match opts.get("columns") {
+        Some(Value::Array(arr)) if !arr.is_empty() => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        _ => (0..ncols)
+            .filter(|&c| {
+                rows[data_start..].iter().any(|r| {
+                    r.as_array()
+                        .and_then(|a| a.get(c))
+                        .and_then(sheet_cell_num)
+                        .is_some()
+                })
+            })
+            .collect(),
+    };
+    let groups: Vec<Vec<f64>> = col_idx
+        .iter()
+        .map(|&c| {
+            rows[data_start..]
+                .iter()
+                .filter_map(|r| r.as_array().and_then(|a| a.get(c)).and_then(sheet_cell_num))
+                .collect()
+        })
+        .collect();
+    let k = groups.len();
+    if k < 2 || groups.iter().any(|g| g.is_empty()) {
+        return Err(anyhow!("need at least two non-empty numeric groups"));
+    }
+    let total_n: usize = groups.iter().map(Vec::len).sum();
+    if total_n <= k {
+        return Err(anyhow!("not enough observations for within-group variance"));
+    }
+    let grand = groups.iter().flatten().sum::<f64>() / total_n as f64;
+    let mut ssb = 0.0;
+    let mut ssw = 0.0;
+    for g in &groups {
+        let m = g.iter().sum::<f64>() / g.len() as f64;
+        ssb += g.len() as f64 * (m - grand).powi(2);
+        ssw += g.iter().map(|x| (x - m).powi(2)).sum::<f64>();
+    }
+    let df1 = (k - 1) as f64;
+    let df2 = (total_n - k) as f64;
+    let msw = ssw / df2;
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    let (f_val, p) = if msw.abs() < f64::EPSILON {
+        // zero within-group spread: F → ∞, tail probability → 0
+        (Value::Null, 0.0)
+    } else {
+        let f = (ssb / df1) / msw;
+        (
+            json!(round(f)),
+            betai(df2 / 2.0, df1 / 2.0, df2 / (df2 + df1 * f)),
+        )
+    };
+    Ok(json!({
+        "ok": true,
+        "f": f_val,
+        "df_between": df1,
+        "df_within": df2,
+        "p": round(p),
+        "groups": k,
+        "n": total_n,
+    }))
+}
+
 fn op_sheet_cov(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -13976,6 +14084,7 @@ export!(office__sheet_argmax, op_sheet_argmax);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_regress, op_sheet_regress);
 export!(office__sheet_ttest, op_sheet_ttest);
+export!(office__sheet_anova, op_sheet_anova);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
 export!(office__sheet_to_latex, op_sheet_to_latex);
