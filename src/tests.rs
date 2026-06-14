@@ -7381,6 +7381,45 @@ fn image_fit_letterbox() {
 }
 
 #[test]
+fn image_concat_edge_to_edge() {
+    // 40x20 + 30x10, horizontal -> 70 wide, 20 tall (max), flush (no padding)
+    let a = call(
+        office__img_new,
+        r#"{"width":40,"height":20,"color":[255,0,0,255]}"#,
+    );
+    let b = call(
+        office__img_new,
+        r#"{"width":30,"height":10,"color":[0,0,255,255]}"#,
+    );
+    let ha = a["handle"].as_u64().unwrap();
+    let hb = b["handle"].as_u64().unwrap();
+
+    let r = call(
+        office__img_concat,
+        &format!(r#"{{"handles":[{ha},{hb}],"axis":"h"}}"#),
+    );
+    assert_eq!(r["width"], 70, "summed widths: {r}");
+    assert_eq!(r["height"], 20, "max height: {r}");
+
+    // vertical -> 40 wide (max), 30 tall (sum)
+    let rv = call(
+        office__img_concat,
+        &format!(r#"{{"handles":[{ha},{hb}],"axis":"v"}}"#),
+    );
+    assert_eq!(rv["width"], 40, "max width: {rv}");
+    assert_eq!(rv["height"], 30, "summed heights: {rv}");
+
+    for h in [
+        ha,
+        hb,
+        r["handle"].as_u64().unwrap(),
+        rv["handle"].as_u64().unwrap(),
+    ] {
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    }
+}
+
+#[test]
 fn image_cross_format_png_to_jpeg() {
     let png = tmp("x.png");
     let jpg = tmp("x.jpg");

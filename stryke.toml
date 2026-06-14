@@ -315,6 +315,7 @@ exports = [
     "office__img_open_frames",
     "office__img_save_animated",
     "office__img_montage",
+    "office__img_concat",
     "office__img_gradient",
     "office__img_draw_ellipse",
     "office__img_draw_polygon",

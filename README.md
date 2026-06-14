@@ -745,6 +745,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_open_frames($path)` | split animated gif/webp → `{count, frames:[{handle,width,height,delay_ms}]}` |
 | `img_save_animated($path, $handles, %opts)` | write animated GIF; `delay`/`delays`/`repeat` |
 | `img_montage($handles, %opts)` | grid montage → new handle; `cols`/`gap`/`bg` |
+| `img_concat($handles, %opts)` | edge-to-edge concat (flush, native sizes) → new handle; `axis` h/v, `gap`/`bg` |
 | `img_gradient($h, %opts)` | fill `linear`/`radial` between `from`/`to`; `angle` |
 | `img_draw_ellipse($h, $x, $y, $rx, $ry, $color, %opts)` | `fill` opt |
 | `img_draw_polygon($h, $points, $color)` | `points` = `[[x,y],…]` |
