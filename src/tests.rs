@@ -1113,6 +1113,32 @@ fn csv_and_tsv_round_trip() {
 }
 
 #[test]
+fn csv_custom_delimiter() {
+    // write a semicolon-delimited .csv
+    let path = tmp("semi.csv");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["a","b"],[1,2]]}}],"delimiter":";"}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let raw = std::fs::read_to_string(&path).unwrap();
+    assert!(raw.contains("a;b"), "semicolon-separated: {raw:?}");
+
+    // read it back with the same delimiter
+    let r = call(
+        office__sheet_read,
+        &format!(r#"{{"path":"{path}","delimiter":";"}}"#),
+    );
+    assert_eq!(r["sheets"][0]["rows"][0][0], "a", "header a: {r}");
+    assert_eq!(r["sheets"][0]["rows"][0][1], "b", "header b: {r}");
+    assert_eq!(r["sheets"][0]["rows"][1][1], 2.0, "numeric: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn html_md_rtf_txt_doc_round_trip() {
     for ext in ["html", "md", "rtf", "txt"] {
         let path = tmp(&format!("rt.{ext}"));
