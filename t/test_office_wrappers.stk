@@ -1281,4 +1281,10 @@ assert_eq $flr->{value}, 3, "tail => 1 honored (lenient bool): last row kept"
 unlink $flx
 unlink $flo
 
+# ── chart density (ggplot2 geom_density): KDE curve to SVG ───────────
+val $densvg = Office::chart_svg("density", [{ name => "a", data => [1, 2, 2, 3, 3, 3, 4, 4, 5] }])
+assert_ok ($densvg =~ /^<svg/), "chart density: svg document"
+assert_ok ($densvg =~ /polyline/), "chart density: KDE outline polyline"
+assert_ok ($densvg =~ /fill-opacity/), "chart density: filled area"
+
 test_run

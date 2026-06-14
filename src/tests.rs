@@ -10717,6 +10717,68 @@ fn chart_new_types_render_raster_and_svg() {
 }
 
 #[test]
+fn kde_curve_integrates_to_one() {
+    // symmetric data centered at 5; KDE over a wide grid should integrate ~1
+    let data = [3.0, 4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0];
+    let pts = kde_curve(&data, 0.0, 10.0, 256);
+    assert_eq!(pts.len(), 256, "grid length");
+    // trapezoidal integral of the density over [0,10] ≈ 1
+    let dx = 10.0 / 255.0;
+    let area: f64 = pts.windows(2).map(|w| (w[0].1 + w[1].1) / 2.0 * dx).sum();
+    assert!((area - 1.0).abs() < 0.05, "area ~1, got {area}");
+    // densest grid point sits near the data center (5)
+    let peak =
+        pts.iter().cloned().fold(
+            (0.0, f64::NEG_INFINITY),
+            |acc, p| {
+                if p.1 > acc.1 {
+                    p
+                } else {
+                    acc
+                }
+            },
+        );
+    assert!((peak.0 - 5.0).abs() < 1.0, "peak near 5, got {}", peak.0);
+}
+
+#[test]
+fn chart_density_kde_raster_and_svg() {
+    // two series of raw values -> overlaid KDE curves
+    let series =
+        r#"[{"name":"a","data":[1,2,2,3,3,3,4,4,5]},{"name":"b","data":[4,5,5,6,6,6,7,7,8]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"density","width":480,"height":320,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("density raster: {c}"));
+    assert_eq!(c["type"], "density", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    // SVG: filled area path + outline polyline, well-formed document
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"density","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "density svg malformed"
+    );
+    assert!(
+        svg.contains("fill-opacity=\"0.35\""),
+        "density svg filled area"
+    );
+    assert!(svg.contains("<polyline"), "density svg outline");
+    // both series names appear in the legend
+    assert!(
+        svg.contains(">a<") && svg.contains(">b<"),
+        "density svg legend entries"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

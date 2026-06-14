@@ -280,6 +280,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_hexbin(&mut img, &opts, series, l, t, r, b)
         }
+        "density" => {
+            require_series(&opts)?;
+            render_density(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -772,6 +776,121 @@ fn render_histogram(
     }
     draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &format!("{lo:.1}"));
     draw_text_mut(img, black, (l as f64 + pw - 30.0) as i32, b + 6, PxScale::from(12.0), fnt, &format!("{hi:.1}"));
+}
+
+/// Gaussian kernel density estimate of `data` evaluated at `points` evenly
+/// spaced x-values across `[lo, hi]`. Bandwidth follows Silverman's rule of
+/// thumb (`0.9 * min(std, IQR/1.34) * n^(-1/5)`), with a small positive
+/// fallback for degenerate input. Returns `(x, density)` pairs whose area ≈ 1.
+/// Shared by the raster and SVG density renderers.
+fn kde_curve(data: &[f64], lo: f64, hi: f64, points: usize) -> Vec<(f64, f64)> {
+    let n = data.len();
+    if n == 0 || points == 0 {
+        return Vec::new();
+    }
+    let mean = data.iter().sum::<f64>() / n as f64;
+    let std = (data.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n as f64).sqrt();
+    let mut sorted = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let q = |p: f64| sorted[((p * (n - 1) as f64).round() as usize).min(n - 1)];
+    let iqr = q(0.75) - q(0.25);
+    let spread = if iqr > 0.0 { std.min(iqr / 1.34) } else { std };
+    let mut h = 0.9 * spread * (n as f64).powf(-0.2);
+    if !h.is_finite() || h <= 0.0 {
+        h = ((hi - lo).abs() / points as f64).max(1e-6);
+    }
+    let inv = 1.0 / (n as f64 * h * std::f64::consts::TAU.sqrt());
+    (0..points)
+        .map(|i| {
+            let x = lo + (hi - lo) * i as f64 / (points - 1).max(1) as f64;
+            let dens = data
+                .iter()
+                .map(|&xi| {
+                    let z = (x - xi) / h;
+                    (-0.5 * z * z).exp()
+                })
+                .sum::<f64>()
+                * inv;
+            (x, dens)
+        })
+        .collect()
+}
+
+/// Kernel-density plot (ggplot2 `geom_density`) — one smooth Gaussian-KDE curve
+/// per series over a shared value axis, drawn as a translucent filled area with
+/// a colored outline. opts: `points` => grid resolution (default 128). Series
+/// share one x (value) and y (density) scale for honest comparison.
+#[allow(clippy::too_many_arguments)]
+fn render_density(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+    }
+    if !lo.is_finite() || !hi.is_finite() {
+        return;
+    }
+    if (hi - lo).abs() < f64::EPSILON {
+        hi = lo + 1.0;
+    }
+    let pad = (hi - lo) * 0.05;
+    let (lo, hi) = (lo - pad, hi + pad);
+    let points = opts.get("points").and_then(Value::as_u64).unwrap_or(128).clamp(16, 1024) as usize;
+
+    let curves: Vec<Vec<(f64, f64)>> =
+        series.iter().map(|s| kde_curve(&series_nums(s), lo, hi, points)).collect();
+    let ymax = curves.iter().flatten().map(|&(_, d)| d).fold(f64::EPSILON, f64::max);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    for i in 0..=5 {
+        let d = ymax * i as f64 / 5.0;
+        let y = (b as f64 - d / ymax * ph) as f32;
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &fmt_num(d));
+    }
+    draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &fmt_num(lo));
+    draw_text_mut(img, black, ((l as f64 + pw) - 36.0) as i32, b + 6, PxScale::from(12.0), fnt, &fmt_num(hi));
+
+    let xp = |x: f64| l as f64 + (x - lo) / (hi - lo) * pw;
+    let yp = |d: f64| b as f64 - d / ymax * ph;
+    for (si, cur) in curves.iter().enumerate() {
+        if cur.is_empty() {
+            continue;
+        }
+        let color = series_color(&series[si], si);
+        let verts: Vec<(f32, f32)> = cur.iter().map(|&(x, d)| (xp(x) as f32, yp(d) as f32)).collect();
+        let mut poly: Vec<Point<i32>> = Vec::with_capacity(verts.len() + 2);
+        poly.push(Point::new(xp(cur[0].0) as i32, b));
+        for &(x, y) in &verts {
+            poly.push(Point::new(x as i32, y as i32));
+        }
+        poly.push(Point::new(xp(cur[cur.len() - 1].0) as i32, b));
+        poly.dedup();
+        if poly.len() >= 3 && poly.first() != poly.last() {
+            let mut fillc = color;
+            fillc.0[3] = 90;
+            draw_polygon_mut(img, &poly, fillc);
+        }
+        for w in verts.windows(2) {
+            draw_line_segment_mut(img, w[0], w[1], color);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -76,6 +76,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "calendar" => svg_calendar(&mut s, opts, series, l, t, r, b),
         "parallel" => svg_parallel(&mut s, series, &cats, l, t, r, b),
         "hexbin" => svg_hexbin(&mut s, opts, series, l, t, r, b),
+        "density" => svg_density(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1203,6 +1204,62 @@ fn svg_histogram(s: &mut String, series: &[Value], opts: &Value, l: f64, pw: f64
         let x = l + i as f64 * slot + slot * 0.05;
         let bh = c as f64 / maxc * ph;
         let _ = write!(s, r##"<rect x="{x}" y="{}" width="{}" height="{bh}" fill="{col}"/>"##, b - bh, slot * 0.9);
+    }
+}
+
+/// Kernel-density plot (vector; ggplot2 `geom_density`). One Gaussian-KDE curve
+/// per series sharing a value/density scale, drawn as a translucent filled area
+/// plus a colored outline. opts: `points` => grid resolution (default 128).
+fn svg_density(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+    }
+    if !lo.is_finite() || !hi.is_finite() {
+        return;
+    }
+    if (hi - lo).abs() < f64::EPSILON {
+        hi = lo + 1.0;
+    }
+    let pad = (hi - lo) * 0.05;
+    let (lo, hi) = (lo - pad, hi + pad);
+    let points = opts.get("points").and_then(Value::as_u64).unwrap_or(128).clamp(16, 1024) as usize;
+
+    let curves: Vec<Vec<(f64, f64)>> =
+        series.iter().map(|ser| kde_curve(&series_nums(ser), lo, hi, points)).collect();
+    let ymax = curves.iter().flatten().map(|&(_, d)| d).fold(f64::EPSILON, f64::max);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    for i in 0..=5 {
+        let d = ymax * i as f64 / 5.0;
+        let y = b - d / ymax * ph;
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(d)));
+    }
+    let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(lo)));
+    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(hi)));
+
+    let xp = |x: f64| l + (x - lo) / (hi - lo) * pw;
+    let yp = |d: f64| b - d / ymax * ph;
+    for (si, cur) in curves.iter().enumerate() {
+        if cur.is_empty() {
+            continue;
+        }
+        let col = svg_palette(si);
+        let mut area = format!("M {:.1},{b:.1} ", xp(cur[0].0));
+        let mut line = String::new();
+        for &(x, d) in cur {
+            let (px, py) = (xp(x), yp(d));
+            let _ = write!(area, "L {px:.1},{py:.1} ");
+            let _ = write!(line, "{px:.1},{py:.1} ");
+        }
+        let _ = write!(area, "L {:.1},{b:.1} Z", xp(cur[cur.len() - 1].0));
+        let _ = write!(s, r##"<path d="{area}" fill="{col}" fill-opacity="0.35"/>"##);
+        let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="2"/>"##);
     }
 }
 
