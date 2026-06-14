@@ -12429,6 +12429,7 @@ export!(office__img_erode, op_img_erode);
 export!(office__img_open_frames, op_img_open_frames);
 export!(office__img_save_animated, op_img_save_animated);
 export!(office__img_montage, op_img_montage);
+export!(office__img_concat, op_img_concat);
 export!(office__img_gradient, op_img_gradient);
 export!(office__img_draw_ellipse, op_img_draw_ellipse);
 export!(office__img_draw_polygon, op_img_draw_polygon);

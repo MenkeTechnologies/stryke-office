@@ -1348,6 +1348,56 @@ fn op_img_montage(opts: Value) -> Result<Value> {
     with_image(handle, |img| Ok(info_json(handle, img)))
 }
 
+/// Concatenate images edge-to-edge into one (stitch scans, before/after) —
+/// unlike `img_montage` (uniform grid cells with padding) this places each image
+/// flush at its native size. opts: handles (array, required), axis => "h"
+/// (horizontal, default) or "v" (vertical), gap => pixels between images (default
+/// 0), bg => background/gap fill (default white). On the cross axis each image is
+/// centered. Returns the new image's geometry.
+fn op_img_concat(opts: Value) -> Result<Value> {
+    let handles: Vec<u64> = opts
+        .get("handles")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing handles (expected array)"))?
+        .iter()
+        .filter_map(Value::as_u64)
+        .collect();
+    if handles.is_empty() {
+        return Err(anyhow!("no images to concat"));
+    }
+    let imgs: Vec<image::RgbaImage> = handles.iter().map(|&h| rgba_of(h)).collect::<Result<_>>()?;
+    let vertical = opts.get("axis").and_then(Value::as_str) == Some("v");
+    let gap = opts.get("gap").and_then(Value::as_u64).unwrap_or(0) as u32;
+    let bg = parse_color(opts.get("bg").or(Some(&Value::String("#ffffff".into()))));
+
+    let n = imgs.len() as u32;
+    let total_gap = gap * (n.saturating_sub(1));
+    let (total_w, total_h) = if vertical {
+        (
+            imgs.iter().map(|i| i.width()).max().unwrap_or(1),
+            imgs.iter().map(|i| i.height()).sum::<u32>() + total_gap,
+        )
+    } else {
+        (
+            imgs.iter().map(|i| i.width()).sum::<u32>() + total_gap,
+            imgs.iter().map(|i| i.height()).max().unwrap_or(1),
+        )
+    };
+    let mut canvas = image::RgbaImage::from_pixel(total_w.max(1), total_h.max(1), bg);
+    let mut cursor = 0u32;
+    for im in &imgs {
+        let (x, y) = if vertical {
+            ((total_w - im.width()) / 2, cursor)
+        } else {
+            (cursor, (total_h - im.height()) / 2)
+        };
+        image::imageops::overlay(&mut canvas, im, x as i64, y as i64);
+        cursor += if vertical { im.height() } else { im.width() } + gap;
+    }
+    let handle = insert_image(DynamicImage::ImageRgba8(canvas));
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
 /// Fill the image with a gradient. opts: kind => "linear"|"radial"
 /// (default linear), from (color), to (color), angle (deg, linear only,
 /// default 0 = left→right).

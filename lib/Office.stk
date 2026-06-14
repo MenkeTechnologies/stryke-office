@@ -2287,6 +2287,14 @@ fn Office::img_montage ($handles, %opts) {
         office__img_montage(to_json({ handles => $handles, cols => $opts{cols}, gap => $opts{gap}, bg => $opts{bg} })))
 }
 
+## Concatenate image handles edge-to-edge (flush, native sizes). $handles is an
+## arrayref. opts: axis (h|v, default h), gap (default 0), bg (default white).
+## Returns a new image handle.
+fn Office::img_concat ($handles, %opts) {
+    Office::_decode("img_concat",
+        office__img_concat(to_json({ handles => $handles, axis => $opts{axis}, gap => $opts{gap}, bg => $opts{bg} })))
+}
+
 ## Fill the image with a gradient. opts: kind => "linear"|"radial", from, to,
 ## angle (deg, linear; 0 = left->right).
 fn Office::img_gradient ($handle, %opts) {
