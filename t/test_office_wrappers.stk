@@ -69,11 +69,13 @@ val $fr = Office::sheet_freq($xl, "Item")
 assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
 unlink $xl
 
-# ── deck -> markdown ────────────────────────────────────────────────
+# ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"
 Office::slides_write($pptx, [{ title => "Intro", body => ["a", "b"] }])
 val $smd = Office::slides_to_md($pptx)
 assert_ok ($smd->{markdown} =~ /## Intro/), "slides_to_md: title heading"
+val $shtml = Office::slides_to_html($pptx)
+assert_ok ($shtml->{html} =~ /<h2>Intro<\/h2>/), "slides_to_html: title section"
 unlink $pptx
 
 # ── pdf text statistics ─────────────────────────────────────────────

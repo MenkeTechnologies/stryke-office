@@ -1150,6 +1150,78 @@ fn op_slides_to_md(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Render a presentation as an HTML page, one `<section>` per slide (title in an
+/// `<h2>`, body lines as a `<ul>`). Completes the html-export family alongside
+/// `sheet_to_html`/`doc_to_html`. opts: path, output => write to an `.html` file
+/// (omit to return the markup), notes => append each slide's speaker notes as a
+/// `<p class="notes">`, full => wrap in a complete `<html>` document (default
+/// false = bare sections). Cells are HTML-escaped. Returns `{ ok, slides, html,
+/// path? }`.
+fn op_slides_to_html(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let full = opts.get("full").and_then(Value::as_bool).unwrap_or(false);
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let str_lines = |v: Option<&Value>| -> Vec<String> {
+        v.and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let mut body = String::new();
+    for s in &slides {
+        let text = str_lines(s.get("text"));
+        let (title, items) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        body.push_str("<section>\n");
+        body.push_str(&format!("  <h2>{}</h2>\n", xml_escape(&title)));
+        if !items.is_empty() {
+            body.push_str("  <ul>\n");
+            for it in &items {
+                body.push_str(&format!("    <li>{}</li>\n", xml_escape(it)));
+            }
+            body.push_str("  </ul>\n");
+        }
+        if want_notes {
+            let notes = str_lines(s.get("notes"));
+            if !notes.is_empty() {
+                body.push_str(&format!(
+                    "  <p class=\"notes\">{}</p>\n",
+                    xml_escape(&notes.join(" "))
+                ));
+            }
+        }
+        body.push_str("</section>\n");
+    }
+
+    let html = if full {
+        format!(
+            "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\">\n<style>section{{margin:1em 0;padding:1em;border:1px solid #ccc}}</style>\n</head>\n<body>\n{body}</body>\n</html>\n"
+        )
+    } else {
+        body
+    };
+
+    let mut out = json!({ "ok": true, "slides": slides.len(), "html": html });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, &html)?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// Parse a Markdown outline into a presentation (the inverse of `slides_to_md`).
 /// opts: markdown => outline text, or path => a `.md` file; output (required) =>
 /// pptx/odp; format => override. Each heading line (`#`..`######`) starts a new
