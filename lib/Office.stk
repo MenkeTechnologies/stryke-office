@@ -95,6 +95,13 @@ fn Office::sheet_describe ($path, %opts) {
         office__sheet_describe(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Pearson correlation matrix between numeric columns (pandas df.corr()).
+## opts: sheet, header. Returns { sheet, columns, matrix }.
+fn Office::sheet_corr ($path, %opts) {
+    Office::_decode("sheet_corr",
+        office__sheet_corr(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

@@ -218,6 +218,45 @@ fn sheet_describe_numeric_summary() {
 }
 
 #[test]
+fn sheet_corr_pearson_matrix() {
+    let path = tmp("corr.xlsx");
+    // y = 2x (perfect +), z = -x (perfect -).
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"C","rows":[
+                ["x","y","z"],
+                [1,2,3],
+                [2,4,2],
+                [3,6,1]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(office__sheet_corr, &format!(r#"{{"path":"{path}"}}"#));
+    let names = s["columns"].as_array().unwrap();
+    assert_eq!(names.len(), 3, "three numeric columns: {s}");
+    assert_eq!(names[0], "x");
+    let m = &s["matrix"];
+    // diagonal
+    assert_eq!(m[0][0], 1.0, "diag x: {s}");
+    assert_eq!(m[1][1], 1.0, "diag y: {s}");
+    // x vs y perfectly correlated, x vs z perfectly anti-correlated
+    assert!(
+        (m[0][1].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "x~y=+1: {s}"
+    );
+    assert!(
+        (m[0][2].as_f64().unwrap() + 1.0).abs() < 1e-9,
+        "x~z=-1: {s}"
+    );
+    // symmetric
+    assert_eq!(m[1][0], m[0][1], "symmetric: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
