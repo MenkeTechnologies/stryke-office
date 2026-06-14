@@ -654,6 +654,14 @@ fn Office::sheet_date_add ($path, $column, $amount, $output, %opts) {
         office__sheet_date_add(to_json({ path => $path, column => $column, amount => $amount, output => $output, unit => $opts{unit}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append the day-of-week of an ISO-date $column. opts: format =>
+## name (default) | short | num (0-6, 0=Sun) | iso (1-7, 1=Mon), into
+## (default {column}_weekday), sheet, header. Returns { ok, path, column }.
+fn Office::sheet_weekday ($path, $column, $output, %opts) {
+    Office::_decode("sheet_weekday",
+        office__sheet_weekday(to_json({ path => $path, column => $column, output => $output, format => $opts{format}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Group by a column and concatenate another column's values per group (SQL
 ## GROUP_CONCAT). opts: sep, distinct, sheet, header, format. Returns { ok, path, groups }.
 fn Office::sheet_group_concat ($path, $group_by, $value, $output, %opts) {
