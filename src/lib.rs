@@ -3152,6 +3152,125 @@ fn op_sheet_movavg(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append a generalized rolling-window aggregate column (the multi-statistic
+/// superset of `sheet_movavg`, which only does the mean). opts: path, output,
+/// column => name/index (required), window => rows (required, ≥1), agg =>
+/// sum|mean|min|max|median|std (default mean), into => header (default
+/// "{column}_roll{window}"), decimals, sheet, header, format. A window is
+/// emitted only once `window` rows are available and all are numeric; partial or
+/// gappy windows get a blank. `std` is the population standard deviation over the
+/// window. Returns `{ ok, path, column }`.
+fn op_sheet_rolling(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let window = opts
+        .get("window")
+        .and_then(Value::as_u64)
+        .filter(|&w| w >= 1)
+        .ok_or_else(|| anyhow!("missing window (>= 1)"))? as usize;
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("mean");
+    if !matches!(agg, "sum" | "mean" | "min" | "max" | "median" | "std") {
+        return Err(anyhow!("unknown agg: {agg} (sum|mean|min|max|median|std)"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_roll{window}"));
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let nums: Vec<Option<f64>> = rows[data_start..]
+        .iter()
+        .map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+
+    let reduce = |w: &[f64]| -> f64 {
+        let n = w.len() as f64;
+        match agg {
+            "sum" => w.iter().sum(),
+            "mean" => w.iter().sum::<f64>() / n,
+            "min" => w.iter().cloned().fold(f64::INFINITY, f64::min),
+            "max" => w.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            "std" => {
+                let m = w.iter().sum::<f64>() / n;
+                (w.iter().map(|x| (x - m).powi(2)).sum::<f64>() / n).sqrt()
+            }
+            _ => {
+                let mut s = w.to_vec();
+                s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                percentile_sorted(&s, 0.5)
+            }
+        }
+    };
+
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        let mut hr = rows[0].as_array().cloned().unwrap_or_default();
+        hr.push(json!(into));
+        new_rows.push(Value::Array(hr));
+    }
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        let mut cells = row.as_array().cloned().unwrap_or_default();
+        let cell = if i + 1 >= window {
+            let slice = &nums[i + 1 - window..=i];
+            if slice.iter().all(Option::is_some) {
+                let w: Vec<f64> = slice.iter().flatten().cloned().collect();
+                let v = reduce(&w);
+                let v = match decimals {
+                    Some(d) => {
+                        let f = 10f64.powi(d as i32);
+                        (v * f).round() / f
+                    }
+                    None => v,
+                };
+                json!(v)
+            } else {
+                json!("")
+            }
+        } else {
+            json!("")
+        };
+        cells.push(cell);
+        new_rows.push(Value::Array(cells));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Append a row-over-row difference column (current − previous) for a numeric
 /// column — useful for tracking change in a time series. opts: path, output,
 /// column => name or 0-based index (required), into => new column header
@@ -8737,6 +8856,7 @@ export!(office__sheet_cumsum, op_sheet_cumsum);
 export!(office__sheet_pct, op_sheet_pct);
 export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_movavg, op_sheet_movavg);
+export!(office__sheet_rolling, op_sheet_rolling);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
