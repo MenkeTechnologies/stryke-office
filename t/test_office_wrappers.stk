@@ -103,9 +103,15 @@ val $pco = "$dir/$tag-pct-out.xlsx"
 Office::sheet_pct($csx, "amt", $pco, decimals => 1)
 val $pcr = Office::sheet_get_cell($pco, "B2")
 assert_ok ($pcr->{value} > 33 && $pcr->{value} < 34), "sheet_pct: 10 of 30 ~= 33.3%"
+# min-max normalize
+val $nmo = "$dir/$tag-norm-out.xlsx"
+Office::sheet_normalize($csx, "amt", $nmo)
+val $nmr = Office::sheet_get_cell($nmo, "B2")
+assert_eq $nmr->{value}, 0, "sheet_normalize: min maps to 0"
 unlink $csx
 unlink $cso
 unlink $pco
+unlink $nmo
 
 # ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"

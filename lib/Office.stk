@@ -197,6 +197,13 @@ fn Office::sheet_pct ($path, $column, $output, %opts) {
         office__sheet_pct(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a normalized column (method => "minmax" 0..1 or "zscore"). opts: into,
+## method, decimals, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_normalize ($path, $column, $output, %opts) {
+    Office::_decode("sheet_normalize",
+        office__sheet_normalize(to_json({ path => $path, column => $column, output => $output, method => $opts{method}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
