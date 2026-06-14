@@ -2092,6 +2092,46 @@ fn sheet_group_concat_joins_values() {
 }
 
 #[test]
+fn sheet_lookup_vlookup() {
+    let path = tmp("lookup.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","price"],["apple",10],["banana",20]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // found
+    let r = call(
+        office__sheet_lookup,
+        &format!(r#"{{"path":"{path}","lookup":"name","key":"banana","result":"price"}}"#),
+    );
+    assert_eq!(r["found"], true, "found: {r}");
+    assert_eq!(r["value"].as_f64().unwrap(), 20.0, "returned price: {r}");
+    assert_eq!(r["row"], 1, "0-based data row: {r}");
+
+    // case-insensitive match
+    let ci = call(
+        office__sheet_lookup,
+        &format!(
+            r#"{{"path":"{path}","lookup":"name","key":"APPLE","result":"price","ignore_case":true}}"#
+        ),
+    );
+    assert_eq!(ci["value"].as_f64().unwrap(), 10.0, "ci lookup: {ci}");
+
+    // not found
+    let nf = call(
+        office__sheet_lookup,
+        &format!(r#"{{"path":"{path}","lookup":"name","key":"cherry","result":"price"}}"#),
+    );
+    assert_eq!(nf["found"], false, "not found: {nf}");
+    assert_eq!(nf["row"], -1, "row -1: {nf}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(
