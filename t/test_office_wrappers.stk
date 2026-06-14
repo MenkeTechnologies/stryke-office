@@ -65,6 +65,16 @@ assert_ok ($html->{html} =~ /<th>Item<\/th>/), "sheet_to_html: header cell"
 val $txt = Office::sheet_to_text($xl)
 assert_ok ($txt->{text} =~ /Item/), "sheet_to_text: header rendered"
 
+# ── html table round-trip: sheet_to_html then html_to_sheet ─────────
+val $hsh = "$dir/$tag-hsheet.html"
+Office::sheet_to_html($xl, output => $hsh)
+val $hso = "$dir/$tag-hsheet.xlsx"
+Office::html_to_sheet($hsh, $hso)
+val $hsr = Office::sheet_get_cell($hso, "A1")
+assert_eq $hsr->{value}, "Item", "html_to_sheet: table parsed back"
+unlink $hsh
+unlink $hso
+
 # ── analytics: describe + freq (before mutating $xl) ────────────────
 val $desc = Office::sheet_describe($xl)
 assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"
