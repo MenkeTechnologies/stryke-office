@@ -1358,6 +1358,13 @@ assert_ok ($rdr->{flesch_reading_ease} > 100), "doc_readability: high reading ea
 val $sents = Office::doc_sentences($rdt)
 assert_eq $sents->{count}, 2, "doc_sentences: two sentences"
 unlink $rdt
+# doc_summary: extractive top-sentence selection
+val $smt = "$dir/$tag-summary.txt"
+spew $smt, "The weather is mild. The budget report shows budget growth and budget savings. Lunch was fine. Someone left."
+val $smr = Office::doc_summary($smt, sentences => 1)
+assert_eq $smr->{count}, 1, "doc_summary: one sentence kept"
+assert_ok ($smr->{summary}[0] =~ /budget/), "doc_summary: picks topical sentence"
+unlink $smt
 
 # ── doc_diff: paragraph-level LCS diff between two docs ──────────────
 val $dfa = "$dir/$tag-diffa.docx"

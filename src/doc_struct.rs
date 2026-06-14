@@ -2210,6 +2210,83 @@ fn op_doc_sentences(opts: Value) -> Result<Value> {
     Ok(json!({ "count": sentences.len(), "sentences": sentences }))
 }
 
+/// Split document text into trimmed, whitespace-normalized sentences (shared by
+/// `doc_sentences` and `doc_summary`).
+fn doc_split_sentences(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let chars: Vec<char> = text.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        cur.push(c);
+        if matches!(c, '.' | '!' | '?') && chars.get(i + 1).is_none_or(|n| n.is_whitespace()) {
+            let s: String = cur.split_whitespace().collect::<Vec<_>>().join(" ");
+            if !s.is_empty() {
+                out.push(s);
+            }
+            cur.clear();
+        }
+    }
+    let tail: String = cur.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !tail.is_empty() {
+        out.push(tail);
+    }
+    out
+}
+
+/// Extractive document summary — score each sentence by the summed normalized
+/// frequency of its content words (stopwords excluded), then return the top
+/// `sentences` highest-scoring sentences in their original order. A classic
+/// frequency-based summarizer, dependency-free. opts: path, sentences => count
+/// to keep (default 3). Returns `{ ok, summary, count, total_sentences }`.
+fn op_doc_summary(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let want = opts.get("sentences").and_then(Value::as_u64).unwrap_or(3).max(1) as usize;
+    let text = doc_full_text(path)?;
+    let sentences = doc_split_sentences(&text);
+    let total = sentences.len();
+    if total <= want {
+        // Nothing to trim — return everything in order.
+        return Ok(json!({ "ok": true, "summary": sentences, "count": total, "total_sentences": total }));
+    }
+
+    // Content-word frequencies (lowercased, stopwords + single chars dropped).
+    let mut freq: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    for tok in text.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()) {
+        let w = tok.to_lowercase();
+        if w.chars().count() < 2 || STOPWORDS.contains(&w.as_str()) {
+            continue;
+        }
+        *freq.entry(w).or_insert(0.0) += 1.0;
+    }
+    let maxf = freq.values().cloned().fold(1.0, f64::max);
+
+    // Score each sentence by mean normalized word weight (length-normalized so
+    // long sentences aren't unfairly favored).
+    let mut scored: Vec<(usize, f64)> = sentences
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let mut sum = 0.0;
+            let mut n = 0.0;
+            for tok in s.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()) {
+                let w = tok.to_lowercase();
+                if let Some(&f) = freq.get(&w) {
+                    sum += f / maxf;
+                }
+                n += 1.0;
+            }
+            (i, if n > 0.0 { sum / n } else { 0.0 })
+        })
+        .collect();
+    // Pick the top `want` by score, then restore original order.
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(want);
+    scored.sort_by_key(|&(i, _)| i);
+    let summary: Vec<Value> = scored.iter().map(|&(i, _)| json!(sentences[i])).collect();
+
+    Ok(json!({ "ok": true, "summary": summary, "count": summary.len(), "total_sentences": total }))
+}
+
 // ── hyperlinks ────────────────────────────────────────────────────────────────
 
 /// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display

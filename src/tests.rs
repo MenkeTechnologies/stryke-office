@@ -8466,6 +8466,40 @@ fn doc_sentences_segments() {
 }
 
 #[test]
+fn doc_summary_extractive() {
+    let path = tmp("summary.txt");
+    // The "budget" sentence carries the most repeated content words.
+    std::fs::write(
+        &path,
+        "The weather today is mild. The budget report shows budget growth and budget savings across the budget. \
+         Lunch was fine. Someone left early.",
+    )
+    .unwrap();
+
+    let r = call(
+        office__doc_summary,
+        &format!(r#"{{"path":"{path}","sentences":1}}"#),
+    );
+    assert_eq!(r["count"].as_u64().unwrap(), 1, "one sentence kept: {r}");
+    assert_eq!(r["total_sentences"].as_u64().unwrap(), 4, "four total: {r}");
+    let top = r["summary"][0].as_str().unwrap();
+    assert!(top.contains("budget"), "picks the topical sentence: {r}");
+
+    // asking for more than available returns all, in order
+    let all = call(
+        office__doc_summary,
+        &format!(r#"{{"path":"{path}","sentences":10}}"#),
+    );
+    assert_eq!(
+        all["count"].as_u64().unwrap(),
+        4,
+        "all returned when fewer exist: {all}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn doc_find_and_slides_find() {
     // doc_find over a docx with three paragraphs
     let dx = tmp("find.docx");
