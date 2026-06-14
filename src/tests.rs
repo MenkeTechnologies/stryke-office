@@ -934,6 +934,59 @@ fn sheet_delta_row_over_row() {
 }
 
 #[test]
+fn sheet_pct_change_row_over_row() {
+    let path = tmp("pctchg.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[100],[150],[75]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // default: percent. 150 from 100 = +50%; 75 from 150 = -50%.
+    let out = tmp("pctchg_out.xlsx");
+    let r = call(
+        office__sheet_pct_change,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_pctchg", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        rows[1][1].as_str().unwrap_or(""),
+        "",
+        "first row blank: {rd}"
+    );
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 50.0).abs() < 1e-9,
+        "+50%: {rd}"
+    );
+    assert!(
+        (rows[3][1].as_f64().unwrap() + 50.0).abs() < 1e-9,
+        "-50%: {rd}"
+    );
+
+    // fraction mode: raw ratio (0.5, -0.5)
+    let outf = tmp("pctchg_frac.xlsx");
+    let rf = call(
+        office__sheet_pct_change,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{outf}","fraction":true}}"#),
+    );
+    assert_eq!(rf["ok"], true, "fraction mode: {rf}");
+    let rdf = call(office__sheet_read, &format!(r#"{{"path":"{outf}"}}"#));
+    let rowsf = rdf["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rowsf[2][1].as_f64().unwrap() - 0.5).abs() < 1e-9,
+        "+0.5 ratio: {rdf}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outf).ok();
+}
+
+#[test]
 fn sheet_clamp_caps_values() {
     let path = tmp("clamp.xlsx");
     let w = call(
