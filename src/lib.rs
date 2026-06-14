@@ -1787,6 +1787,74 @@ fn op_sheet_moments(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Autocorrelation function (ACF) of a numeric column treated as an ordered
+/// series — the correlation of the series with lagged copies of itself. opts:
+/// path, column => name/index (required), lags => maximum lag (default 10),
+/// sheet, header (default true), decimals => round. Uses the biased estimator
+/// `r_k = Σ(x_t−m)(x_{t−k}−m) / Σ(x_t−m)²`. Returns `{ ok, column, n, acf }`
+/// where `acf` is `[{ lag, value }]` for lags `0..=lags` (`r_0` is always 1).
+fn op_sheet_autocorr(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let x: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let n = x.len();
+    if n < 2 {
+        return Err(anyhow!("need at least two numeric values"));
+    }
+    let max_lag = (opts.get("lags").and_then(Value::as_u64).unwrap_or(10) as usize).min(n - 1);
+    let mean = x.iter().sum::<f64>() / n as f64;
+    let denom: f64 = x.iter().map(|v| (v - mean).powi(2)).sum();
+    if denom <= 0.0 {
+        return Err(anyhow!("series has zero variance"));
+    }
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    let acf: Vec<Value> = (0..=max_lag)
+        .map(|k| {
+            let num: f64 = (k..n).map(|t| (x[t] - mean) * (x[t - k] - mean)).sum();
+            json!({ "lag": k, "value": round(num / denom) })
+        })
+        .collect();
+    Ok(json!({ "ok": true, "column": base, "n": n, "acf": acf }))
+}
+
 fn op_sheet_quantile(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let q = opts
@@ -14291,6 +14359,7 @@ export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
+export!(office__sheet_autocorr, op_sheet_autocorr);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);
 export!(office__sheet_argmax, op_sheet_argmax);
