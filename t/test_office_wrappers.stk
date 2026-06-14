@@ -123,6 +123,15 @@ assert_eq $srd->[0]{rows}[0][0], "h", "sheet_sample: header kept"
 unlink $sx
 unlink $so
 
+# ── pdf_add_link / pdf_links round-trip ─────────────────────────────
+val $plp = "$dir/$tag-link.pdf"
+Office::pdf_write($plp, ["link page"])
+Office::pdf_add_link($plp, "https://stryke.dev", page => 1, rect => [10, 10, 200, 30])
+val $plr = Office::pdf_links($plp)
+assert_eq $plr->{count}, 1, "pdf_links: one link"
+assert_eq $plr->{links}[0]{url}, "https://stryke.dev", "pdf_links: url round-trips"
+unlink $plp
+
 # ── xml entity survival across text extraction (regression) ─────────
 val $ent = "$dir/$tag-ent.pptx"
 Office::slides_write($ent, [{ title => "R&D", body => ["a & b"] }])

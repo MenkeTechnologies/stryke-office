@@ -4616,6 +4616,47 @@ fn pdf_stats_counts_words_and_pages() {
 }
 
 #[test]
+fn pdf_add_link_then_links_round_trip() {
+    let src = tmp("plink.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{src}","elements":[
+                {{"type":"paragraph","text":"page one"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"page two"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    // add a link on page 2 with an explicit rect
+    let r = call(
+        office__pdf_add_link,
+        &format!(
+            r#"{{"path":"{src}","page":2,"url":"https://example.com/x","rect":[72,700,300,720]}}"#
+        ),
+    );
+    assert_eq!(r["ok"], true, "add_link: {r}");
+
+    let lk = call(office__pdf_links, &format!(r#"{{"path":"{src}"}}"#));
+    assert_eq!(lk["count"], 1, "one link: {lk}");
+    assert_eq!(lk["links"][0]["page"], 2, "on page 2: {lk}");
+    assert_eq!(
+        lk["links"][0]["url"], "https://example.com/x",
+        "url round-trips: {lk}"
+    );
+    let rect = lk["links"][0]["rect"].as_array().unwrap();
+    assert_eq!(rect.len(), 4, "rect has 4 coords: {lk}");
+    assert!(
+        (rect[0].as_f64().unwrap() - 72.0).abs() < 1e-6,
+        "rect x0: {lk}"
+    );
+
+    std::fs::remove_file(&src).ok();
+}
+
+#[test]
 fn pdf_assemble_mixed_inputs() {
     // one image and one 1-page pdf
     let img = tmp("asm.png");

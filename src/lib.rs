@@ -5785,6 +5785,8 @@ export!(office__pdf_insert, op_pdf_insert);
 export!(office__pdf_draw_rect, op_pdf_draw_rect);
 export!(office__pdf_add_text, op_pdf_add_text);
 export!(office__pdf_draw_line, op_pdf_draw_line);
+export!(office__pdf_add_link, op_pdf_add_link);
+export!(office__pdf_links, op_pdf_links);
 
 // PDF file attachments (embedded files): embed + list/extract
 include!("pdf_attach.rs");
