@@ -249,6 +249,14 @@ fn Office::sheet_diff ($left, $right, %opts) {
         office__sheet_diff(to_json({ left => $left, right => $right, sheet => $opts{sheet}, left_sheet => $opts{left_sheet}, right_sheet => $opts{right_sheet} })))
 }
 
+## Add a new sheet to a workbook. $name is the sheet name. opts: rows =>
+## [[cell,...]] (default empty), position => 0-based insert index (default
+## append), output (default in place), format. Returns { ok, path, sheets }.
+fn Office::sheet_add ($path, $name, %opts) {
+    Office::_decode("sheet_add",
+        office__sheet_add(to_json({ path => $path, name => $name, rows => $opts{rows}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Rename a sheet in a workbook. opts: from => sheet to rename (name/index,
 ## default first), output (default: in place), format. $to is the new name.
 ## Returns { ok, path, renamed }.
