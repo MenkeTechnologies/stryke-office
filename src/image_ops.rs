@@ -1593,6 +1593,65 @@ fn op_img_resize_file(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Build a contact sheet (thumbnail grid) image file from a list of image files.
+/// opts: images => [paths], output, thumb => max px per cell (default 128),
+/// cols, gap, bg. Returns `{ ok, path, count, width, height }`.
+fn op_contact_sheet(opts: Value) -> Result<Value> {
+    let images = opts
+        .get("images")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing images (expected array of paths)"))?;
+    if images.is_empty() {
+        return Err(anyhow!("no images"));
+    }
+    let output = req_str(&opts, "output")?.to_string();
+    let thumb = opts.get("thumb").and_then(Value::as_u64).unwrap_or(128);
+
+    let mut handles: Vec<u64> = Vec::new();
+    let result = (|| -> Result<Value> {
+        for im in images {
+            let p = im
+                .as_str()
+                .ok_or_else(|| anyhow!("image path must be a string"))?;
+            let opened = op_img_open(json!({ "path": p }))?;
+            let h = opened
+                .get("handle")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow!("open produced no handle"))?;
+            handles.push(h);
+            op_img_thumbnail(json!({ "handle": h, "max": thumb }))?;
+        }
+        let mut mopts = json!({ "handles": handles });
+        for k in ["cols", "gap", "bg", "background"] {
+            if let Some(v) = opts.get(k) {
+                mopts[k] = v.clone();
+            }
+        }
+        let mont = op_img_montage(mopts)?;
+        let mh = mont
+            .get("handle")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("montage produced no handle"))?;
+        op_img_save(json!({ "handle": mh, "path": output }))?;
+        let _ = op_img_close(json!({ "handle": mh }));
+        Ok(json!({
+            "width": mont.get("width").cloned().unwrap_or(json!(0)),
+            "height": mont.get("height").cloned().unwrap_or(json!(0)),
+        }))
+    })();
+    for h in &handles {
+        let _ = op_img_close(json!({ "handle": h }));
+    }
+    let info = result?;
+    Ok(json!({
+        "ok": true,
+        "path": output,
+        "count": handles.len(),
+        "width": info["width"],
+        "height": info["height"],
+    }))
+}
+
 // ── shapes, fills, masks, color analysis ─────────────────────────────────────
 
 /// Is point (px,py) inside the rounded rect [x,x+w)×[y,y+h) with corner `r`?

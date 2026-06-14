@@ -3813,6 +3813,50 @@ fn img_resize_file_exact_and_fit() {
 }
 
 #[test]
+fn contact_sheet_grid() {
+    // three small images of different colors
+    let mut files = Vec::new();
+    for (i, color) in [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
+        .iter()
+        .enumerate()
+    {
+        let p = tmp(&format!("cs{i}.png"));
+        let n = call(
+            office__img_new,
+            &format!(r#"{{"width":20,"height":20,"color":{color:?}}}"#),
+        );
+        let h = n["handle"].as_u64().unwrap();
+        call(
+            office__img_save,
+            &format!(r#"{{"handle":{h},"path":"{p}"}}"#),
+        );
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+        files.push(p);
+    }
+
+    let out = tmp("cs_out.png");
+    let list = files
+        .iter()
+        .map(|f| format!("\"{f}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let r = call(
+        office__contact_sheet,
+        &format!(r#"{{"images":[{list}],"output":"{out}","cols":2,"thumb":16}}"#),
+    );
+    assert_eq!(r["count"], 3, "three images: {r}");
+    assert!(r["width"].as_u64().unwrap_or(0) > 0, "grid has width: {r}");
+    // output opens as a valid image
+    let i = call(office__img_open, &format!(r#"{{"path":"{out}"}}"#));
+    let h = i["handle"].as_u64().expect("opens");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    for f in files.iter().chain([&out]) {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn img_data_uri_encodes() {
     let png = tmp("uri.png");
     let n = call(
