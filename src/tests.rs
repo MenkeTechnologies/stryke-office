@@ -4325,6 +4325,35 @@ fn sheet_add_header_prepends() {
 }
 
 #[test]
+fn sheet_add_index_numbers_rows() {
+    let path = tmp("addidx.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name"],["a"],["b"],["c"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("addidx_out.xlsx");
+    let r = call(
+        office__sheet_add_index,
+        &format!(r#"{{"path":"{path}","output":"{out}","name":"id"}}"#),
+    );
+    assert_eq!(r["rows"], 3, "three rows numbered: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "id", "index header prepended: {rd}");
+    assert_eq!(rows[0][1], "name", "original header shifted right: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.0, "first index 1: {rd}");
+    assert_eq!(rows[3][0].as_f64().unwrap(), 3.0, "third index 3: {rd}");
+    assert_eq!(rows[1][1], "a", "original data preserved: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_calc_arithmetic_column() {
     let path = tmp("calc.xlsx");
     let w = call(
