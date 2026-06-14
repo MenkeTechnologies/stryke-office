@@ -34,6 +34,7 @@ exports = [
     "office__sheet_fill",
     "office__sheet_split",
     "office__sheet_diff",
+    "office__sheet_info",
     "office__sheet_to_slides",
     "office__sheet_validate",
     "office__doc_read",

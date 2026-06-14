@@ -2505,6 +2505,35 @@ fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     Ok(sheet["rows"].as_array().cloned().unwrap_or_default())
 }
 
+/// Workbook overview: name + dimensions of every sheet. opts: path. Returns
+/// `{ count, sheets: [{ name, rows, cols }] }`.
+fn op_sheet_info(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let info: Vec<Value> = sheets
+        .iter()
+        .map(|s| {
+            let rows = s["rows"].as_array().map_or(0, Vec::len);
+            let cols = s["rows"]
+                .as_array()
+                .map(|rs| {
+                    rs.iter()
+                        .map(|r| r.as_array().map_or(0, |a| a.len()))
+                        .max()
+                        .unwrap_or(0)
+                })
+                .unwrap_or(0);
+            json!({ "name": s["name"].as_str().unwrap_or(""), "rows": rows, "cols": cols })
+        })
+        .collect();
+    Ok(json!({ "count": info.len(), "sheets": info }))
+}
+
 /// Compare two sheets cell by cell. opts: left, right (paths), sheet (selector
 /// for both), left_sheet / right_sheet (override per side). Returns
 /// `{ count, changed: [{ ref, row, col, left, right }], left_rows, right_rows }`
@@ -3471,6 +3500,7 @@ export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_diff, op_sheet_diff);
+export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);
 export!(office__sheet_validate, op_sheet_validate);
 export!(office__doc_read, op_doc_read);
