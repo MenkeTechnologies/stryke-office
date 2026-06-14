@@ -2132,6 +2132,47 @@ fn sheet_lookup_vlookup() {
 }
 
 #[test]
+fn sheet_countif_sumif() {
+    let path = tmp("countif.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","qty"],
+                ["west",10],
+                ["east",20],
+                ["west",30]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // countif region == west -> 2
+    let c = call(
+        office__sheet_countif,
+        &format!(r#"{{"path":"{path}","column":"region","op":"eq","value":"west"}}"#),
+    );
+    assert_eq!(c["count"], 2, "two west rows: {c}");
+
+    // countif qty >= 20 -> 2
+    let cn = call(
+        office__sheet_countif,
+        &format!(r#"{{"path":"{path}","column":"qty","op":"ge","value":20}}"#),
+    );
+    assert_eq!(cn["count"], 2, "two rows qty>=20: {cn}");
+
+    // sumif qty where region == west -> 40
+    let s = call(
+        office__sheet_sumif,
+        &format!(r#"{{"path":"{path}","column":"region","op":"eq","value":"west","sum":"qty"}}"#),
+    );
+    assert_eq!(s["count"], 2, "two matched: {s}");
+    assert_eq!(s["sum"].as_f64().unwrap(), 40.0, "west qty sum: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(

@@ -308,6 +308,21 @@ fn Office::sheet_lookup ($path, $lookup, $key, $result, %opts) {
         office__sheet_lookup(to_json({ path => $path, lookup => $lookup, key => $key, result => $result, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## COUNTIF: count rows where $column matches a predicate. opts: op (default eq),
+## value, ignore_case, sheet, header. Returns { count }.
+fn Office::sheet_countif ($path, $column, %opts) {
+    Office::_decode("sheet_countif",
+        office__sheet_countif(to_json({ path => $path, column => $column, op => $opts{op}, value => $opts{value}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
+## SUMIF: sum a numeric column over rows where $column matches a predicate. opts:
+## op, value, sum (column to sum; default $column), ignore_case, sheet, header.
+## Returns { sum, count }.
+fn Office::sheet_sumif ($path, $column, %opts) {
+    Office::_decode("sheet_sumif",
+        office__sheet_sumif(to_json({ path => $path, column => $column, op => $opts{op}, value => $opts{value}, sum => $opts{sum}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Value-counts of one column, sorted by frequency (pandas value_counts).
 ## opts: sheet, header, ignore_case, top. Returns { column, total, distinct, values }.
 fn Office::sheet_freq ($path, $column, %opts) {

@@ -3375,6 +3375,109 @@ fn op_sheet_lookup(opts: Value) -> Result<Value> {
     Ok(json!({ "found": false, "value": Value::Null, "row": -1 }))
 }
 
+/// Count data rows whose `column` matches a predicate (Excel `COUNTIF`). opts:
+/// path, column => name or 0-based index (required), op => eq|ne|contains|
+/// not_contains|gt|lt|ge|le (default eq), value => comparison value, ignore_case
+/// (default false), sheet, header (default true). Returns `{ count }`.
+fn op_sheet_countif(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
+    let value = opts.get("value").cloned().unwrap_or(Value::Null);
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let count = rows[data_start..]
+        .iter()
+        .filter(|row| {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(col))
+                .unwrap_or(&Value::Null);
+            cell_matches(cell, op, &value, ignore_case)
+        })
+        .count();
+    Ok(json!({ "count": count }))
+}
+
+/// Sum a numeric column over rows whose `column` matches a predicate (Excel
+/// `SUMIF`). opts: path, column => the test column, op/value/ignore_case (as
+/// `countif`), sum => the column to sum (name or 0-based index; default = the
+/// test column), sheet, header (default true). Returns `{ sum, count }` (count
+/// of matched rows). Non-numeric summed cells contribute 0.
+fn op_sheet_sumif(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let op = opts.get("op").and_then(Value::as_str).unwrap_or("eq");
+    let value = opts.get("value").cloned().unwrap_or(Value::Null);
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let sum_col = match opts.get("sum") {
+        Some(v) => resolve_col(Some(v), header_row)?,
+        None => col,
+    };
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut sum = 0f64;
+    let mut count = 0u64;
+    for row in &rows[data_start..] {
+        let cells = row.as_array();
+        let cell = cells.and_then(|a| a.get(col)).unwrap_or(&Value::Null);
+        if cell_matches(cell, op, &value, ignore_case) {
+            count += 1;
+            if let Some(x) = cells.and_then(|a| a.get(sum_col)).and_then(sheet_cell_num) {
+                sum += x;
+            }
+        }
+    }
+    Ok(json!({ "sum": sum, "count": count }))
+}
+
 /// Frequency analysis (value-counts) of a single column, returned in memory and
 /// sorted by count descending (pandas `value_counts`). Unlike `sheet_aggregate`
 /// (which writes a file sorted by key), this is a pure read for analysis. opts:
@@ -6659,6 +6762,8 @@ export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
+export!(office__sheet_countif, op_sheet_countif);
+export!(office__sheet_sumif, op_sheet_sumif);
 export!(office__sheet_freq, op_sheet_freq);
 export!(office__sheet_split_column, op_sheet_split_column);
 export!(office__sheet_concat_columns, op_sheet_concat_columns);

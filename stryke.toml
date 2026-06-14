@@ -46,6 +46,8 @@ exports = [
     "office__sheet_aggregate",
     "office__sheet_group_concat",
     "office__sheet_lookup",
+    "office__sheet_countif",
+    "office__sheet_sumif",
     "office__sheet_freq",
     "office__sheet_split_column",
     "office__sheet_concat_columns",
