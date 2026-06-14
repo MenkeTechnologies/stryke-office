@@ -753,6 +753,13 @@ fn Office::slides_to_html ($path, %opts) {
         office__slides_to_html(to_json({ path => $path, output => $opts{output}, notes => $opts{notes}, full => $opts{full} })))
 }
 
+## Extract a presentation's text as plain text, slide by slide. opts: output,
+## notes, sep. Returns { ok, slides, text, path? }.
+fn Office::slides_to_text ($path, %opts) {
+    Office::_decode("slides_to_text",
+        office__slides_to_text(to_json({ path => $path, output => $opts{output}, notes => $opts{notes}, sep => $opts{sep} })))
+}
+
 ## Parse a Markdown outline into a presentation (inverse of slides_to_md).
 ## opts: markdown (text) or path (.md file), format. Returns { ok, path, slides }.
 fn Office::md_to_slides ($output, %opts) {
