@@ -265,6 +265,11 @@ val $fzo = "$dir/$tag-freeze-out.xlsx"
 val $fzr = Office::sheet_freeze($gcx, $fzo, row => 1)
 assert_ok $fzr->{ok}, "sheet_freeze: ok"
 unlink $fzo
+# autofilter over the used range
+val $afo = "$dir/$tag-af-out.xlsx"
+val $afr = Office::sheet_autofilter($gcx, $afo)
+assert_ok $afr->{ok}, "sheet_autofilter: ok"
+unlink $afo
 unlink $gcx
 unlink $gco2
 

@@ -5849,6 +5849,49 @@ fn op_sheet_freeze(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "row": row, "col": col }))
 }
 
+/// Apply an autofilter (header dropdown filters) over a sheet's range (xlsx
+/// only). opts: path, output (default in place), range => `[r1,c1,r2,c2]`
+/// 0-based (default: the whole used range), sheet, format. Returns
+/// `{ ok, path, range }`.
+fn op_sheet_autofilter(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let range = match opts.get("range").and_then(Value::as_array) {
+        Some(a) if a.len() == 4 => a.clone(),
+        _ => {
+            let last_row = rows.len().saturating_sub(1) as u64;
+            let last_col = rows
+                .iter()
+                .map(|r| r.as_array().map_or(0, |x| x.len()))
+                .max()
+                .unwrap_or(1)
+                .saturating_sub(1) as u64;
+            vec![json!(0), json!(0), json!(last_row), json!(last_col)]
+        }
+    };
+    sheets[target]["autofilter"] = Value::Array(range.clone());
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "range": range }))
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -7932,6 +7975,7 @@ export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
+export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
