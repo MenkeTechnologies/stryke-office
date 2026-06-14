@@ -256,6 +256,14 @@ fn Office::sheet_pct_change ($path, $column, $output, %opts) {
         office__sheet_pct_change(to_json({ path => $path, column => $column, output => $output, fraction => $opts{fraction}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a shifted (lag/lead) copy of a column (pandas Series.shift). opts:
+## periods (default 1; negative = lead), fill (vacated cells; default blank),
+## into, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_shift ($path, $column, $output, %opts) {
+    Office::_decode("sheet_shift",
+        office__sheet_shift(to_json({ path => $path, column => $column, output => $output, periods => $opts{periods}, fill => $opts{fill}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Clamp a numeric column to a range (cap outliers). opts: min and/or max
 ## (>=1 required), into (new column; default in place), sheet, header, format.
 ## Returns { ok, path, clamped }.
