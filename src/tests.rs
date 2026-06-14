@@ -1211,6 +1211,45 @@ fn sheet_normalize_minmax_and_zscore() {
 }
 
 #[test]
+fn sheet_standardize_in_place() {
+    let path = tmp("std.xlsx");
+    // v: 10,20,30 (mean 20, pop std ~8.165); label column left alone
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v","name"],[10,"a"],[20,"b"],[30,"c"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("std_out.xlsx");
+    let r = call(
+        office__sheet_standardize,
+        &format!(r#"{{"path":"{path}","output":"{out}","decimals":3}}"#),
+    );
+    assert_eq!(r["columns"], 1, "only the numeric column standardized: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows[2][0].as_f64().unwrap()).abs() < 1e-9,
+        "mean -> 0 in place: {rd}"
+    );
+    assert!(
+        (rows[1][0].as_f64().unwrap() + 1.225).abs() < 0.01,
+        "low z<0: {rd}"
+    );
+    assert!(
+        (rows[3][0].as_f64().unwrap() - 1.225).abs() < 0.01,
+        "high z>0: {rd}"
+    );
+    // text column untouched
+    assert_eq!(rows[1][1], "a", "label column preserved: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_movavg_rolling_mean() {
     let path = tmp("movavg.xlsx");
     let w = call(

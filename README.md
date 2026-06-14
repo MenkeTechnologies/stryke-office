@@ -263,6 +263,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_cumulative($path, $column, $output, %opts)` | `{ok, path, column}` | append a cumulative running max/min/product column (pandas `cummax`/`cummin`/`cumprod`); `agg`/`into`/`decimals` opts |
 | `Office::sheet_pct($path, $column, $output, %opts)` | `{ok, path, column}` | append a percent-of-total column (value ÷ column sum × 100); `into`/`decimals` opts |
 | `Office::sheet_group_pct($path, $output, $group, $value, %opts)` | `{ok, path, column}` | append a percent-of-group-total column (value ÷ group sum × 100); `into`/`decimals` opts |
+| `Office::sheet_standardize($path, $output, %opts)` | `{ok, path, columns}` | z-score numeric column(s) in place (whole-sheet); `by`/`decimals` opts |
 | `Office::sheet_running($path, $output, $group, $value, %opts)` | `{ok, path, column}` | append a group-wise running total column (running balance per group; pandas `groupby.cumsum`); `into`/`decimals` opts |
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |
 | `Office::sheet_movavg($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a moving-average (rolling mean) column over a window; `into`/`decimals` opts |

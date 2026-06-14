@@ -302,6 +302,14 @@ fn Office::sheet_normalize ($path, $column, $output, %opts) {
         office__sheet_normalize(to_json({ path => $path, column => $column, output => $output, method => $opts{method}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Standardize numeric column(s) in place to z-scores (whole-sheet; counterpart
+## to sheet_normalize). opts: by (column(s); default all numeric), decimals,
+## sheet, header, format. Returns { ok, path, columns }.
+fn Office::sheet_standardize ($path, $output, %opts) {
+    Office::_decode("sheet_standardize",
+        office__sheet_standardize(to_json({ path => $path, output => $output, by => $opts{by}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a moving-average (rolling mean) column over a $window of rows. opts:
 ## into, decimals, sheet, header, format. Returns { ok, path, column }.
 fn Office::sheet_movavg ($path, $column, $window, $output, %opts) {

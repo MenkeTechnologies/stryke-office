@@ -244,6 +244,16 @@ val $nmo = "$dir/$tag-norm-out.xlsx"
 Office::sheet_normalize($csx, "amt", $nmo)
 val $nmr = Office::sheet_get_cell($nmo, "B2")
 assert_eq $nmr->{value}, 0, "sheet_normalize: min maps to 0"
+# standardize numeric columns in place (z-score)
+val $sdz = "$dir/$tag-stdz.xlsx"
+Office::sheet_write($sdz, [{ name => "D", rows => [["v"], [10], [20], [30]] }])
+val $sdzo = "$dir/$tag-stdz-out.xlsx"
+val $sdzr = Office::sheet_standardize($sdz, $sdzo, decimals => 3)
+assert_eq $sdzr->{columns}, 1, "sheet_standardize: one numeric column"
+val $sdzc = Office::sheet_get_cell($sdzo, "A3")
+assert_eq $sdzc->{value}, 0, "sheet_standardize: mean maps to 0"
+unlink $sdz
+unlink $sdzo
 # moving average (window 2 over [10,20] -> 15 at row 3)
 val $mao = "$dir/$tag-ma-out.xlsx"
 Office::sheet_movavg($csx, "amt", 2, $mao)

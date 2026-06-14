@@ -3897,6 +3897,103 @@ fn op_sheet_normalize(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Standardize numeric column(s) in place to z-scores `(x − mean) / std` — the
+/// whole-sheet, in-place counterpart to `sheet_normalize` (which appends one
+/// scaled column). opts: path, output, `by` => column name/index or array
+/// (default: every column with numeric data), decimals => round, sheet, header,
+/// format. Population standard deviation; a zero-variance column maps to all 0;
+/// non-numeric cells pass through. Returns `{ ok, path, columns }` (count
+/// standardized).
+fn op_sheet_standardize(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    // Candidate columns: explicit `by`, else all columns (numeric ones get done).
+    let candidates: Vec<usize> = match opts.get("by") {
+        None | Some(Value::Null) => (0..ncols).collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        Some(v) => vec![resolve_col(Some(v), header_row)?],
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Per-column (mean, std) over numeric cells; skip columns with no numbers.
+    let mut stats: std::collections::HashMap<usize, (f64, f64)> = std::collections::HashMap::new();
+    for &c in &candidates {
+        let vals: Vec<f64> = rows[data_start..]
+            .iter()
+            .filter_map(|r| r.as_array().and_then(|a| a.get(c)).and_then(sheet_cell_num))
+            .collect();
+        if vals.is_empty() {
+            continue;
+        }
+        let mean = vals.iter().sum::<f64>() / vals.len() as f64;
+        let var = vals.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / vals.len() as f64;
+        stats.insert(c, (mean, var.sqrt()));
+    }
+
+    let round = |x: f64| match decimals {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (x * f).round() / f
+        }
+        None => x,
+    };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            if i < data_start {
+                return row.clone();
+            }
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            for (&c, &(mean, std)) in &stats {
+                if let Some(x) = cells.get(c).and_then(sheet_cell_num) {
+                    let z = if std == 0.0 { 0.0 } else { (x - mean) / std };
+                    if c < cells.len() {
+                        cells[c] = json!(round(z));
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let n = stats.len();
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "columns": n }))
+}
+
 /// Bucket a numeric column into bins and append the bin assignment as a new
 /// column (the pandas `pd.cut` analogue; the labeling counterpart to the
 /// counts-only `sheet_histogram`). opts: path, output, column => name/index
@@ -12122,6 +12219,7 @@ export!(office__sheet_pct, op_sheet_pct);
 export!(office__sheet_group_pct, op_sheet_group_pct);
 export!(office__sheet_running, op_sheet_running);
 export!(office__sheet_normalize, op_sheet_normalize);
+export!(office__sheet_standardize, op_sheet_standardize);
 export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_rolling, op_sheet_rolling);
 export!(office__sheet_delta, op_sheet_delta);
