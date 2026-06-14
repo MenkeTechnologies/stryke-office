@@ -31,6 +31,7 @@ exports = [
     "office__sheet_rank",
     "office__sheet_filter",
     "office__sheet_aggregate",
+    "office__sheet_freq",
     "office__sheet_pivot",
     "office__sheet_unpivot",
     "office__sheet_join",

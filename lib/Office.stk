@@ -201,6 +201,13 @@ fn Office::sheet_aggregate ($path, $group_by, $output, %opts) {
         office__sheet_aggregate(to_json({ path => $path, group_by => $group_by, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Value-counts of one column, sorted by frequency (pandas value_counts).
+## opts: sheet, header, ignore_case, top. Returns { column, total, distinct, values }.
+fn Office::sheet_freq ($path, $column, %opts) {
+    Office::_decode("sheet_freq",
+        office__sheet_freq(to_json({ path => $path, column => $column, sheet => $opts{sheet}, header => $opts{header}, ignore_case => $opts{ignore_case}, top => $opts{top} })))
+}
+
 ## Join two spreadsheets on a key column (SQL JOIN). opts: on => shared key
 ## field name (or left_on + right_on), how => "inner" (default) | "left",
 ## left_sheet / right_sheet => name/index, format => override. Output columns are
