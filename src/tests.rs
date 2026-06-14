@@ -5546,6 +5546,46 @@ fn doc_comments_extracted_from_docx() {
 }
 
 #[test]
+fn doc_footnotes_extracted_from_docx() {
+    // Real footnote (id 1) plus the two boilerplate separators (ids -1, 0).
+    let footnotes_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:t>sep</w:t></w:r></w:p></w:footnote>
+  <w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:t>cont</w:t></w:r></w:p></w:footnote>
+  <w:footnote w:id="1"><w:p><w:r><w:t>See appendix A for details.</w:t></w:r></w:p></w:footnote>
+</w:footnotes>"#;
+    let zip = write_zip_entries(&[(
+        "word/footnotes.xml".to_string(),
+        footnotes_xml.as_bytes().to_vec(),
+    )])
+    .unwrap();
+    let path = tmp("footnotes.docx");
+    std::fs::write(&path, &zip).unwrap();
+
+    let r = call(office__doc_footnotes, &format!(r#"{{"path":"{path}"}}"#));
+    // separators skipped → only the real footnote remains
+    assert_eq!(r["count"], 1, "one real footnote: {r}");
+    assert_eq!(r["notes"][0]["id"], "1", "footnote id: {r}");
+    assert_eq!(
+        r["notes"][0]["text"], "See appendix A for details.",
+        "footnote text: {r}"
+    );
+
+    // a docx without the footnotes part returns empty
+    let plain = tmp("nofn.docx");
+    let w = call(
+        office__doc_write,
+        &format!(r#"{{"path":"{plain}","blocks":[{{"kind":"para","text":"hi"}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "plain write: {w}");
+    let r2 = call(office__doc_footnotes, &format!(r#"{{"path":"{plain}"}}"#));
+    assert_eq!(r2["count"], 0, "no footnotes: {r2}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&plain).ok();
+}
+
+#[test]
 fn doc_to_md_structured() {
     let dx = tmp("tomd.docx");
     let w = call(

@@ -2357,6 +2357,90 @@ fn op_doc_comments(opts: Value) -> Result<Value> {
     Ok(json!({ "comments": comments, "count": comments.len() }))
 }
 
+/// Extract footnotes (or endnotes) from a docx `word/footnotes.xml`: each
+/// `<w:footnote w:id w:type?>` holds `<w:t>` runs. The two boilerplate notes
+/// (`w:type="separator"` / `"continuationSeparator"`, ids ≤ 0) are skipped.
+/// Returns `[{ id, text }]` in document order.
+fn extract_notes_docx(xml: &[u8], tag: &[u8]) -> Vec<Value> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut in_note = false;
+    let mut skip = false;
+    let mut id = String::new();
+    let mut text = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) if e.name().as_ref() == tag => {
+                in_note = true;
+                text.clear();
+                id = attr(&e, b"w:id").unwrap_or_default();
+                // Separators and notes with non-positive ids are structural, not content.
+                let ty = attr(&e, b"w:type").unwrap_or_default();
+                let id_num = id.parse::<i64>().unwrap_or(0);
+                skip = (!ty.is_empty() && ty != "normal") || id_num <= 0;
+            }
+            Ok(Event::Text(e)) => {
+                if in_note && !skip {
+                    if let Ok(t) = e.xml10_content() {
+                        text.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if in_note && !skip {
+                    if let Some(c) = xml_ref_char(&e) {
+                        text.push(c);
+                    }
+                }
+            }
+            Ok(Event::End(e)) if e.name().as_ref() == b"w:p" && in_note && !skip => {
+                if !text.is_empty() && !text.ends_with(' ') {
+                    text.push(' ');
+                }
+            }
+            Ok(Event::End(e)) if e.name().as_ref() == tag => {
+                in_note = false;
+                if !skip {
+                    out.push(json!({
+                        "id": std::mem::take(&mut id),
+                        "text": text.trim().to_string(),
+                    }));
+                }
+                text.clear();
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// Extract footnotes (and, with `endnotes => true`, endnotes) from a docx. opts:
+/// path, endnotes => read `word/endnotes.xml` instead of `word/footnotes.xml`
+/// (default false). Returns `{ notes: [{id, text}], count }` (empty when the
+/// part is absent).
+fn op_doc_footnotes(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let endnotes = opts.get("endnotes").and_then(flag_of).unwrap_or(false);
+    let (part, tag): (&str, &[u8]) = if endnotes {
+        ("word/endnotes.xml", b"w:endnote")
+    } else {
+        ("word/footnotes.xml", b"w:footnote")
+    };
+    let bytes = std::fs::read(path)?;
+    let notes = match ext_of(path).as_str() {
+        "docx" => match read_zip_entry(&bytes, part) {
+            Ok(xml) => extract_notes_docx(&xml, tag),
+            Err(_) => Vec::new(),
+        },
+        other => return Err(anyhow!("unsupported document footnote format: {other}")),
+    };
+    Ok(json!({ "notes": notes, "count": notes.len() }))
+}
+
 /// Ordered structural read of a docx/odt: `{ blocks: [{kind:"heading",level,
 /// text} | {kind:"para",text} | {kind:"table",rows}], count }`, in document
 /// order. The read-side mirror of `doc_write`'s block model.
