@@ -649,6 +649,32 @@ fn sheet_transpose_swaps_axes() {
 }
 
 #[test]
+fn sheet_drop_columns() {
+    let path = tmp("drop.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b","c"],[1,2,3]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("drop_out.xlsx");
+    let r = call(
+        office__sheet_drop,
+        &format!(r#"{{"path":"{path}","columns":["b"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["columns"], 2, "two columns kept: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "a", "kept a: {rd}");
+    assert_eq!(rows[0][1], "c", "kept c (b dropped): {rd}");
+    assert_eq!(rows[1][1], 3.0, "value under c: {rd}");
+
+    for f in [&path, &out] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_select_columns() {
     let path = tmp("sel.xlsx");
     let w = call(

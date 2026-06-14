@@ -183,6 +183,14 @@ fn Office::sheet_select ($path, $columns, $output, %opts) {
         office__sheet_select(to_json({ path => $path, columns => $columns, output => $output, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Drop columns from a sheet (complement of sheet_select). $columns is an
+## arrayref of column names/indices to remove. opts: sheet, header => 0 if first
+## row is data, format => override. Returns { ok, path, columns } (kept count).
+fn Office::sheet_drop ($path, $columns, $output, %opts) {
+    Office::_decode("sheet_drop",
+        office__sheet_drop(to_json({ path => $path, columns => $columns, output => $output, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Transpose a sheet — rows become columns and vice versa. opts: sheet =>
 ## name/index, format => override. Returns { ok, path, rows, columns }.
 fn Office::sheet_transpose ($path, $output, %opts) {

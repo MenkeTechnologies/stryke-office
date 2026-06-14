@@ -2139,6 +2139,42 @@ fn op_sheet_select(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "columns": cols.len() }))
 }
 
+/// Drop columns from a sheet (complement of `sheet_select`). opts: path, output,
+/// columns => column name(s)/index(es) to remove, sheet, header (default true),
+/// format. Returns `{ ok, path, columns }` (kept column count).
+fn op_sheet_drop(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let drop: Vec<usize> = match opts.get("columns") {
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|c| resolve_col(Some(c), hr))
+            .collect::<Result<_>>()?,
+        Some(v) if !v.is_null() => vec![resolve_col(Some(v), hr)?],
+        _ => return Err(anyhow!("missing columns to drop")),
+    };
+    let keep: Vec<Value> = (0..ncols)
+        .filter(|c| !drop.contains(c))
+        .map(|c| json!(c))
+        .collect();
+
+    // Delegate to sheet_select with the kept column indices.
+    let mut sopts = opts.clone();
+    sopts["columns"] = Value::Array(keep);
+    op_sheet_select(sopts)
+}
+
 /// Transpose a sheet — rows become columns and vice versa. opts: path, output,
 /// sheet => name/index (default first), format. Other sheets pass through.
 /// Returns `{ ok, path, rows, columns }` (dimensions of the transposed sheet).
@@ -3632,6 +3668,7 @@ export!(office__sheet_pivot, op_sheet_pivot);
 export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);
 export!(office__sheet_select, op_sheet_select);
+export!(office__sheet_drop, op_sheet_drop);
 export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
