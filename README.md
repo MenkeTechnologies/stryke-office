@@ -175,6 +175,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_where($path, $conditions, $output, %opts)` | `{ok, path, kept}` | keep rows matching multiple conditions (`[{column,op,value}]`); `match` all/any |
 | `Office::sheet_freeze($path, $output, %opts)` | `{ok, path, row, col}` | freeze panes on a sheet (xlsx); `row` (default 1)/`col` opts |
 | `Office::sheet_autofilter($path, $output, %opts)` | `{ok, path, range}` | apply an autofilter over a sheet's range (xlsx); `range` opt (default used range) |
+| `Office::sheet_round($path, $output, %opts)` | `{ok, path, rounded}` | round every numeric cell to N decimals (`decimals` default 2); `columns` opt restricts which columns; header untouched |
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
 | `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable |
 | `Office::sheet_unpivot($path, $output, %opts)` | `{rows}` | melt wide→long; `id_vars`/`value_vars`/`var_name`/`value_name` |

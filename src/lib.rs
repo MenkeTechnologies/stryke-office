@@ -6024,6 +6024,87 @@ fn op_sheet_autofilter(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "range": range }))
 }
 
+/// Round every numeric cell in a sheet (or selected columns) to a fixed number
+/// of decimals — clean up float noise from exports. opts: path, output,
+/// decimals => places (default 2), columns => name(s)/index(es) to restrict to
+/// (default: all columns), sheet, header (default true; the header row is never
+/// rounded), format. Returns `{ ok, path, rounded }` (count of cells changed).
+fn op_sheet_round(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let decimals = opts.get("decimals").and_then(Value::as_i64).unwrap_or(2);
+    let factor = 10f64.powi(decimals as i32);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    // Restrict to specific columns when `columns` is given.
+    let only: Option<std::collections::HashSet<usize>> = match opts.get("columns") {
+        Some(Value::Array(a)) => Some(
+            a.iter()
+                .map(|c| resolve_col(Some(c), header_row))
+                .collect::<Result<_>>()?,
+        ),
+        Some(Value::Null) | None => None,
+        Some(v) => Some([resolve_col(Some(v), header_row)?].into_iter().collect()),
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut rounded = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            if i < data_start {
+                return row.clone();
+            }
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let out: Vec<Value> = cells
+                .into_iter()
+                .enumerate()
+                .map(|(c, cell)| {
+                    if only.as_ref().is_some_and(|s| !s.contains(&c)) {
+                        return cell;
+                    }
+                    match sheet_cell_num(&cell) {
+                        Some(x) => {
+                            let y = (x * factor).round() / factor;
+                            if y != x {
+                                rounded += 1;
+                            }
+                            json!(y)
+                        }
+                        None => cell,
+                    }
+                })
+                .collect();
+            Value::Array(out)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rounded": rounded }))
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -8110,6 +8191,7 @@ export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
+export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);

@@ -684,6 +684,13 @@ fn Office::sheet_autofilter ($path, $output, %opts) {
         office__sheet_autofilter(to_json({ path => $path, output => $output, range => $opts{range}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Round every numeric cell (or selected columns) to N decimals. opts: decimals
+## (default 2), columns, sheet, header, format. Returns { ok, path, rounded }.
+fn Office::sheet_round ($path, $output, %opts) {
+    Office::_decode("sheet_round",
+        office__sheet_round(to_json({ path => $path, output => $output, decimals => $opts{decimals}, columns => $opts{columns}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns
