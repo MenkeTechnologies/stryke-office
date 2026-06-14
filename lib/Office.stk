@@ -2724,3 +2724,14 @@ fn Office::barcode_save ($data, $output, %opts) {
     $r{output} = $output
     Office::_decode("barcode_save", office__barcode_save(to_json(\%r)))
 }
+
+## Batch-generate one barcode/QR per value of $column into $dir (label sheets).
+## opts: kind (qr|1d), symbology, ext (default png), prefix, plus barcode style
+## opts (scale/ec/fg/bg/height), sheet, header. Returns { count, files }.
+fn Office::barcode_sheet ($path, $column, $dir, %opts) {
+    var %r = %opts
+    $r{path} = $path
+    $r{column} = $column
+    $r{dir} = $dir
+    Office::_decode("barcode_sheet", office__barcode_sheet(to_json(\%r)))
+}
