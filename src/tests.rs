@@ -10866,6 +10866,48 @@ fn chart_ecdf_raster_and_svg() {
 }
 
 #[test]
+fn norm_ppf_known_quantiles() {
+    assert!(norm_ppf(0.5).abs() < 1e-6, "median quantile is 0");
+    assert!(
+        (norm_ppf(0.975) - 1.959_963_98).abs() < 1e-4,
+        "97.5% ~ 1.96"
+    );
+    assert!(
+        (norm_ppf(0.025) + 1.959_963_98).abs() < 1e-4,
+        "2.5% ~ -1.96"
+    );
+    // strictly increasing
+    assert!(norm_ppf(0.1) < norm_ppf(0.9), "monotone");
+}
+
+#[test]
+fn chart_qq_raster_and_svg() {
+    let series = r#"[{"name":"x","data":[1,2,3,4,5,6,7,8,9,10]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"qq","width":460,"height":360,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("qq raster: {c}"));
+    assert_eq!(c["type"], "qq", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"qq","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "qq svg malformed"
+    );
+    // point cloud (circles) + a qq reference line
+    assert!(svg.contains("<circle"), "qq svg points");
+    assert!(svg.contains("<line"), "qq svg reference line");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

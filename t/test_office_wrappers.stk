@@ -1299,4 +1299,10 @@ assert_ok ($ecdfsvg =~ /^<svg/), "chart ecdf: svg document"
 assert_ok ($ecdfsvg =~ /polyline/), "chart ecdf: step curve"
 assert_ok ($ecdfsvg =~ />1\.0</), "chart ecdf: probability axis to 1.0"
 
+# ── chart qq (ggplot2 stat_qq): normal quantile-quantile to SVG ─────
+val $qqsvg = Office::chart_svg("qq", [{ name => "x", data => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }])
+assert_ok ($qqsvg =~ /^<svg/), "chart qq: svg document"
+assert_ok ($qqsvg =~ /circle/), "chart qq: quantile point cloud"
+assert_ok ($qqsvg =~ /line/), "chart qq: reference line"
+
 test_run
