@@ -1323,6 +1323,14 @@ assert_eq $mmr->{variance}, 2.5, "sheet_moments: sample variance 2.5"
 assert_eq $mmr->{skewness}, 0, "sheet_moments: symmetric skew 0"
 unlink $mmx
 
+# ── sheet_autocorr: ACF of an alternating series ────────────────────
+val $acx = "$dir/$tag-acf.xlsx"
+Office::sheet_write($acx, [{ name => "S", rows => [["v"], [1], [-1], [1], [-1], [1], [-1]] }])
+val $acr = Office::sheet_autocorr($acx, "v", lags => 2, decimals => 6)
+assert_eq $acr->{acf}[0]{value}, 1, "sheet_autocorr: r0 = 1"
+assert_ok ($acr->{acf}[1]{value} < -0.5), "sheet_autocorr: lag1 anti-correlated"
+unlink $acx
+
 # ── sheet_corr: Pearson + Spearman correlation matrices ─────────────
 val $crx = "$dir/$tag-corr.xlsx"
 Office::sheet_write($crx, [{ name => "C", rows => [["x", "y"], [1, 1], [2, 8], [3, 27], [4, 64], [5, 125]] }])

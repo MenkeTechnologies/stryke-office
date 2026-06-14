@@ -444,6 +444,43 @@ fn sheet_moments_skew_kurtosis() {
 }
 
 #[test]
+fn sheet_autocorr_acf() {
+    // a perfectly periodic series: ACF at lag 0 is 1; an alternating series is
+    // anti-correlated at lag 1.
+    let path = tmp("acf.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["v"],[1],[-1],[1],[-1],[1],[-1]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_autocorr,
+        &format!(r#"{{"path":"{path}","column":"v","lags":2,"decimals":6}}"#),
+    );
+    let acf = s["acf"].as_array().unwrap();
+    assert_eq!(acf.len(), 3, "lags 0..=2: {s}");
+    assert_eq!(acf[0]["lag"], 0, "first is lag 0: {s}");
+    assert!(
+        (acf[0]["value"].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "r0 = 1: {s}"
+    );
+    // alternating sign -> strong negative lag-1 autocorrelation
+    assert!(
+        acf[1]["value"].as_f64().unwrap() < -0.5,
+        "lag1 anti-correlated: {s}"
+    );
+    // lag-2 (same sign) -> positive
+    assert!(
+        acf[2]["value"].as_f64().unwrap() > 0.4,
+        "lag2 positive: {s}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_agg_scalar() {
     let path = tmp("agg.xlsx");
     let w = call(
