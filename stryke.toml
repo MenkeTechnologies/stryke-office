@@ -58,6 +58,7 @@ exports = [
     "office__sheet_multisort",
     "office__sheet_find",
     "office__sheet_records",
+    "office__sheet_to_map",
     "office__records_write",
     "office__sheet_to_json",
     "office__sheet_to_ndjson",

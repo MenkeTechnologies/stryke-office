@@ -693,6 +693,15 @@ unlink $nx
 unlink $no
 unlink $nb
 
+# ── sheet_to_map: key=>value hash from two columns ──────────────────
+val $tmx = "$dir/$tag-tomap.xlsx"
+Office::sheet_write($tmx, [{ name => "D", rows => [["code", "label"], ["a", "Apple"], ["b", "Banana"]] }])
+val $tmr = Office::sheet_to_map($tmx, "code", "label")
+assert_eq $tmr->{count}, 2, "sheet_to_map: two keys"
+assert_eq $tmr->{map}{a}, "Apple", "sheet_to_map: a -> Apple"
+assert_eq $tmr->{map}{b}, "Banana", "sheet_to_map: b -> Banana"
+unlink $tmx
+
 # ── sheet_transform: per-column op ──────────────────────────────────
 val $tx = "$dir/$tag-xform.xlsx"
 Office::sheet_write($tx, [{ name => "D", rows => [["name"], ["  hi "], ["YO"]] }])
