@@ -1854,6 +1854,112 @@ fn op_sheet_to_text(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Parse an A1 cell reference (e.g. `B2`, `AA10`) into 0-based `(row, col)`.
+/// Row 1 / column A map to `(0, 0)`. Returns None for malformed input.
+fn parse_a1(s: &str) -> Option<(usize, usize)> {
+    let s = s.trim();
+    let split = s.find(|c: char| c.is_ascii_digit())?;
+    let (letters, digits) = s.split_at(split);
+    if letters.is_empty() || digits.is_empty() {
+        return None;
+    }
+    let mut col = 0usize;
+    for c in letters.chars() {
+        if !c.is_ascii_alphabetic() {
+            return None;
+        }
+        col = col * 26 + (c.to_ascii_uppercase() as usize - 'A' as usize + 1);
+    }
+    let row: usize = digits.parse().ok()?;
+    if col == 0 || row == 0 {
+        return None;
+    }
+    Some((row - 1, col - 1))
+}
+
+/// Read a single cell by A1 reference. opts: path, cell (e.g. "B2", required),
+/// sheet => name/index. Returns `{ cell, row, col, value }` (0-based row/col;
+/// value is null if out of range).
+fn op_sheet_get_cell(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let cell = req_str(&opts, "cell")?;
+    let (r, c) = parse_a1(cell).ok_or_else(|| anyhow!("bad A1 reference: {cell}"))?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let value = sheet["rows"]
+        .as_array()
+        .and_then(|rows| rows.get(r))
+        .and_then(Value::as_array)
+        .and_then(|row| row.get(c))
+        .cloned()
+        .unwrap_or(Value::Null);
+    Ok(json!({ "cell": cell, "row": r, "col": c, "value": value }))
+}
+
+/// Set a single cell by A1 reference, growing the grid with blanks as needed.
+/// opts: path, cell (required), value (default null/blank), output (default in
+/// place), sheet => name/index, format. Returns `{ ok, path, cell }`.
+fn op_sheet_set_cell(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let cell = req_str(&opts, "cell")?;
+    let (r, c) = parse_a1(cell).ok_or_else(|| anyhow!("bad A1 reference: {cell}"))?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let value = opts.get("value").cloned().unwrap_or(Value::Null);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if sheets.is_empty() {
+        sheets.push(json!({ "name": "Sheet1", "rows": [] }));
+    }
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if rows.len() <= r {
+        rows.resize(r + 1, Value::Array(Vec::new()));
+    }
+    let mut row = rows[r].as_array().cloned().unwrap_or_default();
+    if row.len() <= c {
+        row.resize(c + 1, Value::Null);
+    }
+    row[c] = value;
+    rows[r] = Value::Array(row);
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "cell": cell }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -5832,6 +5938,8 @@ export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__md_to_sheet, op_md_to_sheet);
 export!(office__sheet_to_html, op_sheet_to_html);
 export!(office__sheet_to_text, op_sheet_to_text);
+export!(office__sheet_get_cell, op_sheet_get_cell);
+export!(office__sheet_set_cell, op_sheet_set_cell);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
