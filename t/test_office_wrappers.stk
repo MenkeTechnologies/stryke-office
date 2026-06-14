@@ -19,6 +19,8 @@ val $grt = "$dir/$tag-grep.txt"
 Office::sheet_to_text($grx, output => $grt)
 val $grr = Office::text_grep($grt, "banana")
 assert_eq $grr->{count}, 1, "text_grep: one matching line"
+val $grs = Office::text_stats($grt)
+assert_ok ($grs->{lines} >= 3), "text_stats: counts lines"
 unlink $grx
 unlink $grt
 

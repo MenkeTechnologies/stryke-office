@@ -8435,6 +8435,20 @@ fn text_grep_matches_lines() {
 }
 
 #[test]
+fn text_stats_wc() {
+    let path = tmp("wc.txt");
+    std::fs::write(&path, "a b\nc\n").unwrap();
+
+    let r = call(office__text_stats, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["lines"], 2, "two lines: {r}");
+    assert_eq!(r["words"], 3, "three words: {r}");
+    assert_eq!(r["chars"], 6, "six chars incl newlines: {r}");
+    assert_eq!(r["bytes"], 6, "six bytes: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn replace_text_xlsx_strings() {
     let path = tmp("tmpl.xlsx");
     call(

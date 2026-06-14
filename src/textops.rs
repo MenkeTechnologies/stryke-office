@@ -373,3 +373,17 @@ fn op_text_grep(opts: Value) -> Result<Value> {
     let count = matches.len();
     Ok(json!({ "count": count, "matches": matches }))
 }
+
+/// `wc`-style statistics for a raw text file. opts: path. Returns
+/// `{ lines, words, chars, bytes }` — lines counted by `\n`-delimited content,
+/// words by whitespace, chars by Unicode scalar, bytes by file size.
+fn op_text_stats(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let raw = std::fs::read(path)?;
+    let bytes = raw.len();
+    let text = String::from_utf8_lossy(&raw);
+    let lines = if text.is_empty() { 0 } else { text.lines().count() };
+    let words = text.split_whitespace().count();
+    let chars = text.chars().count();
+    Ok(json!({ "lines": lines, "words": words, "chars": chars, "bytes": bytes }))
+}

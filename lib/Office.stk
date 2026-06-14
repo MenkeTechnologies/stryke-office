@@ -1413,6 +1413,11 @@ fn Office::text_grep ($path, $query, %opts) {
         office__text_grep(to_json({ path => $path, query => $query, ignore_case => $opts{ignore_case}, invert => $opts{invert}, max => $opts{max} })))
 }
 
+## wc-style stats for a raw text file. Returns { lines, words, chars, bytes }.
+fn Office::text_stats ($path) {
+    Office::_decode("text_stats", office__text_stats(to_json({ path => $path })))
+}
+
 ## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
 ## per data record, writing one file per record into $dir. opts: data =>
 ## spreadsheet path (read as records) or records => arrayref of hashes, sheet =>
