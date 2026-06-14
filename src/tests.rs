@@ -3301,6 +3301,55 @@ fn sheet_filter_rows() {
 }
 
 #[test]
+fn sheet_flag_marks_rows() {
+    let path = tmp("flag.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","qty"],["a",10],["b",20],["c",30]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // flag qty >= 20 with default 1/0 → all rows kept, b & c flagged
+    let out = tmp("flag_out.xlsx");
+    let r = call(
+        office__sheet_flag,
+        &format!(
+            r#"{{"path":"{path}","by":"qty","op":"ge","value":20,"into":"big","output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["column"], "big", "flag column name: {r}");
+    assert_eq!(r["flagged"], 2, "two rows flagged: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 4, "all rows kept (header + 3): {rd}");
+    assert_eq!(rows[0][2], "big", "header appended: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 0.0, "a not flagged: {rd}");
+    assert_eq!(rows[2][2].as_f64().unwrap(), 1.0, "b flagged: {rd}");
+    assert_eq!(rows[3][2].as_f64().unwrap(), 1.0, "c flagged: {rd}");
+
+    // custom labels
+    let outl = tmp("flag_lbl.xlsx");
+    call(
+        office__sheet_flag,
+        &serde_json::json!({
+            "path": path, "by": "name", "op": "eq", "value": "a",
+            "true_value": "Y", "false_value": "N", "into": "isA", "output": outl
+        })
+        .to_string(),
+    );
+    let rdl = call(office__sheet_read, &format!(r#"{{"path":"{outl}"}}"#));
+    let rowsl = rdl["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rowsl[1][2], "Y", "a -> Y: {rdl}");
+    assert_eq!(rowsl[2][2], "N", "b -> N: {rdl}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outl).ok();
+}
+
+#[test]
 fn sheet_sort_by_column() {
     let path = tmp("sort.xlsx");
     let w = call(

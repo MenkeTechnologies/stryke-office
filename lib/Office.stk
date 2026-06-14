@@ -396,6 +396,15 @@ fn Office::sheet_filter ($path, $by, $output, %opts) {
         office__sheet_filter(to_json({ path => $path, by => $by, output => $output, op => $opts{op}, value => $opts{value}, sheet => $opts{sheet}, ignore_case => $opts{ignore_case}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a flag column marking rows where $by satisfies a predicate (keeps all
+## rows). opts: op (default eq), value, true_value/false_value (default 1/0),
+## into (default "flag"), ignore_case, sheet, header, format. Returns
+## { ok, path, column, flagged }.
+fn Office::sheet_flag ($path, $by, $output, %opts) {
+    Office::_decode("sheet_flag",
+        office__sheet_flag(to_json({ path => $path, by => $by, output => $output, op => $opts{op}, value => $opts{value}, true_value => $opts{true_value}, false_value => $opts{false_value}, into => $opts{into}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Group rows by $group_by and aggregate (SQL GROUP BY). opts: value => column
 ## to aggregate (required for sum/mean/min/max), agg => count|sum|mean|min|max
 ## (default count), sheet, header => 0 if first row is data, format => override.

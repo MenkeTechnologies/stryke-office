@@ -58,6 +58,7 @@ exports = [
     "office__sheet_sort",
     "office__sheet_rank",
     "office__sheet_filter",
+    "office__sheet_flag",
     "office__sheet_aggregate",
     "office__sheet_group_concat",
     "office__sheet_lookup",

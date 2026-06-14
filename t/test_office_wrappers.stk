@@ -309,6 +309,12 @@ val $who = "$dir/$tag-where-out.xlsx"
 val $whr = Office::sheet_where($gcx, [{ column => "g", op => "eq", value => "x" }], $who)
 assert_eq $whr->{kept}, 2, "sheet_where: rows kept"
 unlink $who
+# flag: g == x marks 2 rows but keeps all
+val $flgo = "$dir/$tag-flag-out.xlsx"
+val $flgr = Office::sheet_flag($gcx, "g", $flgo, op => "eq", value => "x", into => "isx")
+assert_eq $flgr->{flagged}, 2, "sheet_flag: two rows flagged"
+assert_eq $flgr->{column}, "isx", "sheet_flag: flag column name"
+unlink $flgo
 # freeze the header row
 val $fzo = "$dir/$tag-freeze-out.xlsx"
 val $fzr = Office::sheet_freeze($gcx, $fzo, row => 1)
