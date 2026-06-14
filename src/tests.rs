@@ -4063,6 +4063,52 @@ fn sheet_date_part_extract() {
 }
 
 #[test]
+fn sheet_group_stats_per_group() {
+    let path = tmp("grpstats.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["g","v"],["a",2],["a",4],["a",6],["b",10],["b",20]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("grpstats_out.xlsx");
+    let r = call(
+        office__sheet_group_stats,
+        &format!(r#"{{"path":"{path}","output":"{out}","group":"g","value":"v"}}"#),
+    );
+    assert_eq!(r["ok"], true, "group_stats: {r}");
+    assert_eq!(r["groups"].as_u64().unwrap(), 2, "two groups: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // header: [g, count, mean, std, min, max]
+    assert_eq!(rows[0][0], "g", "group header keeps name: {rd}");
+    assert_eq!(rows[0][1], "count", "count header: {rd}");
+    // group a: 2,4,6 -> count 3, mean 4, min 2, max 6, sample std 2
+    assert_eq!(rows[1][0], "a", "first group sorted: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 3.0, "a count: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 4.0, "a mean: {rd}");
+    assert!(
+        (rows[1][3].as_f64().unwrap() - 2.0).abs() < 1e-9,
+        "a std: {rd}"
+    );
+    assert_eq!(rows[1][4].as_f64().unwrap(), 2.0, "a min: {rd}");
+    assert_eq!(rows[1][5].as_f64().unwrap(), 6.0, "a max: {rd}");
+    // group b: 10,20 -> count 2, mean 15, sample std ~7.0710678
+    assert_eq!(rows[2][0], "b", "second group: {rd}");
+    assert_eq!(rows[2][2].as_f64().unwrap(), 15.0, "b mean: {rd}");
+    assert!(
+        (rows[2][3].as_f64().unwrap() - 7.071_067_811_865_476).abs() < 1e-9,
+        "b std: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_freq_value_counts() {
     let path = tmp("freq.xlsx");
     // west x3, east x2, north x1; one blank (skipped)

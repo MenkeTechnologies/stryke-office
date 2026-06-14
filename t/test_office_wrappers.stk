@@ -818,6 +818,19 @@ val $prb = Office::sheet_read($pro)
 assert_eq $prb->[0]{rows}[4][1], 1, "sheet_pct_rank: max -> 1.0"
 unlink $prx
 unlink $pro
+# sheet_group_stats: per-group count/mean/std/min/max
+val $gsx = "$dir/$tag-grpstats.xlsx"
+Office::sheet_write($gsx, [{ name => "S", rows => [["g", "v"], ["a", 2], ["a", 4], ["a", 6], ["b", 10], ["b", 20]] }])
+val $gso = "$dir/$tag-grpstats-out.xlsx"
+val $gsr = Office::sheet_group_stats($gsx, "g", "v", $gso)
+assert_eq $gsr->{groups}, 2, "sheet_group_stats: two groups"
+val $gsb = Office::sheet_read($gso)
+assert_eq $gsb->[0]{rows}[1][0], "a", "sheet_group_stats: first group sorted"
+assert_eq $gsb->[0]{rows}[1][1], 3, "sheet_group_stats: a count 3"
+assert_eq $gsb->[0]{rows}[1][2], 4, "sheet_group_stats: a mean 4"
+assert_eq $gsb->[0]{rows}[2][2], 15, "sheet_group_stats: b mean 15"
+unlink $gsx
+unlink $gso
 # sheet_date_part: extract month from a date column
 val $dpo = "$dir/$tag-datepart-out.xlsx"
 val $dpr = Office::sheet_date_part($rsx, $dpo, "date", part => "month", into => "mo")
