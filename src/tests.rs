@@ -2702,6 +2702,36 @@ fn sheet_drop_empty_rows_and_cols() {
 }
 
 #[test]
+fn sheet_add_header_prepends() {
+    let path = tmp("addhdr.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[[1,2],[3,4]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("addhdr_out.xlsx");
+    let r = call(
+        office__sheet_add_header,
+        &serde_json::json!({ "path": path, "names": ["a", "b"], "output": out }).to_string(),
+    );
+    assert_eq!(r["columns"], 2, "two header columns: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2 data rows: {rd}");
+    assert_eq!(rows[0][0], "a", "header a: {rd}");
+    assert_eq!(rows[0][1], "b", "header b: {rd}");
+    assert_eq!(
+        rows[1][0].as_f64().unwrap(),
+        1.0,
+        "old first row now data: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(

@@ -634,6 +634,13 @@ fn Office::sheet_drop_empty ($path, $output, %opts) {
         office__sheet_drop_empty(to_json({ path => $path, output => $output, rows => $opts{rows}, cols => $opts{cols}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Prepend a header row of $names (for headerless data). opts: sheet, format.
+## Returns { ok, path, columns }.
+fn Office::sheet_add_header ($path, $names, $output, %opts) {
+    Office::_decode("sheet_add_header",
+        office__sheet_add_header(to_json({ path => $path, names => $names, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns

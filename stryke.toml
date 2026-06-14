@@ -73,6 +73,7 @@ exports = [
     "office__sheet_append",
     "office__sheet_fill",
     "office__sheet_drop_empty",
+    "office__sheet_add_header",
     "office__sheet_split",
     "office__sheet_chunk",
     "office__sheet_head",

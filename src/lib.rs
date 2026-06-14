@@ -5596,6 +5596,40 @@ fn op_sheet_drop_empty(opts: Value) -> Result<Value> {
     )
 }
 
+/// Prepend a header row of column names (for headerless data, e.g. a bare CSV).
+/// opts: path, output, names => array of column names (required), sheet, format.
+/// All existing rows become data rows. Returns `{ ok, path, columns }`.
+fn op_sheet_add_header(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let names = opts
+        .get("names")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing names (expected array of column names)"))?
+        .clone();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    rows.insert(0, Value::Array(names.clone()));
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "columns": names.len() }))
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -7612,6 +7646,7 @@ export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
+export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
