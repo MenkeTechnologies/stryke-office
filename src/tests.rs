@@ -4561,6 +4561,48 @@ fn sheet_autofilter_applied() {
 }
 
 #[test]
+fn sheet_merge_cells_applied() {
+    use std::io::Read as _;
+    let path = tmp("merge.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["Title","",""],[1,2,3]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // merge the title across A1:C1 (row 0, cols 0..2)
+    let out = tmp("merge_out.xlsx");
+    let r = call(
+        office__sheet_merge_cells,
+        &format!(r#"{{"path":"{path}","ranges":[[0,0,0,2]],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["merged"], 1, "one range merged: {r}");
+
+    // the worksheet XML carries a mergeCells element with the A1:C1 ref
+    let bytes = std::fs::read(&out).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut ws = String::new();
+    zip.by_name("xl/worksheets/sheet1.xml")
+        .unwrap()
+        .read_to_string(&mut ws)
+        .unwrap();
+    assert!(ws.contains("mergeCell"), "mergeCells emitted: {ws}");
+    assert!(ws.contains("A1:C1"), "A1:C1 merge ref: {ws}");
+
+    // bad range shape is rejected
+    let bad = call(
+        office__sheet_merge_cells,
+        &format!(r#"{{"path":"{path}","ranges":[[0,0]],"output":"{out}"}}"#),
+    );
+    assert!(bad["error"].is_string(), "malformed range rejected: {bad}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_autosize_sets_column_widths() {
     use std::io::Read as _;
     let path = tmp("autosize.xlsx");

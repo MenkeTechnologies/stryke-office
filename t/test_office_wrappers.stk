@@ -477,6 +477,11 @@ val $afo = "$dir/$tag-af-out.xlsx"
 val $afr = Office::sheet_autofilter($gcx, $afo)
 assert_ok $afr->{ok}, "sheet_autofilter: ok"
 unlink $afo
+# merge cells
+val $mco = "$dir/$tag-merge-out.xlsx"
+val $mcr = Office::sheet_merge_cells($gcx, [[0, 0, 0, 1]], output => $mco)
+assert_eq $mcr->{merged}, 1, "sheet_merge_cells: one range merged"
+unlink $mco
 # autosize all columns to content
 val $aso = "$dir/$tag-autosize-out.xlsx"
 val $asr = Office::sheet_autosize($gcx, output => $aso)

@@ -966,6 +966,14 @@ fn Office::sheet_autofilter ($path, $output, %opts) {
         office__sheet_autofilter(to_json({ path => $path, output => $output, range => $opts{range}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Merge cell ranges in a sheet (xlsx). $ranges is an arrayref of [r1,c1,r2,c2]
+## 0-based rectangles. opts: output (default in place), sheet, format. Returns
+## { ok, path, merged }.
+fn Office::sheet_merge_cells ($path, $ranges, %opts) {
+    Office::_decode("sheet_merge_cells",
+        office__sheet_merge_cells(to_json({ path => $path, ranges => $ranges, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Auto-size columns to their content (xlsx). opts: sheet (default all), output
 ## (default in place), format. Returns { ok, path, sheets }.
 fn Office::sheet_autosize ($path, %opts) {

@@ -106,6 +106,7 @@ exports = [
     "office__sheet_where",
     "office__sheet_freeze",
     "office__sheet_autofilter",
+    "office__sheet_merge_cells",
     "office__sheet_autosize",
     "office__sheet_protect",
     "office__sheet_comments",

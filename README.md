@@ -186,6 +186,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_where($path, $conditions, $output, %opts)` | `{ok, path, kept}` | keep rows matching multiple conditions (`[{column,op,value}]`); `match` all/any |
 | `Office::sheet_freeze($path, $output, %opts)` | `{ok, path, row, col}` | freeze panes on a sheet (xlsx); `row` (default 1)/`col` opts |
 | `Office::sheet_autofilter($path, $output, %opts)` | `{ok, path, range}` | apply an autofilter over a sheet's range (xlsx); `range` opt (default used range) |
+| `Office::sheet_merge_cells($path, $ranges, %opts)` | `{ok, path, merged}` | merge cell ranges (xlsx); `ranges` of `[r1,c1,r2,c2]`; top-left value fills each |
 | `Office::sheet_autosize($path, %opts)` | `{ok, path, sheets}` | auto-size columns to content (xlsx); `sheet` opt limits to one sheet (default all) |
 | `Office::sheet_protect($path, %opts)` | `{ok, path, sheets}` | enable worksheet protection (xlsx); `password`/`sheet` opts |
 | `Office::sheet_comments($path)` | `{comments:[{cell,author,text}], count}` | extract cell comments/notes from an xlsx (`xl/comments*.xml`) |
