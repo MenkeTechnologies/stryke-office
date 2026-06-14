@@ -227,6 +227,32 @@ fn sheet_write_html_and_markdown_tables() {
 }
 
 #[test]
+fn sheet_diff_cells() {
+    let a = tmp("diffa.xlsx");
+    let b = tmp("diffb.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{a}","sheets":[{{"name":"D","rows":[["a","b"],[1,2],[3,4]]}}]}}"#),
+    );
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{b}","sheets":[{{"name":"D","rows":[["a","b"],[1,9],[3,4]]}}]}}"#),
+    );
+    let r = call(
+        office__sheet_diff,
+        &format!(r#"{{"left":"{a}","right":"{b}"}}"#),
+    );
+    assert_eq!(r["count"], 1, "one changed cell: {r}");
+    assert_eq!(r["changed"][0]["ref"], "B2", "cell ref: {r}");
+    assert_eq!(r["changed"][0]["left"], 2.0, "left val: {r}");
+    assert_eq!(r["changed"][0]["right"], 9.0, "right val: {r}");
+
+    for f in [&a, &b] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_split_per_sheet() {
     let path = tmp("wb.xlsx");
     let w = call(

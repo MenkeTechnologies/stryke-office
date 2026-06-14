@@ -2391,6 +2391,71 @@ fn op_sheet_split(opts: Value) -> Result<Value> {
     Ok(json!({ "count": files.len(), "files": files }))
 }
 
+/// Read one sheet's rows from a file, selected by name/index (default first).
+fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match sel {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    Ok(sheet["rows"].as_array().cloned().unwrap_or_default())
+}
+
+/// Compare two sheets cell by cell. opts: left, right (paths), sheet (selector
+/// for both), left_sheet / right_sheet (override per side). Returns
+/// `{ count, changed: [{ ref, row, col, left, right }], left_rows, right_rows }`
+/// — cells whose string value differs (added/removed cells compare against
+/// null), with 1-based row/col and an A1 `ref`.
+fn op_sheet_diff(opts: Value) -> Result<Value> {
+    let left = req_str(&opts, "left")?;
+    let right = req_str(&opts, "right")?;
+    let sel = opts.get("sheet");
+    let lrows = select_sheet_rows(left, opts.get("left_sheet").or(sel))?;
+    let rrows = select_sheet_rows(right, opts.get("right_sheet").or(sel))?;
+
+    let cell = |rows: &[Value], r: usize, c: usize| -> Value {
+        rows.get(r)
+            .and_then(|x| x.as_array())
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let width =
+        |rows: &[Value], r: usize| rows.get(r).and_then(|x| x.as_array()).map_or(0, Vec::len);
+
+    let nrows = lrows.len().max(rrows.len());
+    let mut changed = Vec::new();
+    for r in 0..nrows {
+        let ncols = width(&lrows, r).max(width(&rrows, r));
+        for c in 0..ncols {
+            let lv = cell(&lrows, r, c);
+            let rv = cell(&rrows, r, c);
+            if cell_to_string(&lv) != cell_to_string(&rv) {
+                changed.push(json!({
+                    "ref": format!("{}{}", col_letters(c), r + 1),
+                    "row": r + 1,
+                    "col": c + 1,
+                    "left": lv,
+                    "right": rv,
+                }));
+            }
+        }
+    }
+    Ok(json!({
+        "count": changed.len(),
+        "changed": changed,
+        "left_rows": lrows.len(),
+        "right_rows": rrows.len(),
+    }))
+}
+
 // ── word processing ──────────────────────────────────────────────────────────
 
 fn op_doc_read(opts: Value) -> Result<Value> {
@@ -3156,6 +3221,7 @@ export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
+export!(office__sheet_diff, op_sheet_diff);
 export!(office__doc_read, op_doc_read);
 export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
