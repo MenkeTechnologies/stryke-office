@@ -7903,10 +7903,10 @@ fn op_sheet_hstack(opts: Value) -> Result<Value> {
 }
 
 /// Fill blank cells in a sheet. opts: path, output (default: in place),
-/// method => "ffill" (default; carry the last non-blank value down) | "value"
-/// (use a constant `value`), by => column name/index or array (default: all
-/// columns), value (for the constant method), sheet, header (default true),
-/// format. Returns `{ ok, path, filled }`.
+/// method => "ffill" (default; carry the last non-blank value down) | "bfill"
+/// (carry the next non-blank value up) | "value" (use a constant `value`), by =>
+/// column name/index or array (default: all columns), value (for the constant
+/// method), sheet, header (default true), format. Returns `{ ok, path, filled }`.
 fn op_sheet_fill(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = opts
@@ -7918,6 +7918,9 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
         .get("method")
         .and_then(Value::as_str)
         .unwrap_or("ffill");
+    if !matches!(method, "ffill" | "bfill" | "value") {
+        return Err(anyhow!("unknown method: {method} (ffill|bfill|value)"));
+    }
     let fill_value = opts.get("value").cloned().unwrap_or(Value::Null);
 
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -7970,7 +7973,14 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
 
     let mut last: std::collections::HashMap<usize, Value> = std::collections::HashMap::new();
     let mut filled = 0u64;
-    for ri in data_start..rows.len() {
+    // ffill walks top-to-bottom carrying the last seen value; bfill walks
+    // bottom-to-top carrying the next; value just substitutes a constant.
+    let order: Vec<usize> = if method == "bfill" {
+        (data_start..rows.len()).rev().collect()
+    } else {
+        (data_start..rows.len()).collect()
+    };
+    for ri in order {
         let Some(arr) = rows[ri].as_array_mut() else {
             continue;
         };
