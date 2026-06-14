@@ -808,6 +808,15 @@ fn Office::sheet_substr ($path, $output, $column, %opts) {
         office__sheet_substr(to_json({ path => $path, output => $output, column => $column, start => $opts{start}, len => $opts{len}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Extract a regex match/capture group from a column into a new column (pandas
+## str.extract). $pattern is a regex. opts: group (capture index, default 0 =
+## whole match), into (default "{column}_extract"), sheet, header, format. Returns
+## { ok, path, column, matched }.
+fn Office::sheet_extract ($path, $output, $column, $pattern, %opts) {
+    Office::_decode("sheet_extract",
+        office__sheet_extract(to_json({ path => $path, output => $output, column => $column, pattern => $pattern, group => $opts{group}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Reverse the order of a sheet's data rows (header kept on top). opts: output
 ## (default in place), sheet, header, format. Returns { ok, path, rows }.
 fn Office::sheet_reverse ($path, %opts) {

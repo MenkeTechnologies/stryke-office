@@ -9468,6 +9468,85 @@ fn op_sheet_substr(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into.unwrap_or(base) }))
 }
 
+/// Extract a regular-expression match (or capture group) from a column into a
+/// new column (pandas `str.extract`) — parse structured text like dates, codes,
+/// or domains. opts: path, output, column => name/index (required), pattern =>
+/// regex (required), group => capture-group index to extract (default 0 = whole
+/// match), into => new column header (default "{column}_extract"), sheet, header,
+/// format. Cells with no match (or a missing group) get a blank. Returns
+/// `{ ok, path, column, matched }` (count of cells that matched).
+fn op_sheet_extract(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let pattern = req_str(&opts, "pattern")?;
+    let group = opts.get("group").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let re = regex::Regex::new(pattern).map_err(|e| anyhow!("invalid regex: {e}"))?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_extract"));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut matched = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).map(cell_to_string).unwrap_or_default();
+            let extracted = re
+                .captures(&src)
+                .and_then(|caps| caps.get(group))
+                .map(|m| m.as_str().to_string());
+            let cell = match extracted {
+                Some(s) => {
+                    matched += 1;
+                    json!(s)
+                }
+                None => json!(""),
+            };
+            cells.push(cell);
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into, "matched": matched }))
+}
+
 /// Reverse the order of a sheet's data rows (e.g. show newest entries first).
 /// opts: path, output (default in place), sheet, header (default true; the header
 /// row stays on top, only the data rows are reversed), format. Returns
@@ -11713,6 +11792,7 @@ export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_pad, op_sheet_pad);
 export!(office__sheet_substr, op_sheet_substr);
+export!(office__sheet_extract, op_sheet_extract);
 export!(office__sheet_reverse, op_sheet_reverse);
 export!(office__sheet_coalesce, op_sheet_coalesce);
 export!(office__sheet_recode, op_sheet_recode);
