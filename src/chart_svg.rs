@@ -79,6 +79,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "density" => svg_density(&mut s, series, opts, l, t, r, b),
         "violin" => svg_violin(&mut s, series, opts, l, t, r, b),
         "ecdf" => svg_ecdf(&mut s, series, l, t, r, b),
+        "qq" | "qqplot" => svg_qq(&mut s, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -1375,6 +1376,76 @@ fn svg_ecdf(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
             let _ = write!(line, "{:.1},{:.1} ", xp(x), yp(f));
         }
         let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="2"/>"##);
+    }
+}
+
+/// Normal QQ plot (vector; ggplot2 `stat_qq` + `geom_qq_line`). Sample quantiles
+/// (y) vs theoretical standard-normal quantiles (x) as a point cloud per series,
+/// plus a reference line through the quartiles.
+fn svg_qq(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let clouds: Vec<Vec<(f64, f64)>> = series
+        .iter()
+        .map(|ser| {
+            let mut d = series_nums(ser);
+            d.sort_by(|a, c| a.partial_cmp(c).unwrap_or(std::cmp::Ordering::Equal));
+            let n = d.len();
+            d.iter()
+                .enumerate()
+                .map(|(i, &v)| (norm_ppf((i as f64 + 0.5) / n as f64), v))
+                .collect()
+        })
+        .collect();
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for c in &clouds {
+        for &(x, y) in c {
+            if x.is_finite() {
+                xmin = xmin.min(x);
+                xmax = xmax.max(x);
+            }
+            ymin = ymin.min(y);
+            ymax = ymax.max(y);
+        }
+    }
+    if !xmin.is_finite() || !ymin.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let xp = |x: f64| l + (x - xmin) / (xmax - xmin) * pw;
+    let yp = |y: f64| b - (y - ymin) / (ymax - ymin) * ph;
+    for i in 0..=5 {
+        let y = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let py = yp(y);
+        let _ = write!(s, r##"<line x1="{l}" y1="{py:.1}" x2="{r}" y2="{py:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, py + 4.0, xml_escape(&fmt_num(y)));
+    }
+    let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(xmin)));
+    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(xmax)));
+
+    let (tq1, tq3) = (norm_ppf(0.25), norm_ppf(0.75));
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        for &(x, y) in &clouds[si] {
+            if x.is_finite() {
+                let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="3" fill="{col}"/>"##, xp(x), yp(y));
+            }
+        }
+        if let Some(fv) = five_number(&series_nums(ser)) {
+            let (sq1, sq3) = (fv[1], fv[3]);
+            if (tq3 - tq1).abs() > f64::EPSILON {
+                let slope = (sq3 - sq1) / (tq3 - tq1);
+                let line_y = |x: f64| sq1 + slope * (x - tq1);
+                let _ = write!(s, r##"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{col}" stroke-width="1.5"/>"##, xp(xmin), yp(line_y(xmin)), xp(xmax), yp(line_y(xmax)));
+            }
+        }
     }
 }
 
