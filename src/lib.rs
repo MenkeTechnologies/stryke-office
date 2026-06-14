@@ -7572,6 +7572,119 @@ fn op_sheet_resample(opts: Value) -> Result<Value> {
 /// "{column}_{part}"), sheet, header, format. Cells too short for the requested
 /// part get a blank. year/month/day are emitted as integers, ym as text. Returns
 /// `{ ok, path, column }`.
+/// Days since the Unix epoch (1970-01-01) for a proleptic-Gregorian date, via
+/// Howard Hinnant's branch-free `days_from_civil` algorithm (exact, no deps).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = y - (m <= 2) as i64;
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146097 + doe - 719468
+}
+
+/// Parse the leading `YYYY-MM-DD` of an ISO date/datetime string into epoch days.
+fn iso_to_epoch_days(s: &str) -> Option<i64> {
+    let c: Vec<char> = s.chars().take(10).collect();
+    if c.len() < 10 {
+        return None;
+    }
+    let part =
+        |a: usize, b: usize| -> Option<i64> { c[a..b].iter().collect::<String>().parse().ok() };
+    Some(days_from_civil(part(0, 4)?, part(5, 7)?, part(8, 10)?))
+}
+
+/// Append a column of the signed difference between two ISO-date columns
+/// (`end − start`), in days or weeks. opts: path, output, start => column
+/// name/index (required), end => column name/index (required), unit => `days`
+/// (default) | `weeks`, into => new column (default `date_diff`), decimals =>
+/// round (weeks), sheet, header (default true), format. Rows with an unparseable
+/// date in either column get a blank. Returns `{ ok, path, column }`.
+fn op_sheet_date_diff(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let unit = opts.get("unit").and_then(Value::as_str).unwrap_or("days");
+    if !matches!(unit, "days" | "weeks") {
+        return Err(anyhow!("unknown unit: {unit} (days|weeks)"));
+    }
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let scol = resolve_col(opts.get("start"), header_row)?;
+    let ecol = resolve_col(opts.get("end"), header_row)?;
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| "date_diff".to_string());
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let sd = cells
+                .get(scol)
+                .map(cell_to_string)
+                .and_then(|s| iso_to_epoch_days(&s));
+            let ed = cells
+                .get(ecol)
+                .map(cell_to_string)
+                .and_then(|s| iso_to_epoch_days(&s));
+            let cell = match (sd, ed) {
+                (Some(s), Some(e)) => {
+                    let days = (e - s) as f64;
+                    let v = if unit == "weeks" { days / 7.0 } else { days };
+                    let v = match decimals {
+                        Some(d) => {
+                            let f = 10f64.powi(d as i32);
+                            (v * f).round() / f
+                        }
+                        None => v,
+                    };
+                    // whole days render as integers
+                    if unit == "days" {
+                        json!(v as i64)
+                    } else {
+                        json!(v)
+                    }
+                }
+                _ => json!(""),
+            };
+            cells.push(cell);
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_date_part(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -14423,6 +14536,7 @@ export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_resample, op_sheet_resample);
 export!(office__sheet_group_stats, op_sheet_group_stats);
 export!(office__sheet_date_part, op_sheet_date_part);
+export!(office__sheet_date_diff, op_sheet_date_diff);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);

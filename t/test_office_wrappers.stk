@@ -931,6 +931,17 @@ assert_eq $dpb->[0]{rows}[1][2], 1, "sheet_date_part: 2026-01-05 -> month 1"
 unlink $dpo
 unlink $rsx
 unlink $rso
+# sheet_date_diff: days between two date columns
+val $ddx = "$dir/$tag-datediff.xlsx"
+Office::sheet_write($ddx, [{ name => "D", rows => [["start", "end"], ["2026-01-01", "2026-01-08"], ["2026-06-14", "2026-06-14"]] }])
+val $ddo = "$dir/$tag-datediff-out.xlsx"
+val $ddr = Office::sheet_date_diff($ddx, "start", "end", $ddo, into => "gap")
+assert_eq $ddr->{column}, "gap", "sheet_date_diff: new column"
+val $ddb = Office::sheet_read($ddo)
+assert_eq $ddb->[0]{rows}[1][2], 7, "sheet_date_diff: one week = 7 days"
+assert_eq $ddb->[0]{rows}[2][2], 0, "sheet_date_diff: same date = 0"
+unlink $ddx
+unlink $ddo
 # sheet_running: group-wise running total
 val $rnx2 = "$dir/$tag-running.xlsx"
 Office::sheet_write($rnx2, [{ name => "D", rows => [["region", "amt"], ["west", 10], ["east", 5], ["west", 30]] }])

@@ -4575,6 +4575,58 @@ fn sheet_date_part_extract() {
 }
 
 #[test]
+fn sheet_date_diff_days_between() {
+    let path = tmp("datediff.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["start","end"],
+                ["2026-01-01","2026-01-08"],
+                ["2024-02-28","2024-03-01"],
+                ["2026-06-14","2026-06-14"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("datediff_out.xlsx");
+    let r = call(
+        office__sheet_date_diff,
+        &format!(
+            r#"{{"path":"{path}","start":"start","end":"end","output":"{out}","into":"gap"}}"#
+        ),
+    );
+    assert_eq!(r["column"], "gap", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][2], "gap", "header appended: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 7.0, "one week = 7 days: {rd}");
+    // 2024 is a leap year: Feb 28 -> Mar 1 is 2 days
+    assert_eq!(rows[2][2].as_f64().unwrap(), 2.0, "leap-year span: {rd}");
+    assert_eq!(rows[3][2].as_f64().unwrap(), 0.0, "same date = 0: {rd}");
+
+    // weeks unit
+    let outw = tmp("datediff_wk.xlsx");
+    call(
+        office__sheet_date_diff,
+        &format!(
+            r#"{{"path":"{path}","start":"start","end":"end","output":"{outw}","unit":"weeks","decimals":3}}"#
+        ),
+    );
+    let rdw = call(office__sheet_read, &format!(r#"{{"path":"{outw}"}}"#));
+    assert_eq!(
+        rdw["sheets"][0]["rows"][1][2].as_f64().unwrap(),
+        1.0,
+        "7 days = 1 week: {rdw}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outw).ok();
+}
+
+#[test]
 fn sheet_group_stats_per_group() {
     let path = tmp("grpstats.xlsx");
     let w = call(

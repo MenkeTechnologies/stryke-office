@@ -638,6 +638,14 @@ fn Office::sheet_date_part ($path, $output, $column, %opts) {
         office__sheet_date_part(to_json({ path => $path, output => $output, column => $column, part => $opts{part}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append the signed difference ($end - $start) between two ISO-date columns.
+## opts: unit (days|weeks, default days), into (default date_diff), decimals,
+## sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_date_diff ($path, $start, $end, $output, %opts) {
+    Office::_decode("sheet_date_diff",
+        office__sheet_date_diff(to_json({ path => $path, start => $start, end => $end, output => $output, unit => $opts{unit}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Group by a column and concatenate another column's values per group (SQL
 ## GROUP_CONCAT). opts: sep, distinct, sheet, header, format. Returns { ok, path, groups }.
 fn Office::sheet_group_concat ($path, $group_by, $value, $output, %opts) {
