@@ -951,6 +951,16 @@ val $dab = Office::sheet_read($dao)
 assert_eq $dab->[0]{rows}[1][1], "2026-02-28", "sheet_date_add: Jan31 +1mo clamps to Feb28"
 unlink $dax
 unlink $dao
+# sheet_weekday: day-of-week name
+val $wkx = "$dir/$tag-weekday.xlsx"
+Office::sheet_write($wkx, [{ name => "D", rows => [["d"], ["2026-06-14"], ["2026-06-15"]] }])
+val $wko = "$dir/$tag-weekday-out.xlsx"
+Office::sheet_weekday($wkx, "d", $wko, into => "dow")
+val $wkb = Office::sheet_read($wko)
+assert_eq $wkb->[0]{rows}[1][1], "Sunday", "sheet_weekday: 2026-06-14 is Sunday"
+assert_eq $wkb->[0]{rows}[2][1], "Monday", "sheet_weekday: 2026-06-15 is Monday"
+unlink $wkx
+unlink $wko
 # sheet_running: group-wise running total
 val $rnx2 = "$dir/$tag-running.xlsx"
 Office::sheet_write($rnx2, [{ name => "D", rows => [["region", "amt"], ["west", 10], ["east", 5], ["west", 30]] }])

@@ -4673,6 +4673,52 @@ fn sheet_date_add_shift() {
 }
 
 #[test]
+fn sheet_weekday_names() {
+    let path = tmp("weekday.xlsx");
+    // 2026-06-14 is a Sunday; 2026-06-15 a Monday
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["d"],["2026-06-14"],["2026-06-15"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("weekday_out.xlsx");
+    let r = call(
+        office__sheet_weekday,
+        &format!(r#"{{"path":"{path}","column":"d","output":"{out}","into":"dow"}}"#),
+    );
+    assert_eq!(r["column"], "dow", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1], "Sunday", "2026-06-14 is Sunday: {rd}");
+    assert_eq!(rows[2][1], "Monday", "2026-06-15 is Monday: {rd}");
+
+    // ISO number: Sunday=7, Monday=1
+    let outi = tmp("weekday_iso.xlsx");
+    call(
+        office__sheet_weekday,
+        &format!(r#"{{"path":"{path}","column":"d","output":"{outi}","format":"iso"}}"#),
+    );
+    let rdi = call(office__sheet_read, &format!(r#"{{"path":"{outi}"}}"#));
+    assert_eq!(
+        rdi["sheets"][0]["rows"][1][1].as_f64().unwrap(),
+        7.0,
+        "Sunday ISO 7: {rdi}"
+    );
+    assert_eq!(
+        rdi["sheets"][0]["rows"][2][1].as_f64().unwrap(),
+        1.0,
+        "Monday ISO 1: {rdi}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outi).ok();
+}
+
+#[test]
 fn sheet_group_stats_per_group() {
     let path = tmp("grpstats.xlsx");
     let w = call(

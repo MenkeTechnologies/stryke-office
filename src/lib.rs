@@ -7734,6 +7734,95 @@ fn days_in_month(y: i64, m: i64) -> i64 {
 /// (default true), format. Day/week math is exact; month math clamps to the
 /// target month's last day (Jan 31 + 1 month → Feb 28/29). Unparseable dates
 /// become blank. Returns `{ ok, path, column }`.
+/// Append the day-of-week of an ISO-date column. opts: path, output, column =>
+/// date column name/index (required), format => `name` (default, "Monday") |
+/// `short` ("Mon") | `num` (0–6, 0=Sunday) | `iso` (1–7, 1=Monday), into =>
+/// new column (default `{column}_weekday`), sheet, header (default true),
+/// format. Unparseable dates become blank. Returns `{ ok, path, column }`.
+fn op_sheet_weekday(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let fmt = opts.get("format").and_then(Value::as_str).unwrap_or("name");
+    if !matches!(fmt, "name" | "short" | "num" | "iso") {
+        return Err(anyhow!("unknown format: {fmt} (name|short|num|iso)"));
+    }
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_weekday"));
+
+    // 1970-01-01 (epoch day 0) is a Thursday; index 0 = Sunday.
+    const NAMES: [&str; 7] = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+    const SHORT: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let dow = |s: &str| -> Option<Value> {
+        let (y, m, d) = iso_to_ymd(s)?;
+        let idx = (days_from_civil(y, m, d) + 4).rem_euclid(7) as usize; // 0=Sun
+        Some(match fmt {
+            "name" => json!(NAMES[idx]),
+            "short" => json!(SHORT[idx]),
+            "num" => json!(idx),
+            // ISO: 1=Monday..7=Sunday
+            _ => json!(if idx == 0 { 7 } else { idx }),
+        })
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = cells
+                    .get(col)
+                    .map(cell_to_string)
+                    .and_then(|s| dow(&s))
+                    .unwrap_or(json!(""));
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+    // `format` here selects the weekday style, so the output file format is
+    // taken from the output path's extension (no format passthrough).
+    op_sheet_write(json!({ "path": output, "sheets": sheets }))?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_date_add(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -14672,6 +14761,7 @@ export!(office__sheet_group_stats, op_sheet_group_stats);
 export!(office__sheet_date_part, op_sheet_date_part);
 export!(office__sheet_date_diff, op_sheet_date_diff);
 export!(office__sheet_date_add, op_sheet_date_add);
+export!(office__sheet_weekday, op_sheet_weekday);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);
