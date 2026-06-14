@@ -921,6 +921,14 @@ fn Office::sheet_add_header ($path, $names, $output, %opts) {
         office__sheet_add_header(to_json({ path => $path, names => $names, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Prepend a sequential row-number column (row IDs). opts: name (default
+## "index"), start (default 1), step (default 1), sheet, header, format. Returns
+## { ok, path, rows }.
+fn Office::sheet_add_index ($path, $output, %opts) {
+    Office::_decode("sheet_add_index",
+        office__sheet_add_index(to_json({ path => $path, output => $output, name => $opts{name}, start => $opts{start}, step => $opts{step}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a computed column from an arithmetic op (+ - * / %) between two columns
 ## or a column and a constant. opts: right (column) or value (constant), into,
 ## decimals, sheet, header, format. Returns { ok, path, column }.

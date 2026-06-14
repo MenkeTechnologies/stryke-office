@@ -375,6 +375,15 @@ Office::sheet_add_header($gcx, ["c1", "c2"], $aho)
 val $ahr = Office::sheet_get_cell($aho, "A1")
 assert_eq $ahr->{value}, "c1", "sheet_add_header: header prepended"
 unlink $aho
+# add an index column
+val $aio = "$dir/$tag-ai-out.xlsx"
+val $air = Office::sheet_add_index($gcx, $aio, name => "id")
+assert_ok ($air->{rows} >= 1), "sheet_add_index: rows numbered"
+val $aib = Office::sheet_get_cell($aio, "A1")
+assert_eq $aib->{value}, "id", "sheet_add_index: index header prepended"
+val $ai2 = Office::sheet_get_cell($aio, "A2")
+assert_eq $ai2->{value}, 1, "sheet_add_index: first index is 1"
+unlink $aio
 
 # calc: build a numeric sheet and compute a*2
 val $clx = "$dir/$tag-calc.xlsx"

@@ -8454,6 +8454,58 @@ fn op_sheet_add_header(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "columns": names.len() }))
 }
 
+/// Prepend a sequential row-number column (row IDs; like `df.reset_index` or
+/// `nl`). opts: path, output, name => header for the new column (default
+/// "index"), start => first number (default 1), step => increment (default 1),
+/// sheet, header (default true; the index header is added to the header row),
+/// format. Returns `{ ok, path, rows }` (numbered data rows).
+fn op_sheet_add_index(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let name = opts.get("name").and_then(Value::as_str).unwrap_or("index");
+    let start = opts.get("start").and_then(Value::as_i64).unwrap_or(1);
+    let step = opts.get("step").and_then(Value::as_i64).unwrap_or(1);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut n = 0i64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = vec![if i < data_start {
+                json!(name)
+            } else {
+                let idx = start + n * step;
+                n += 1;
+                json!(idx)
+            }];
+            cells.extend(row.as_array().cloned().unwrap_or_default());
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n }))
+}
+
 /// Append a computed column from an arithmetic op between two columns, or a
 /// column and a constant (e.g. `total = qty * price`). opts: path, output, into
 /// => new column header (required), left => column name/index (required), op =>
@@ -12124,6 +12176,7 @@ export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_interpolate, op_sheet_interpolate);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_add_header, op_sheet_add_header);
+export!(office__sheet_add_index, op_sheet_add_index);
 export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_freeze, op_sheet_freeze);
