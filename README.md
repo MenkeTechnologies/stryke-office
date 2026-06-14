@@ -313,6 +313,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::text_sort($path, %opts)` | `{ok, path, lines}` | sort a text file's lines (`sort`/`uniq`); `descending`/`numeric`/`unique`/`ignore_case` opts |
 | `Office::text_uniq($path, %opts)` | `{ok, path, lines}` | collapse duplicate lines (`uniq`); `count`/`global`/`ignore_case` opts |
 | `Office::text_sed($path, $pattern, $replacement, %opts)` | `{ok, path, replaced}` | regex find/replace over a text file (`sed s/…/…/g`) with `$1` backreferences; `global`/`ignore_case` opts |
+| `Office::text_extract($path, $pattern, %opts)` | `{count, matches, path?}` | extract all regex matches/capture groups from a text file into a list; `group`/`unique`/`ignore_case`/`output` opts |
 | `Office::text_cut($path, $fields, %opts)` | `{count, lines, path?}` | extract delimited fields per line (`cut -d -f`); `delim`/`output_delim`/`output` opts |
 | `Office::text_wrap($path, %opts)` | `{ok, path, lines}` | wrap long lines to a max width (`fmt`/`fold -s`); `width`/`break_words`/`output` opts |
 | `Office::text_head($path, %opts)` | `{count, lines, path?}` | first (or last) N lines of a text file (`head`/`tail`); `n`/`tail`/`output` opts |

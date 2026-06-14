@@ -84,6 +84,13 @@ val $sedt = slurp $sedo
 assert_ok ($sedt =~ /06\/14\/2026/), "text_sed: backreferences reorder date"
 unlink $sedx
 unlink $sedo
+# text_extract: pull all regex matches into a list
+val $texx = "$dir/$tag-textract.txt"
+spew $texx, "call 555-1212 or 555-3434\n"
+val $texr = Office::text_extract($texx, '\d{3}-\d{4}')
+assert_eq $texr->{count}, 2, "text_extract: two phone numbers"
+assert_eq $texr->{matches}[0], "555-1212", "text_extract: first match"
+unlink $texx
 
 # ── meta_write / meta_read: hashref props ───────────────────────────
 val $mx = "$dir/$tag-meta.docx"

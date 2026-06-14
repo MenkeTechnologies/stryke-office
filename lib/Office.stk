@@ -1811,6 +1811,14 @@ fn Office::text_sed ($path, $pattern, $replacement, %opts) {
         office__text_sed(to_json({ path => $path, pattern => $pattern, replacement => $replacement, global => $opts{global}, ignore_case => $opts{ignore_case}, output => $opts{output} })))
 }
 
+## Extract every regex match (or capture group) from a text file into a list.
+## $pattern is a regex. opts: group (capture index, default 0), unique, ignore_case,
+## output (write one per line; omit to return). Returns { count, matches, path? }.
+fn Office::text_extract ($path, $pattern, %opts) {
+    Office::_decode("text_extract",
+        office__text_extract(to_json({ path => $path, pattern => $pattern, group => $opts{group}, unique => $opts{unique}, ignore_case => $opts{ignore_case}, output => $opts{output} })))
+}
+
 ## Grep matching lines from a text file. opts: ignore_case, invert, max.
 ## Returns { count, matches => [{ line, text }] } (1-based line numbers).
 fn Office::text_grep ($path, $query, %opts) {
