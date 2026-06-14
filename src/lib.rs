@@ -1710,6 +1710,89 @@ fn op_sheet_agg(opts: Value) -> Result<Value> {
     Ok(json!({ "column": col_name, "agg": agg, "value": value, "count": n }))
 }
 
+/// Locate the row holding a numeric column's maximum (or minimum) — pandas
+/// `idxmax`/`idxmin`. Unlike `sheet_agg` (which returns the extreme *value*),
+/// this returns *where* it is. opts: path, column => name/index (required), min
+/// => find the minimum instead of the maximum (default false), label => an
+/// optional column whose value identifies the row (e.g. a name), sheet, header.
+/// On ties the first occurrence wins. Returns `{ column, row, value, label? }`
+/// where `row` is the 0-based data-row index; value/row are null if no numbers.
+fn op_sheet_argmax(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let want_min = opts.get("min").and_then(flag_of).unwrap_or(false);
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let label_col = match opts.get("label") {
+        None | Some(Value::Null) => None,
+        c => Some(resolve_col(c, header_row)?),
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut best: Option<(usize, f64)> = None;
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        if let Some(x) = row
+            .as_array()
+            .and_then(|a| a.get(col))
+            .and_then(sheet_cell_num)
+        {
+            let take = match best {
+                None => true,
+                Some((_, b)) => {
+                    if want_min {
+                        x < b
+                    } else {
+                        x > b
+                    }
+                }
+            };
+            if take {
+                best = Some((i, x));
+            }
+        }
+    }
+
+    match best {
+        Some((i, v)) => {
+            let mut out = json!({ "column": col_name, "row": i, "value": v });
+            if let Some(lc) = label_col {
+                let label = rows
+                    .get(data_start + i)
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.get(lc))
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                out["label"] = label;
+            }
+            Ok(out)
+        }
+        None => Ok(json!({ "column": col_name, "row": Value::Null, "value": Value::Null })),
+    }
+}
+
 /// Render a numeric column as a one-line Unicode block sparkline (the eight
 /// levels ▁▂▃▄▅▆▇█) — a compact trend glyph for terminals, Markdown, or commit
 /// messages. Each value maps linearly from the column's [min, max] to one of the
@@ -11772,6 +11855,7 @@ export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);
+export!(office__sheet_argmax, op_sheet_argmax);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);

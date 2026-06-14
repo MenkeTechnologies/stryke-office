@@ -396,6 +396,42 @@ fn sheet_sparkline_blocks() {
 }
 
 #[test]
+fn sheet_argmax_locates_extreme() {
+    let path = tmp("argmax.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["name","sales"],
+                ["a",30],
+                ["b",90],
+                ["c",10]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // max sales -> row 1 (b, 90)
+    let r = call(
+        office__sheet_argmax,
+        &format!(r#"{{"path":"{path}","column":"sales","label":"name"}}"#),
+    );
+    assert_eq!(r["row"], 1, "max at data row 1: {r}");
+    assert_eq!(r["value"].as_f64().unwrap(), 90.0, "max value: {r}");
+    assert_eq!(r["label"], "b", "label of the max row: {r}");
+
+    // min sales -> row 2 (c, 10)
+    let rm = call(
+        office__sheet_argmax,
+        &format!(r#"{{"path":"{path}","column":"sales","min":true,"label":"name"}}"#),
+    );
+    assert_eq!(rm["row"], 2, "min at data row 2: {rm}");
+    assert_eq!(rm["label"], "c", "label of the min row: {rm}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_corr_pearson_matrix() {
     let path = tmp("corr.xlsx");
     // y = 2x (perfect +), z = -x (perfect -).

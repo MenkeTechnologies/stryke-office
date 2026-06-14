@@ -192,6 +192,14 @@ assert_eq $spk->{count}, 3, "sheet_sparkline: value count"
 assert_ok (length($spk->{sparkline}) > 0), "sheet_sparkline: non-empty glyph string"
 unlink $spkx
 
+# sheet_argmax: locate the row of the max
+val $amx = "$dir/$tag-argmax.xlsx"
+Office::sheet_write($amx, [{ name => "D", rows => [["name", "sales"], ["a", 30], ["b", 90], ["c", 10]] }])
+val $amr = Office::sheet_argmax($amx, "sales", label => "name")
+assert_eq $amr->{row}, 1, "sheet_argmax: max at row 1"
+assert_eq $amr->{label}, "b", "sheet_argmax: label of max row"
+unlink $amx
+
 val $fr = Office::sheet_freq($xl, "Item")
 assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
 unlink $xl
