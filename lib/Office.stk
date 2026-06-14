@@ -1453,6 +1453,14 @@ fn Office::slides_set_title ($path, $slide, $title, %opts) {
         office__slides_set_title(to_json({ path => $path, slide => $slide, title => $title, output => $opts{output}, format => $opts{format} })))
 }
 
+## Set (replace) the body lines of slide $slide (1-based); title preserved.
+## $body is an arrayref of lines. opts: output (default in place), format.
+## Returns { ok, path, slide }.
+fn Office::slides_set_body ($path, $slide, $body, %opts) {
+    Office::_decode("slides_set_body",
+        office__slides_set_body(to_json({ path => $path, slide => $slide, body => $body, output => $opts{output}, format => $opts{format} })))
+}
+
 # ── pdf ─────────────────────────────────────────────────────────────
 
 ## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.

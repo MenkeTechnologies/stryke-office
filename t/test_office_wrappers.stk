@@ -332,6 +332,14 @@ assert_eq $stitr->{slide}, 1, "slides_set_title: slide number"
 val $stitread = Office::slides_read($stito)
 assert_eq $stitread->[0]{text}[0], "New Title", "slides_set_title: title replaced"
 assert_eq $stitread->[0]{text}[1], "keep", "slides_set_title: body preserved"
+# slides_set_body: replace the body lines
+val $sbo3 = "$dir/$tag-setbody-out.pptx"
+val $sbr3 = Office::slides_set_body($stito, 1, ["fresh body"], output => $sbo3)
+assert_eq $sbr3->{slide}, 1, "slides_set_body: slide number"
+val $sbread = Office::slides_read($sbo3)
+assert_eq $sbread->[0]{text}[0], "New Title", "slides_set_body: title preserved"
+assert_eq $sbread->[0]{text}[1], "fresh body", "slides_set_body: body replaced"
+unlink $sbo3
 unlink $stitx
 unlink $stito
 val $s2sh = "$dir/$tag-s2sheet.xlsx"
