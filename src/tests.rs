@@ -10779,6 +10779,42 @@ fn chart_density_kde_raster_and_svg() {
 }
 
 #[test]
+fn chart_violin_raster_and_svg() {
+    // two groups of raw values -> side-by-side violins
+    let series = r#"[{"name":"ctrl","data":[2,3,3,4,4,4,5,5,6]},{"name":"treat","data":[5,6,6,7,7,7,8,8,9]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"violin","width":480,"height":340,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("violin raster: {c}"));
+    assert_eq!(c["type"], "violin", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"violin","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "violin svg malformed"
+    );
+    // mirrored KDE shape is a closed path; white median tick present
+    assert!(
+        svg.contains("<path") && svg.contains("Z\""),
+        "violin svg closed shape"
+    );
+    assert!(svg.contains("stroke=\"#ffffff\""), "violin svg median tick");
+    // category labels under the axis
+    assert!(
+        svg.contains(">ctrl<") && svg.contains(">treat<"),
+        "violin svg category labels"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

@@ -284,6 +284,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_density(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
         }
+        "violin" => {
+            require_series(&opts)?;
+            render_violin(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -890,6 +894,100 @@ fn render_density(
         for w in verts.windows(2) {
             draw_line_segment_mut(img, w[0], w[1], color);
         }
+    }
+}
+
+/// Violin plot (ggplot2 `geom_violin`) — one mirrored Gaussian-KDE shape per
+/// series, placed at evenly spaced category slots over a shared value (y) axis.
+/// Each violin is width-normalized (`scale="width"`: the densest point reaches
+/// the full half-width) so shapes are comparable, with a white median marker.
+/// opts: `points` => KDE grid resolution per violin (default 64).
+#[allow(clippy::too_many_arguments)]
+fn render_violin(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            ymin = ymin.min(v);
+            ymax = ymax.max(v);
+        }
+    }
+    if !ymin.is_finite() || !ymax.is_finite() {
+        return;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let pad = (ymax - ymin) * 0.05;
+    let (ymin, ymax) = (ymin - pad, ymax + pad);
+    let points = opts.get("points").and_then(Value::as_u64).unwrap_or(64).clamp(16, 512) as usize;
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let yp = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * ph) as f32;
+    for i in 0..=5 {
+        let v = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(v);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &fmt_num(v));
+    }
+
+    let nser = series.len().max(1);
+    let slot = pw / nser as f64;
+    let half = slot * 0.4;
+    for (si, s) in series.iter().enumerate() {
+        let data = series_nums(s);
+        if data.is_empty() {
+            continue;
+        }
+        let (dlo, dhi) = data.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, c), &v| {
+            (a.min(v), c.max(v))
+        });
+        let cur = kde_curve(&data, dlo, dhi, points);
+        let maxd = cur.iter().map(|&(_, d)| d).fold(f64::EPSILON, f64::max);
+        let cx = l as f64 + (si as f64 + 0.5) * slot;
+        let color = series_color(s, si);
+
+        // Right boundary going up, then left boundary coming back down — a
+        // closed symmetric outline around the slot center.
+        let mut poly: Vec<Point<i32>> = Vec::with_capacity(cur.len() * 2);
+        for &(v, d) in &cur {
+            let off = d / maxd * half;
+            poly.push(Point::new((cx + off) as i32, yp(v) as i32));
+        }
+        for &(v, d) in cur.iter().rev() {
+            let off = d / maxd * half;
+            poly.push(Point::new((cx - off) as i32, yp(v) as i32));
+        }
+        poly.dedup();
+        if poly.len() >= 3 && poly.first() != poly.last() {
+            let mut fillc = color;
+            fillc.0[3] = 110;
+            draw_polygon_mut(img, &poly, fillc);
+        }
+        for w in poly.windows(2) {
+            draw_line_segment_mut(img, (w[0].x as f32, w[0].y as f32), (w[1].x as f32, w[1].y as f32), color);
+        }
+        // median marker
+        if let Some(fv) = five_number(&data) {
+            let y = yp(fv[2]);
+            draw_line_segment_mut(img, ((cx - half * 0.5) as f32, y), ((cx + half * 0.5) as f32, y), Rgba([255, 255, 255, 255]));
+        }
+        // category label
+        let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        draw_text_mut(img, black, (cx - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(12.0), fnt, &name);
     }
 }
 
