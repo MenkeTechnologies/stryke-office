@@ -198,6 +198,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_to_doc($path, $output, %opts)` | `{slides}` | turn a deck into a document (slides → headings + paragraphs); `notes` opt |
 | `Office::slides_to_pdf($path, $output, %opts)` | `{slides}` | render a deck to a PDF handout, one slide per page; `notes` opt |
 | `Office::slides_outline($path)` | `{count, outline}` | extract slide titles as a deck outline/TOC (`[{slide, title}]`) |
+| `Office::slides_split($path, $dir, %opts)` | `{count, files}` | split a deck into one file per slide; `prefix`/`format` opts |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}` |

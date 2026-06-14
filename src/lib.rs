@@ -3994,6 +3994,64 @@ fn op_slides_merge(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "sources": inputs.len(), "slides": n }))
 }
 
+/// Split a deck into one file per slide (the presentation analogue of
+/// `doc_split`/`pdf_burst`). opts: path (pptx/odp), dir => output directory,
+/// format => extension override (default = source ext), prefix => file-name stem
+/// (default = source stem). Each source slide's first text line becomes the title
+/// and the rest the body. Returns `{ count, files: [path] }`.
+fn op_slides_split(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let ext = opts
+        .get("format")
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| ext_of(path));
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("slide")
+                .to_string()
+        });
+
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut files = Vec::new();
+    for (i, s) in slides.iter().enumerate() {
+        let text: Vec<String> = s
+            .get("text")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (title, body) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        let out = format!("{dir}/{prefix}-{}.{ext}", i + 1);
+        op_slides_write(json!({
+            "path": out,
+            "slides": [{ "title": title, "body": body }],
+            "format": ext,
+        }))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
+
 /// Statistics for a presentation (pptx/odp). opts: path. Returns `{ slides,
 /// words (in slide text), notes_words, per_slide: [{ words, notes_words }] }`.
 fn op_slides_stats(opts: Value) -> Result<Value> {
@@ -4203,6 +4261,7 @@ export!(office__doc_write, op_doc_write);
 export!(office__slides_read, op_slides_read);
 export!(office__slides_write, op_slides_write);
 export!(office__slides_merge, op_slides_merge);
+export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);
 export!(office__slides_append, op_slides_append);
 export!(office__pdf_read, op_pdf_read);
