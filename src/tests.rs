@@ -11270,6 +11270,45 @@ fn image_phash_dedup() {
 }
 
 #[test]
+fn image_crop_aspect_centered() {
+    // 100x100 -> crop to 16:9 keeps full width, height = 100/(16/9) ≈ 56
+    let n = call(
+        office__img_new,
+        r#"{"width":100,"height":100,"color":[10,20,30,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    let r = call(
+        office__img_crop_aspect,
+        &format!(r#"{{"handle":{h},"aspect":[16,9]}}"#),
+    );
+    assert_eq!(
+        r["width"].as_u64().unwrap(),
+        100,
+        "wide aspect keeps width: {r}"
+    );
+    assert_eq!(
+        r["height"].as_u64().unwrap(),
+        56,
+        "height = 100*9/16 rounded: {r}"
+    );
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    // ratio form: square 1:1 from a 80x40 image -> 40x40
+    let n2 = call(
+        office__img_new,
+        r#"{"width":80,"height":40,"color":[1,2,3,255]}"#,
+    );
+    let h2 = n2["handle"].as_u64().unwrap();
+    let r2 = call(
+        office__img_crop_aspect,
+        &format!(r#"{{"handle":{h2},"ratio":1.0}}"#),
+    );
+    assert_eq!(r2["width"].as_u64().unwrap(), 40, "square width: {r2}");
+    assert_eq!(r2["height"].as_u64().unwrap(), 40, "square height: {r2}");
+    call(office__img_close, &format!(r#"{{"handle":{h2}}}"#));
+}
+
+#[test]
 fn image_color_science_and_distortions() {
     let n = call(
         office__img_new,

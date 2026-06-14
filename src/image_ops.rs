@@ -246,6 +246,44 @@ fn op_img_crop(opts: Value) -> Result<Value> {
     with_image(handle, |img| Ok(info_json(handle, img)))
 }
 
+/// Center-crop to a target aspect ratio (the maximum-area rectangle of that
+/// ratio, centered), e.g. to make a 16:9 banner or 1:1 avatar without
+/// distortion. Distinct from `img_crop` (explicit coordinates) and `img_fit`
+/// (letterbox/pad). opts: handle, and the ratio as either `aspect` => `[w, h]`
+/// or `ratio` => a float `w/h`. Returns the cropped image info.
+fn op_img_crop_aspect(opts: Value) -> Result<Value> {
+    let handle = req_u64_img(&opts, "handle")?;
+    let target = match (opts.get("aspect").and_then(Value::as_array), opts.get("ratio").and_then(Value::as_f64)) {
+        (Some(a), _) if a.len() == 2 => {
+            let w = a[0].as_f64().unwrap_or(0.0);
+            let h = a[1].as_f64().unwrap_or(0.0);
+            if w <= 0.0 || h <= 0.0 {
+                return Err(anyhow!("aspect must be two positive numbers"));
+            }
+            w / h
+        }
+        (_, Some(r)) if r > 0.0 => r,
+        _ => return Err(anyhow!("provide aspect => [w, h] or ratio => w/h")),
+    };
+    transform(handle, move |img| {
+        let (w, h) = (img.width() as f64, img.height() as f64);
+        let cur = w / h;
+        let (cw, ch) = if cur > target {
+            // too wide: keep height, shrink width
+            ((h * target).round(), h)
+        } else {
+            // too tall: keep width, shrink height
+            (w, (w / target).round())
+        };
+        let cw = (cw as u32).clamp(1, img.width());
+        let ch = (ch as u32).clamp(1, img.height());
+        let x = (img.width() - cw) / 2;
+        let y = (img.height() - ch) / 2;
+        Ok(img.crop_imm(x, y, cw, ch))
+    })?;
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
 fn op_img_rotate(opts: Value) -> Result<Value> {
     let handle = req_u64_img(&opts, "handle")?;
     let deg = opt_i64(&opts, "degrees", 90).rem_euclid(360);

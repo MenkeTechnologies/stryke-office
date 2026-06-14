@@ -15481,6 +15481,7 @@ export!(office__img_thumbnail, op_img_thumbnail);
 export!(office__img_scale, op_img_scale);
 export!(office__img_fit, op_img_fit);
 export!(office__img_crop, op_img_crop);
+export!(office__img_crop_aspect, op_img_crop_aspect);
 export!(office__img_rotate, op_img_rotate);
 export!(office__img_flip, op_img_flip);
 export!(office__img_convert, op_img_convert);

@@ -1236,6 +1236,12 @@ val $phr = Office::img_phash($im->{handle}, other => $im->{handle})
 assert_ok ($phr->{hash} =~ /^[0-9a-f]{16}$/), "img_phash: 16-char hex hash"
 assert_eq $phr->{distance}, 0, "img_phash: self distance 0"
 Office::img_close($im->{handle})
+# img_crop_aspect: center-crop a square to 16:9
+val $cas = Office::img_new(100, 100, color => [10, 20, 30, 255])
+val $casr = Office::img_crop_aspect($cas->{handle}, aspect => [16, 9])
+assert_eq $casr->{width}, 100, "img_crop_aspect: keeps width"
+assert_eq $casr->{height}, 56, "img_crop_aspect: 16:9 height"
+Office::img_close($cas->{handle})
 # barcode_sheet: one QR per column value
 val $bcsx = "$dir/$tag-bcsheet.xlsx"
 Office::sheet_write($bcsx, [{ name => "D", rows => [["sku"], ["A100"], ["B200"]] }])

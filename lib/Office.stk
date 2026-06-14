@@ -2325,6 +2325,13 @@ fn Office::img_crop ($handle, $x, $y, $width, $height) {
         office__img_crop(to_json({ handle => $handle, x => $x, y => $y, width => $width, height => $height })))
 }
 
+## Center-crop to a target aspect ratio (max-area, no distortion). opts: aspect
+## => [w, h] OR ratio => w/h float. Returns the cropped image info.
+fn Office::img_crop_aspect ($handle, %opts) {
+    Office::_decode("img_crop_aspect",
+        office__img_crop_aspect(to_json({ handle => $handle, aspect => $opts{aspect}, ratio => $opts{ratio} })))
+}
+
 ## Rotate by degrees (90/180/270 are exact; other angles fill transparent).
 fn Office::img_rotate ($handle, $degrees) {
     Office::_decode("img_rotate",
