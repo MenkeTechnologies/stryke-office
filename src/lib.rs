@@ -6980,6 +6980,96 @@ fn op_sheet_to_xml(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "count": records.len() }))
 }
 
+/// Import a flat XML records document into a spreadsheet — the inverse of
+/// `sheet_to_xml`. Treats each second-level element (a child of the root) as a
+/// row and its direct children as header-keyed fields. opts: input => xml file,
+/// or xml => the text directly; output (required) => sheet path; row => only
+/// rows with this tag (default: every root child); fields => explicit column
+/// order; sheet_name (default "Sheet1"); format. Field values are read as
+/// strings. Returns the `records_write` result `{ ok, path, rows, fields }`.
+fn op_xml_to_sheet(opts: Value) -> Result<Value> {
+    use quick_xml::events::Event;
+    let text = match opts.get("xml").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            let input = req_str(&opts, "input")?;
+            String::from_utf8_lossy(&std::fs::read(input)?).into_owned()
+        }
+    };
+    let row_filter = opts.get("row").and_then(Value::as_str).map(String::from);
+
+    let mut reader = quick_xml::Reader::from_reader(text.as_bytes());
+    let mut buf = Vec::new();
+    let mut depth = 0usize;
+    let mut records: Vec<Value> = Vec::new();
+    let mut cur: Option<serde_json::Map<String, Value>> = None;
+    let mut field: Option<String> = None;
+    let mut acc = String::new();
+    let lname = |b: &[u8]| {
+        // strip any namespace prefix
+        let s = String::from_utf8_lossy(b);
+        s.rsplit(':').next().unwrap_or(&s).to_string()
+    };
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                depth += 1;
+                let name = lname(e.name().as_ref());
+                if depth == 2 {
+                    cur = row_filter
+                        .as_ref()
+                        .is_none_or(|r| *r == name)
+                        .then(serde_json::Map::new);
+                } else if depth == 3 && cur.is_some() {
+                    field = Some(name);
+                    acc.clear();
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if field.is_some() {
+                    if let Ok(t) = e.xml10_content() {
+                        acc.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::Empty(e)) => {
+                // self-closing field inside a row -> empty value
+                if depth == 2 {
+                    if let Some(m) = cur.as_mut() {
+                        m.insert(lname(e.name().as_ref()), json!(""));
+                    }
+                }
+            }
+            Ok(Event::End(_)) => {
+                if depth == 3 {
+                    if let (Some(f), Some(m)) = (field.take(), cur.as_mut()) {
+                        m.insert(f, json!(acc.trim().to_string()));
+                    }
+                } else if depth == 2 {
+                    if let Some(m) = cur.take() {
+                        if !m.is_empty() {
+                            records.push(Value::Object(m));
+                        }
+                    }
+                }
+                depth = depth.saturating_sub(1);
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    let mut wopts = json!({ "path": req_str(&opts, "output")?, "records": records });
+    for k in ["fields", "sheet_name", "format"] {
+        if let Some(val) = opts.get(k) {
+            wopts[k] = val.clone();
+        }
+    }
+    op_records_write(wopts)
+}
+
 /// Import JSON Lines (NDJSON) into a spreadsheet — the inverse of
 /// `sheet_to_ndjson`. opts: input => a `.jsonl`/`.ndjson` file, or ndjson => the
 /// text directly; output (required) => sheet path; fields => explicit column
@@ -15134,6 +15224,7 @@ export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
 export!(office__sheet_to_ndjson, op_sheet_to_ndjson);
 export!(office__sheet_to_xml, op_sheet_to_xml);
+export!(office__xml_to_sheet, op_xml_to_sheet);
 export!(office__ndjson_to_sheet, op_ndjson_to_sheet);
 export!(office__csv_to_sheet, op_csv_to_sheet);
 export!(office__json_to_sheet, op_json_to_sheet);

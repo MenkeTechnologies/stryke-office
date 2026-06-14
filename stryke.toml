@@ -80,6 +80,7 @@ exports = [
     "office__sheet_to_json",
     "office__sheet_to_ndjson",
     "office__sheet_to_xml",
+    "office__xml_to_sheet",
     "office__ndjson_to_sheet",
     "office__csv_to_sheet",
     "office__json_to_sheet",

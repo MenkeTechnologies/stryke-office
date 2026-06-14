@@ -570,6 +570,14 @@ fn Office::sheet_to_xml ($path, $output, %opts) {
         office__sheet_to_xml(to_json({ path => $path, output => $output, root => $opts{root}, row => $opts{row}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Import a flat XML records document into a sheet (inverse of sheet_to_xml).
+## opts: input => xml file OR xml => text; row (only rows with this tag), fields,
+## sheet_name, format. Returns { ok, path, rows, fields }.
+fn Office::xml_to_sheet ($output, %opts) {
+    Office::_decode("xml_to_sheet",
+        office__xml_to_sheet(to_json({ output => $output, input => $opts{input}, xml => $opts{xml}, row => $opts{row}, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
+}
+
 ## Import JSON Lines (NDJSON) into a spreadsheet (inverse of sheet_to_ndjson).
 ## opts: input (.jsonl file) or ndjson (text), fields, sheet_name, format.
 ## Returns { ok, path, rows, fields }.
