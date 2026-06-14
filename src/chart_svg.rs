@@ -84,6 +84,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "rug" => svg_rug(&mut s, series, l, t, r, b),
         "beeswarm" => svg_beeswarm(&mut s, series, opts, l, t, r, b),
         "contour" | "density2d" => svg_contour(&mut s, series, opts, l, t, r, b),
+        "ridgeline" | "ridge" | "joyplot" => svg_ridgeline(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1683,6 +1684,65 @@ fn svg_contour(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r
                 let _ = write!(s, r##"<path d="{path}" fill="none" stroke="{col}" stroke-width="1.2"/>"##);
             }
         }
+    }
+}
+
+/// Ridgeline plot (vector; ggridges `geom_density_ridges`). Stacked per-series
+/// KDE ridges over a shared value axis, each rising into the lane above. opts:
+/// `points` (KDE grid, default 128), `overlap` (lane-heights climbed, default 1.4).
+fn svg_ridgeline(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let (mut xlo, mut xhi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            xlo = xlo.min(v);
+            xhi = xhi.max(v);
+        }
+    }
+    if !xlo.is_finite() || !xhi.is_finite() {
+        return;
+    }
+    if (xhi - xlo).abs() < f64::EPSILON {
+        xhi = xlo + 1.0;
+    }
+    let pad = (xhi - xlo) * 0.05;
+    let (xlo, xhi) = (xlo - pad, xhi + pad);
+    let points = opts.get("points").and_then(Value::as_u64).unwrap_or(128).clamp(16, 1024) as usize;
+    let overlap = opts.get("overlap").and_then(Value::as_f64).unwrap_or(1.4).clamp(0.2, 4.0);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let xp = |x: f64| l + (x - xlo) / (xhi - xlo) * pw;
+    for i in 0..=5 {
+        let v = xlo + (xhi - xlo) * i as f64 / 5.0;
+        let x = xp(v);
+        let _ = write!(s, r##"<line x1="{x:.1}" y1="{t}" x2="{x:.1}" y2="{b}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, x - 10.0, b + 14.0, xml_escape(&fmt_num(v)));
+    }
+
+    let nser = series.len().max(1);
+    let lane = ph / nser as f64;
+    for si in (0..series.len()).rev() {
+        let ser = &series[si];
+        let data = series_nums(ser);
+        if data.is_empty() {
+            continue;
+        }
+        let cur = kde_curve(&data, xlo, xhi, points);
+        let maxd = cur.iter().map(|&(_, d)| d).fold(f64::EPSILON, f64::max);
+        let baseline = b - si as f64 * lane;
+        let col = svg_palette(si);
+        let mut area = format!("M {:.1},{baseline:.1} ", xp(cur[0].0));
+        let mut line = String::new();
+        for &(x, d) in &cur {
+            let (px, py) = (xp(x), baseline - d / maxd * lane * overlap);
+            let _ = write!(area, "L {px:.1},{py:.1} ");
+            let _ = write!(line, "{px:.1},{py:.1} ");
+        }
+        let _ = write!(area, "L {:.1},{baseline:.1} Z", xp(cur[cur.len() - 1].0));
+        let _ = write!(s, r##"<path d="{area}" fill="{col}" fill-opacity="0.6"/>"##);
+        let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="1.5"/>"##);
+        let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, l + 4.0, baseline - 4.0, xml_escape(&name));
     }
 }
 
