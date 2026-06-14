@@ -130,6 +130,16 @@ assert_eq $stats->{pages}, 1, "pdf_stats: page count"
 assert_ok ($stats->{words} >= 3), "pdf_stats: word count"
 unlink $ps
 
+# ── sheet_group_concat ──────────────────────────────────────────────
+val $gcx = "$dir/$tag-gc.xlsx"
+Office::sheet_write($gcx, [{ name => "D", rows => [["g", "v"], ["x", "a"], ["x", "b"], ["y", "c"]] }])
+val $gco2 = "$dir/$tag-gc-out.xlsx"
+Office::sheet_group_concat($gcx, "g", "v", $gco2, sep => "|")
+val $gcr = Office::sheet_get_cell($gco2, "B2")
+assert_eq $gcr->{value}, "a|b", "sheet_group_concat: values joined per group"
+unlink $gcx
+unlink $gco2
+
 # ── sheet_to_ndjson: JSON Lines export ──────────────────────────────
 val $nx = "$dir/$tag-nd.xlsx"
 Office::sheet_write($nx, [{ name => "D", rows => [["name", "qty"], ["a", 1], ["b", 2]] }])

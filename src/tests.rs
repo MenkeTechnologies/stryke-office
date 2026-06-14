@@ -2038,6 +2038,60 @@ fn sheet_concat_columns_textjoin() {
 }
 
 #[test]
+fn sheet_group_concat_joins_values() {
+    let path = tmp("gconcat.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","name"],
+                ["west","a"],
+                ["east","b"],
+                ["west","c"],
+                ["west","a"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // group by region, concat names (sorted by key: east, west)
+    let out = tmp("gconcat_out.xlsx");
+    let r = call(
+        office__sheet_group_concat,
+        &format!(
+            r#"{{"path":"{path}","group_by":"region","value":"name","output":"{out}","sep":", "}}"#
+        ),
+    );
+    assert_eq!(r["groups"], 2, "two groups: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "region", "group header: {rd}");
+    assert_eq!(rows[0][1], "name_list", "value header: {rd}");
+    assert_eq!(rows[1][0], "east", "first group key: {rd}");
+    assert_eq!(rows[1][1], "b", "east values: {rd}");
+    assert_eq!(rows[2][0], "west", "second group key: {rd}");
+    assert_eq!(rows[2][1], "a, c, a", "west values (dupes kept): {rd}");
+
+    // distinct dedupes within a group
+    let outd = tmp("gconcat_d.xlsx");
+    call(
+        office__sheet_group_concat,
+        &format!(
+            r#"{{"path":"{path}","group_by":"region","value":"name","output":"{outd}","distinct":true}}"#
+        ),
+    );
+    let rdd = call(office__sheet_read, &format!(r#"{{"path":"{outd}"}}"#));
+    assert_eq!(
+        rdd["sheets"][0]["rows"][2][1], "a, c",
+        "west distinct: {rdd}"
+    );
+
+    for f in [&path, &out, &outd] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(
