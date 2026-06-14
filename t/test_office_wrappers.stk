@@ -1305,4 +1305,10 @@ assert_ok ($qqsvg =~ /^<svg/), "chart qq: svg document"
 assert_ok ($qqsvg =~ /circle/), "chart qq: quantile point cloud"
 assert_ok ($qqsvg =~ /line/), "chart qq: reference line"
 
+# ── chart ribbon (ggplot2 geom_ribbon): confidence band to SVG ──────
+val $rbnsvg = Office::chart_svg("ribbon", [{ name => "ci", data => [[1, 3], [2, 5], [2, 6], [1, 4], [0, 3]] }])
+assert_ok ($rbnsvg =~ /^<svg/), "chart ribbon: svg document"
+assert_ok ($rbnsvg =~ /path/), "chart ribbon: band polygon"
+assert_ok ($rbnsvg =~ /fill-opacity/), "chart ribbon: translucent fill"
+
 test_run

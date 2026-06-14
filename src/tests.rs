@@ -10908,6 +10908,36 @@ fn chart_qq_raster_and_svg() {
 }
 
 #[test]
+fn chart_ribbon_raster_and_svg() {
+    // a confidence band: [lo,hi] per x
+    let series = r#"[{"name":"ci","data":[[1,3],[2,5],[2,6],[1,4],[0,3]]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"ribbon","width":460,"height":320,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("ribbon raster: {c}"));
+    assert_eq!(c["type"], "ribbon", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"ribbon","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "ribbon svg malformed"
+    );
+    // one closed translucent band polygon
+    assert!(
+        svg.contains("<path") && svg.contains("fill-opacity=\"0.35\"") && svg.contains("Z\""),
+        "ribbon svg band polygon"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
