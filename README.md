@@ -197,7 +197,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
 | `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable |
 | `Office::sheet_unpivot($path, $output, %opts)` | `{rows}` | melt wide→long; `id_vars`/`value_vars`/`var_name`/`value_name` |
-| `Office::sheet_join($left, $right, $output, %opts)` | `{rows, matched}` | SQL JOIN two sheets on a key; `on`/`left_on`/`right_on`, `how` inner/left |
+| `Office::sheet_join($left, $right, $output, %opts)` | `{rows, matched}` | SQL JOIN two sheets on a key; `on`/`left_on`/`right_on`, `how` inner/left/right/outer |
 | `Office::sheet_select($path, $columns, $output, %opts)` | `{columns}` | project/reorder columns by name or index |
 | `Office::sheet_drop($path, $columns, $output, %opts)` | `{columns}` | remove columns (complement of sheet_select) |
 | `Office::sheet_add_column($path, $name, %opts)` | `{column}` | add a derived column: `value` constant or `concat` of columns |

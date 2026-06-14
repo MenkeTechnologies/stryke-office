@@ -2997,6 +2997,71 @@ fn sheet_join_inner_and_left() {
 }
 
 #[test]
+fn sheet_join_right_and_outer() {
+    let left = tmp("rjl.xlsx");
+    let right = tmp("rjr.xlsx");
+    // left ids 1,2,3 ; right ids 1,2,4 (4 is right-only, 3 is left-only)
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{left}","sheets":[{{"name":"L","rows":[["id","name"],[1,"a"],[2,"b"],[3,"c"]]}}]}}"#
+        ),
+    );
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{right}","sheets":[{{"name":"R","rows":[["id","city"],[1,"NYC"],[2,"LA"],[4,"SF"]]}}]}}"#
+        ),
+    );
+
+    // right join: ids 1,2 (matched) + right-only 4 = 3 rows; left-only 3 dropped
+    let outr = tmp("rj_r.xlsx");
+    let rr = call(
+        office__sheet_join,
+        &format!(
+            r#"{{"left":"{left}","right":"{right}","on":"id","how":"right","output":"{outr}"}}"#
+        ),
+    );
+    assert_eq!(rr["matched"], 2, "two matched pairs: {rr}");
+    assert_eq!(rr["rows"], 3, "right join → 3 rows: {rr}");
+    let rdr = call(office__sheet_read, &format!(r#"{{"path":"{outr}"}}"#));
+    let lastr = rdr["sheets"][0]["rows"].as_array().unwrap().last().unwrap();
+    assert_eq!(
+        lastr[0].as_f64().unwrap(),
+        4.0,
+        "right-only key carried: {rdr}"
+    );
+    assert_eq!(lastr[2], "SF", "right-only city: {rdr}");
+    assert!(
+        lastr[1].as_str().unwrap_or("").is_empty(),
+        "right-only name blank: {rdr}"
+    );
+
+    // outer join: all left (1,2,3) + right-only 4 = 4 rows
+    let outo = tmp("rj_o.xlsx");
+    let ro = call(
+        office__sheet_join,
+        &format!(
+            r#"{{"left":"{left}","right":"{right}","on":"id","how":"outer","output":"{outo}"}}"#
+        ),
+    );
+    assert_eq!(ro["rows"], 4, "outer join → 4 rows: {ro}");
+
+    // unknown how is rejected
+    let bad = call(
+        office__sheet_join,
+        &format!(
+            r#"{{"left":"{left}","right":"{right}","on":"id","how":"cross","output":"{outo}"}}"#
+        ),
+    );
+    assert!(bad["error"].is_string(), "unknown how rejected: {bad}");
+
+    for f in [&left, &right, &outr, &outo] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_unpivot_melt() {
     let path = tmp("melt.xlsx");
     let w = call(

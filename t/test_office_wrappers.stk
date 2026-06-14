@@ -532,6 +532,18 @@ assert_eq $hsb->[0]{rows}[1][2], 9, "sheet_hstack: right value aligned"
 unlink $hlx
 unlink $hrx
 unlink $hso2
+# sheet_join: outer join keeps unmatched rows from both sides
+val $jlx = "$dir/$tag-jl.xlsx"
+val $jrx = "$dir/$tag-jr.xlsx"
+Office::sheet_write($jlx, [{ name => "L", rows => [["id", "name"], [1, "a"], [2, "b"], [3, "c"]] }])
+Office::sheet_write($jrx, [{ name => "R", rows => [["id", "city"], [1, "NYC"], [4, "SF"]] }])
+val $jo = "$dir/$tag-join-out.xlsx"
+val $jr = Office::sheet_join($jlx, $jrx, $jo, on => "id", how => "outer")
+assert_eq $jr->{rows}, 4, "sheet_join: outer keeps 1,2,3 + right-only 4"
+assert_eq $jr->{matched}, 1, "sheet_join: one matched pair"
+unlink $jlx
+unlink $jrx
+unlink $jo
 # sheet_subtotal: group-wise subtotal rows
 val $stx = "$dir/$tag-subtot.xlsx"
 Office::sheet_write($stx, [{ name => "D", rows => [["region", "amt"], ["east", 10], ["east", 20], ["west", 30]] }])
