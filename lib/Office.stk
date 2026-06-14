@@ -965,9 +965,8 @@ fn Office::pdf_form_fields ($path) {
 ## viewers regenerate appearances. opts: output (defaults to $path). Returns
 ## { ok, path, filled }.
 fn Office::pdf_fill_form ($path, $values, %opts) {
-    var %r = { path => $path, values => $values }
-    if exists $opts{output} { $r{output} = $opts{output} }
-    Office::_decode("pdf_fill_form", office__pdf_fill_form(to_json(\%r)))
+    Office::_decode("pdf_fill_form",
+        office__pdf_fill_form(to_json({ path => $path, values => $values, output => $opts{output} })))
 }
 
 ## Read the PDF document outline (bookmarks) as a nested tree. Returns
@@ -980,9 +979,8 @@ fn Office::pdf_outline ($path) {
 ## { title, page (1-based), bold?, italic?, color? [r,g,b 0..1], children? }
 ## nodes. opts: output (defaults to $path). Returns { ok, path, count }.
 fn Office::pdf_set_outline ($path, $outline, %opts) {
-    var %r = { path => $path, outline => $outline }
-    if exists $opts{output} { $r{output} = $opts{output} }
-    Office::_decode("pdf_set_outline", office__pdf_set_outline(to_json(\%r)))
+    Office::_decode("pdf_set_outline",
+        office__pdf_set_outline(to_json({ path => $path, outline => $outline, output => $opts{output} })))
 }
 
 ## Read document metadata (core/app properties) from any office or PDF file.
@@ -997,9 +995,8 @@ fn Office::meta_read ($path) {
 ## hashref of the canonical keys (see meta_read). opts: output (defaults to
 ## $path, edit in place). Works for OOXML (xlsx/docx/pptx), ODF, and PDF.
 fn Office::meta_write ($path, $props, %opts) {
-    var %r = { path => $path, props => $props }
-    if exists $opts{output} { $r{output} = $opts{output} }
-    Office::_decode("meta_write", office__meta_write(to_json(\%r)))
+    Office::_decode("meta_write",
+        office__meta_write(to_json({ path => $path, props => $props, output => $opts{output} })))
 }
 
 ## Extract embedded raster media from an office container (xlsx/docx/pptx,
@@ -1008,9 +1005,8 @@ fn Office::meta_write ($path, $props, %opts) {
 ## this directory). Returns { images => [{ name, handle, width, height,
 ## path? }], count, skipped }.
 fn Office::extract_images ($path, %opts) {
-    var %r = { path => $path }
-    if exists $opts{dir} { $r{dir} = $opts{dir} }
-    Office::_decode("extract_images", office__extract_images(to_json(\%r)))
+    Office::_decode("extract_images",
+        office__extract_images(to_json({ path => $path, dir => $opts{dir} })))
 }
 
 ## Fill a template: search/replace text across a document's run-text parts.
@@ -1019,9 +1015,8 @@ fn Office::extract_images ($path, %opts) {
 ## even when Word stored it as several runs. opts: output (defaults to $path).
 ## Works on OOXML (docx/pptx/xlsx) and ODF. Returns { ok, path, replaced }.
 fn Office::replace_text ($path, $replace, %opts) {
-    var %r = { path => $path, replace => $replace }
-    if exists $opts{output} { $r{output} = $opts{output} }
-    Office::_decode("replace_text", office__replace_text(to_json(\%r)))
+    Office::_decode("replace_text",
+        office__replace_text(to_json({ path => $path, replace => $replace, output => $opts{output} })))
 }
 
 ## Find/replace in a plain-text file (md/html/txt/csv/json/rtf/...). $replace is
@@ -1029,10 +1024,8 @@ fn Office::replace_text ($path, $replace, %opts) {
 ## opts: output (default in place), ignore_case => 1 (ASCII). Returns
 ## { ok, path, replaced }.
 fn Office::text_replace ($path, $replace, %opts) {
-    var %r = { path => $path, replace => $replace }
-    if exists $opts{output} { $r{output} = $opts{output} }
-    if exists $opts{ignore_case} { $r{ignore_case} = $opts{ignore_case} }
-    Office::_decode("text_replace", office__text_replace(to_json(\%r)))
+    Office::_decode("text_replace",
+        office__text_replace(to_json({ path => $path, replace => $replace, output => $opts{output}, ignore_case => $opts{ignore_case} })))
 }
 
 ## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
