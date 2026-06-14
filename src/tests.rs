@@ -2371,6 +2371,43 @@ fn sheet_rank_competition_and_dense() {
 }
 
 #[test]
+fn sheet_pct_rank_cdf() {
+    let path = tmp("pctrank.xlsx");
+    // values 10,20,30,40 -> CDF (count<=)/n: 0.25, 0.5, 0.75, 1.0
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[20],[30],[40]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("pctrank_out.xlsx");
+    let r = call(
+        office__sheet_pct_rank,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "v_pctrank", "default column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows[1][1].as_f64().unwrap() - 0.25).abs() < 1e-9,
+        "min -> 0.25: {rd}"
+    );
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 0.5).abs() < 1e-9,
+        "second -> 0.5: {rd}"
+    );
+    assert!(
+        (rows[4][1].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "max -> 1.0: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_head_and_tail() {
     let path = tmp("head.xlsx");
     let w = call(

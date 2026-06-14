@@ -511,6 +511,14 @@ fn Office::sheet_rank ($path, $by, $output, %opts) {
         office__sheet_rank(to_json({ path => $path, by => $by, output => $output, ascending => $opts{ascending}, dense => $opts{dense}, name => $opts{name}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a percentile-rank column (empirical CDF, fraction <= value, 0..1;
+## pandas rank(pct=True)). opts: into, decimals, sheet, header, format. Returns
+## { ok, path, column }.
+fn Office::sheet_pct_rank ($path, $column, $output, %opts) {
+    Office::_decode("sheet_pct_rank",
+        office__sheet_pct_rank(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Keep only rows whose $by column satisfies a predicate. opts: op => one of
 ## eq|ne|contains|not_contains|gt|lt|ge|le (default eq), value => comparison
 ## value, sheet, ignore_case => 1, header => 0 if first row is data, format =>
