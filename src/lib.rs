@@ -3256,6 +3256,7 @@ export!(office__pdf_crop, op_pdf_crop);
 export!(office__pdf_burst, op_pdf_burst);
 export!(office__pdf_chunk, op_pdf_chunk);
 export!(office__pdf_split_ranges, op_pdf_split_ranges);
+export!(office__pdf_to_text, op_pdf_to_text);
 
 // PDF file attachments (embedded files): embed + list/extract
 include!("pdf_attach.rs");

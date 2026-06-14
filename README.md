@@ -209,6 +209,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::pdf_burst($path, $dir, %opts)` | `{count, files}` | split into one PDF per page (`{prefix}-{n}.pdf`) |
 | `Office::pdf_chunk($path, $size, $dir, %opts)` | `{count, files}` | split into fixed-size page chunks (last may be shorter) |
 | `Office::pdf_split_ranges($path, $ranges, $dir, %opts)` | `{count, files}` | split into one file per `[start,end]` range |
+| `Office::pdf_to_text($path, %opts)` | `{pages, chars}` or `{count, files}` | extract text to one file (`output`) or per-page files (`dir`) |
 | `Office::pdf_form_fields($path)` | `{fields:[{name,type,value,options?}], count}` | list interactive AcroForm fields |
 | `Office::pdf_fill_form($path, $values, %opts)` | `{filled}` | fill form fields; checkbox takes a bool; sets `/NeedAppearances` |
 | `Office::pdf_outline($path)` | `{outline:[{title,page?,children?}], count}` | read the bookmark navigation tree |
