@@ -747,6 +747,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_save_animated($path, $handles, %opts)` | write animated GIF; `delay`/`delays`/`repeat` |
 | `img_montage($handles, %opts)` | grid montage → new handle; `cols`/`gap`/`bg` |
 | `img_concat($handles, %opts)` | edge-to-edge concat (flush, native sizes) → new handle; `axis` h/v, `gap`/`bg` |
+| `img_canvas($handle, $width, $height, %opts)` | resize the canvas to an exact size, anchoring the unscaled image; `anchor`/`color` opts |
 | `img_gradient($h, %opts)` | fill `linear`/`radial` between `from`/`to`; `angle` |
 | `img_draw_ellipse($h, $x, $y, $rx, $ry, $color, %opts)` | `fill` opt |
 | `img_draw_polygon($h, $points, $color)` | `points` = `[[x,y],…]` |

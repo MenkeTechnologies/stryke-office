@@ -941,6 +941,50 @@ fn op_img_border(opts: Value) -> Result<Value> {
     with_image(h, |img| Ok(info_json(h, img)))
 }
 
+/// Resize the *canvas* to an exact width×height, placing the unscaled image at
+/// an anchor and filling the rest with a background color. Unlike `img_fit`
+/// (which scales the image) this preserves native pixels — extend for a
+/// fixed-size output, or crop when the canvas is smaller. opts: handle, width,
+/// height (required), anchor => center (default) | topleft | top | topright |
+/// left | right | bottomleft | bottom | bottomright, color => background fill
+/// (default black). Returns the new geometry.
+fn op_img_canvas(opts: Value) -> Result<Value> {
+    let handle = req_u64_img(&opts, "handle")?;
+    let tw = req_u64_img(&opts, "width")? as u32;
+    let th = req_u64_img(&opts, "height")? as u32;
+    let color = parse_color(opts.get("color"));
+    let anchor = opts
+        .get("anchor")
+        .and_then(Value::as_str)
+        .unwrap_or("center")
+        .to_string();
+    transform(handle, move |img| {
+        let src = img.to_rgba8();
+        let (w, hgt) = (src.width() as i64, src.height() as i64);
+        let (cw, ch) = (tw as i64, th as i64);
+        // Horizontal offset by anchor keyword.
+        let x = if anchor.contains("left") {
+            0
+        } else if anchor.contains("right") {
+            cw - w
+        } else {
+            (cw - w) / 2
+        };
+        // Vertical offset; "top"/"bottom" appear as substrings of the corners too.
+        let y = if anchor.starts_with("top") || anchor == "top" {
+            0
+        } else if anchor.starts_with("bottom") || anchor == "bottom" {
+            ch - hgt
+        } else {
+            (ch - hgt) / 2
+        };
+        let mut out = image::RgbaImage::from_pixel(tw.max(1), th.max(1), color);
+        image::imageops::overlay(&mut out, &src, x, y);
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(handle, |img| Ok(info_json(handle, img)))
+}
+
 /// Autocrop a uniform border matching the top-left pixel within `tolerance`
 /// (default 0). Returns the new geometry.
 fn op_img_trim(opts: Value) -> Result<Value> {

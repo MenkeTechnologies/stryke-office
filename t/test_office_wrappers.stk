@@ -911,6 +911,12 @@ assert_eq $ccat->{width}, 26, "img_concat: widths summed (16 + 10)"
 Office::img_close($ca->{handle})
 Office::img_close($cb->{handle})
 Office::img_close($ccat->{handle})
+# img_canvas: resize canvas without scaling
+val $cv = Office::img_new(10, 10, color => [1, 2, 3, 255])
+val $cvr = Office::img_canvas($cv->{handle}, 30, 20, anchor => "center")
+assert_eq $cvr->{width}, 30, "img_canvas: canvas width"
+assert_eq $cvr->{height}, 20, "img_canvas: canvas height"
+Office::img_close($cv->{handle})
 Office::img_close($im->{handle})
 Office::slides_add_image($idk, $logo)
 val $ex = Office::extract_images($idk)
