@@ -199,6 +199,15 @@ fn Office::sheet_append ($path, %opts) {
         office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Validate a sheet's cells against per-column rules. $rules is an arrayref of
+## { column => name/index, type => "number"|"int"|"nonempty", min, max,
+## allowed => [values] }. opts: sheet, header => 0 if first row is data. Returns
+## { valid, count, violations => [{ ref, row, col, column, rule, value }] }.
+fn Office::sheet_validate ($path, $rules, %opts) {
+    Office::_decode("sheet_validate",
+        office__sheet_validate(to_json({ path => $path, rules => $rules, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Turn each spreadsheet row into a slide. $output is a pptx/odp path. opts:
 ## title_field => column whose value titles each slide (default: first column),
 ## sheet, format. Remaining fields become "field: value" body lines. Returns
