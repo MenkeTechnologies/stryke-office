@@ -723,6 +723,8 @@ val $dcx = "$dir/$tag-comments.docx"
 Office::doc_write($dcx, [{ kind => "para", text => "body" }])
 val $dcr = Office::doc_comments($dcx)
 assert_eq $dcr->{count}, 0, "doc_comments: no comments in a plain docx"
+val $dfn = Office::doc_footnotes($dcx)
+assert_eq $dfn->{count}, 0, "doc_footnotes: no footnotes in a plain docx"
 unlink $dcx
 
 # ── lenient boolean flags: a false-default flag passed as 1 must take effect ──
