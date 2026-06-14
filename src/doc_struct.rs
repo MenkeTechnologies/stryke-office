@@ -846,6 +846,61 @@ fn op_pdf_to_slides(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": n }))
 }
 
+/// Render a word-processor document (docx/odt) to a PDF. opts: path, output (pdf,
+/// required). Headings/paragraphs/lists/tables/page-breaks are mapped onto the
+/// `pdf_build` element model in document order (list items render as bulleted
+/// paragraphs; embedded images are skipped since the block carries no path).
+/// Fills the doc->pdf gap alongside `doc_to_md`/`doc_to_html`/`doc_to_slides`.
+/// Returns `{ ok, path, elements }`.
+fn op_doc_to_pdf(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let blocks = doc_blocks_or_paras(path)?;
+
+    let mut elements: Vec<Value> = Vec::new();
+    for b in &blocks {
+        match b.get("kind").and_then(Value::as_str) {
+            Some("heading") => {
+                let level = b.get("level").and_then(Value::as_u64).unwrap_or(1);
+                elements.push(json!({
+                    "type": "heading",
+                    "level": level,
+                    "text": b.get("text").and_then(Value::as_str).unwrap_or(""),
+                }));
+            }
+            Some("para") => elements.push(json!({
+                "type": "paragraph",
+                "text": b.get("text").and_then(Value::as_str).unwrap_or(""),
+            })),
+            Some("list") => {
+                if let Some(items) = b.get("items").and_then(Value::as_array) {
+                    for it in items {
+                        elements.push(json!({
+                            "type": "paragraph",
+                            "text": format!("• {}", cell_to_string(it)),
+                        }));
+                    }
+                }
+            }
+            Some("table") => {
+                if let Some(rows) = b.get("rows") {
+                    elements.push(json!({ "type": "table", "rows": rows }));
+                }
+            }
+            Some("pagebreak") => elements.push(json!({ "type": "pagebreak" })),
+            // images carry no resolvable path in the block model; skip them.
+            _ => {
+                if let Some(t) = b.get("text").and_then(Value::as_str) {
+                    elements.push(json!({ "type": "paragraph", "text": t }));
+                }
+            }
+        }
+    }
+
+    op_pdf_build(json!({ "path": output, "elements": elements }))?;
+    Ok(json!({ "ok": true, "path": output, "elements": elements.len() }))
+}
+
 /// Flatten a block into slide body lines (paragraph text, list items, or a
 /// table's rows joined by " | ").
 fn block_to_lines(b: &Value) -> Vec<String> {
