@@ -6117,6 +6117,100 @@ fn op_sheet_rank(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "ranked": ranked, "column": col }))
 }
 
+/// Append a percentile-rank column: each value's empirical-CDF position — the
+/// fraction of values less than or equal to it, in 0..1 (pandas
+/// `rank(pct=True)`). Distinct from `sheet_rank` (ordinal) and `sheet_ntile`
+/// (discrete buckets). opts: path, output, column => name/index (required), into
+/// => header (default "{column}_pctrank"), decimals => round, sheet, header,
+/// format. Non-numeric cells get a blank. Returns `{ ok, path, column }`.
+fn op_sheet_pct_rank(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_pctrank"));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut sorted: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = sorted.len();
+    let round = |x: f64| match decimals {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (x * f).round() / f
+        }
+        None => x,
+    };
+    // partition_point gives the count of values strictly less than x; adding the
+    // run of equal values yields "count <= x" without an O(n) scan per row.
+    let pct_of = |x: f64| -> f64 {
+        if n == 0 {
+            return 0.0;
+        }
+        let le = sorted.partition_point(|&v| v <= x);
+        le as f64 / n as f64
+    };
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = match cells.get(col).and_then(sheet_cell_num) {
+                    Some(x) => json!(round(pct_of(x))),
+                    None => json!(""),
+                };
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Whether a cell satisfies `op` against `value`. String ops: eq, ne, contains,
 /// not_contains (honour `ignore_case`). Numeric ops: gt, lt, ge, le (both sides
 /// must parse as numbers, else no match).
@@ -12980,6 +13074,7 @@ export!(office__csv_to_sheet, op_csv_to_sheet);
 export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);
+export!(office__sheet_pct_rank, op_sheet_pct_rank);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_flag, op_sheet_flag);
 export!(office__sheet_onehot, op_sheet_onehot);

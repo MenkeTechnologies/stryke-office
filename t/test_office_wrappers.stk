@@ -808,6 +808,16 @@ assert_eq $rsr->{buckets}, 2, "sheet_resample: two month buckets"
 val $rsb = Office::sheet_read($rso)
 assert_eq $rsb->[0]{rows}[1][0], "2026-01", "sheet_resample: first bucket key"
 assert_eq $rsb->[0]{rows}[1][1], 30, "sheet_resample: Jan sum 30"
+# sheet_pct_rank: percentile rank column
+val $prx = "$dir/$tag-pctrank.xlsx"
+Office::sheet_write($prx, [{ name => "D", rows => [["v"], [10], [20], [30], [40]] }])
+val $pro = "$dir/$tag-pctrank-out.xlsx"
+val $prr = Office::sheet_pct_rank($prx, "v", $pro)
+assert_eq $prr->{column}, "v_pctrank", "sheet_pct_rank: default column name"
+val $prb = Office::sheet_read($pro)
+assert_eq $prb->[0]{rows}[4][1], 1, "sheet_pct_rank: max -> 1.0"
+unlink $prx
+unlink $pro
 # sheet_date_part: extract month from a date column
 val $dpo = "$dir/$tag-datepart-out.xlsx"
 val $dpr = Office::sheet_date_part($rsx, $dpo, "date", part => "month", into => "mo")
