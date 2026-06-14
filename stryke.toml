@@ -372,6 +372,7 @@ exports = [
     "office__barcode_qr",
     "office__barcode_1d",
     "office__barcode_save",
+    "office__barcode_sheet",
 ]
 
 [scripts]

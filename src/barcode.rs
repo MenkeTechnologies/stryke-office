@@ -184,3 +184,73 @@ fn op_barcode_save(opts: Value) -> Result<Value> {
         "height": res.get("height").cloned().unwrap_or(json!(0)),
     }))
 }
+
+/// Batch-generate one barcode/QR image per value of a sheet column (label / asset
+/// tag sheets). opts: path (sheet), column => name/index (required), dir =>
+/// output directory (required), kind => "qr" (default) | "1d", symbology (for 1d),
+/// ext => image extension (default "png"), prefix => filename stem (default ""),
+/// plus any barcode style opts (scale, ec, fg, bg, height, …) passed through per
+/// image, sheet, header. Files are `{dir}/{prefix}{value}.{ext}` (value
+/// sanitized). Blank cells are skipped. Returns `{ count, files }`.
+fn op_barcode_sheet(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?.to_string();
+    let kind = opts.get("kind").and_then(Value::as_str).unwrap_or("qr").to_string();
+    let ext = opts.get("ext").and_then(Value::as_str).unwrap_or("png").to_string();
+    let prefix = opts.get("prefix").and_then(Value::as_str).unwrap_or("").to_string();
+    std::fs::create_dir_all(&dir)?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let sanitize = |s: &str| -> String {
+        let c: String = s
+            .chars()
+            .map(|ch| if ch.is_alphanumeric() { ch } else { '_' })
+            .collect();
+        if c.is_empty() {
+            "blank".to_string()
+        } else {
+            c
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut files: Vec<String> = Vec::new();
+    for row in &rows[data_start..] {
+        let cell = row.as_array().and_then(|a| a.get(col)).cloned().unwrap_or(Value::Null);
+        if sheet_cell_blank(&cell) {
+            continue;
+        }
+        let value = cell_to_string(&cell);
+        let out = format!("{dir}/{prefix}{}.{ext}", sanitize(&value));
+        // Per-image opts: inherit caller styling, set this value/output/kind.
+        let mut bopts = opts.clone();
+        bopts["data"] = json!(value);
+        bopts["output"] = json!(out);
+        bopts["kind"] = json!(kind);
+        op_barcode_save(bopts)?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}

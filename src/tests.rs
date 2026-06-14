@@ -10870,6 +10870,39 @@ fn barcode_save_to_files() {
 }
 
 #[test]
+fn barcode_sheet_batch() {
+    let path = tmp("bcsheet.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["sku"],["A100"],["B200"],[""]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let dir = tmp("bcsheet_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__barcode_sheet,
+        &format!(r#"{{"path":"{path}","column":"sku","dir":"{dir}","prefix":"qr-"}}"#),
+    );
+    assert_eq!(r["count"], 2, "blank skipped, two codes: {r}");
+    // each generated file opens as an image
+    for f in r["files"].as_array().unwrap() {
+        let i = call(office__img_open, &format!(r#"{{"path":{f}}}"#));
+        let h = i["handle"].as_u64().expect("barcode opens as image");
+        call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+    }
+    assert!(
+        std::path::Path::new(&format!("{dir}/qr-A100.png")).exists(),
+        "named file exists"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn meta_xlsx_round_trips() {
     let path = tmp("meta.xlsx");
     let w = call(

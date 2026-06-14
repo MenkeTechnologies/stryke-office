@@ -1005,6 +1005,15 @@ assert_eq $cvr->{width}, 30, "img_canvas: canvas width"
 assert_eq $cvr->{height}, 20, "img_canvas: canvas height"
 Office::img_close($cv->{handle})
 Office::img_close($im->{handle})
+# barcode_sheet: one QR per column value
+val $bcsx = "$dir/$tag-bcsheet.xlsx"
+Office::sheet_write($bcsx, [{ name => "D", rows => [["sku"], ["A100"], ["B200"]] }])
+val $bcdir = "$dir/$tag-bc-out"
+val $bcr = Office::barcode_sheet($bcsx, "sku", $bcdir, prefix => "qr-")
+assert_eq $bcr->{count}, 2, "barcode_sheet: two codes generated"
+unlink "$bcdir/qr-A100.png"
+unlink "$bcdir/qr-B200.png"
+unlink $bcsx
 Office::slides_add_image($idk, $logo)
 val $ex = Office::extract_images($idk)
 assert_eq $ex->{count}, 1, "slides_add_image: image embedded"
