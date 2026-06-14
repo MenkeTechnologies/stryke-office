@@ -3578,6 +3578,37 @@ fn sheet_bin_equal_width_index() {
 }
 
 #[test]
+fn sheet_ntile_quartiles() {
+    let path = tmp("ntile.xlsx");
+    // 8 values, n=4 → 2 per quartile.
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4],[5],[6],[7],[8]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("ntile_out.xlsx");
+    let r = call(
+        office__sheet_ntile,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"v","n":4}}"#),
+    );
+    assert_eq!(r["buckets"], 4, "four buckets: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // ranks 0,1->bucket0; 2,3->1; 4,5->2; 6,7->3 (values round-trip as floats)
+    assert_eq!(rows[1][1].as_f64().unwrap(), 0.0, "1 -> q0: {rd}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 0.0, "2 -> q0: {rd}");
+    assert_eq!(rows[3][1].as_f64().unwrap(), 1.0, "3 -> q1: {rd}");
+    assert_eq!(rows[5][1].as_f64().unwrap(), 2.0, "5 -> q2: {rd}");
+    assert_eq!(rows[8][1].as_f64().unwrap(), 3.0, "8 -> q3: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_outliers_iqr() {
     let path = tmp("outliers.xlsx");
     // Tight cluster 10..14 with one extreme value 100.

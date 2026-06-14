@@ -351,6 +351,17 @@ assert_eq $bnb->[0]{rows}[1][1], "low", "sheet_bin: 5 -> low"
 assert_eq $bnb->[0]{rows}[3][1], "high", "sheet_bin: 95 (max edge) -> high"
 unlink $bnx
 unlink $bno
+# sheet_ntile: equal-frequency quartiles
+val $ntx = "$dir/$tag-ntile.xlsx"
+Office::sheet_write($ntx, [{ name => "D", rows => [["v"], [1], [2], [3], [4], [5], [6], [7], [8]] }])
+val $nto = "$dir/$tag-ntile-out.xlsx"
+val $ntr = Office::sheet_ntile($ntx, $nto, "v", n => 4)
+assert_eq $ntr->{buckets}, 4, "sheet_ntile: four buckets"
+val $ntb = Office::sheet_read($nto)
+assert_eq $ntb->[0]{rows}[1][1], 0, "sheet_ntile: lowest -> q0"
+assert_eq $ntb->[0]{rows}[8][1], 3, "sheet_ntile: highest -> q3"
+unlink $ntx
+unlink $nto
 # sheet_interpolate: linear fill across an internal gap
 val $inx = "$dir/$tag-interp.xlsx"
 Office::sheet_write($inx, [{ name => "D", rows => [["v"], [10], [""], [""], [40]] }])

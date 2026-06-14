@@ -181,6 +181,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_round($path, $output, %opts)` | `{ok, path, rounded}` | round every numeric cell to N decimals (`decimals` default 2); `columns` opt restricts which columns; header untouched |
 | `Office::sheet_histogram($path, $column, %opts)` | `{column, count, min, max, bins}` | bucket a numeric column into `bins` (default 10) equal-width intervals; each bin `{lo, hi, count}` |
 | `Office::sheet_bin($path, $output, $column, %opts)` | `{ok, path, column, into, bins}` | append a bin-assignment column (pandas `pd.cut`); `edges`/`bins`/`labels`/`into` opts |
+| `Office::sheet_ntile($path, $output, $column, %opts)` | `{ok, path, column, into, buckets}` | append an equal-frequency bucket column (SQL `NTILE` / pandas `qcut`); `n`/`labels`/`into` opts |
 | `Office::sheet_outliers($path, $column, %opts)` | `{column, method, count, lower, upper, outliers}` | detect outlier rows via `iqr` Tukey fence (default, `k` 1.5) or `zscore` (`k` 3); each outlier `{row, value}` |
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
 | `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable |
