@@ -908,6 +908,19 @@ fn Office::pdf_draw_line ($path, $lines, $output, %opts) {
         office__pdf_draw_line(to_json({ path => $path, lines => $lines, output => $output, color => $opts{color}, width => $opts{width}, pages => $opts{pages} })))
 }
 
+## Add a clickable URI link annotation to a PDF page. opts: output, page
+## (1-based), rect ([x0,y0,x1,y1], default whole page). Returns { ok, path, page }.
+fn Office::pdf_add_link ($path, $url, %opts) {
+    Office::_decode("pdf_add_link",
+        office__pdf_add_link(to_json({ path => $path, url => $url, output => $opts{output}, page => $opts{page}, rect => $opts{rect} })))
+}
+
+## Extract every URI link annotation from a PDF (analogue of doc_links).
+## Returns { links => [{ page, url, rect }], count }.
+fn Office::pdf_links ($path) {
+    Office::_decode("pdf_links", office__pdf_links(to_json({ path => $path })))
+}
+
 ## Add text at a position on PDF pages (labels, stamps, annotations). opts: x/y
 ## => position in points (default 72,72; y from bottom), size (default 12),
 ## color (default black), pages => [1-based subset] (default all). Returns

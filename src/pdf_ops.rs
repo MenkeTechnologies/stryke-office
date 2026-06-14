@@ -1187,3 +1187,122 @@ fn op_pdf_draw_line(opts: Value) -> Result<Value> {
     doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
     Ok(json!({ "ok": true, "path": out, "pages": drawn, "lines": segs.len() }))
 }
+
+/// Add a clickable URI link annotation to a PDF page (the PDF analogue of a
+/// docx hyperlink). opts: path, output (default in place), page => 1-based page
+/// number (default 1), url (required), rect => `[x0,y0,x1,y1]` clickable area in
+/// PDF points (default the whole page). Returns `{ ok, path, page }`.
+fn op_pdf_add_link(opts: Value) -> Result<Value> {
+    use lopdf::Dictionary;
+    let path = req_str(&opts, "path")?;
+    let out = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let page = opts.get("page").and_then(Value::as_u64).unwrap_or(1) as u32;
+    let url = req_str(&opts, "url")?.to_string();
+
+    let mut doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let pages = doc.get_pages();
+    let pid = *pages
+        .get(&page)
+        .ok_or_else(|| anyhow!("page {page} out of range (1..={})", pages.len()))?;
+    let rect = match opts.get("rect") {
+        Some(v) => four_floats(v).ok_or_else(|| anyhow!("rect must be [x0,y0,x1,y1]"))?,
+        None => {
+            let (w, h) = pdf_page_size(&doc, pid);
+            [0.0, 0.0, w, h]
+        }
+    };
+
+    let mut action = Dictionary::new();
+    action.set("S", Object::Name(b"URI".to_vec()));
+    action.set("URI", Object::string_literal(url));
+    let action_id = doc.add_object(Object::Dictionary(action));
+
+    let mut annot = Dictionary::new();
+    annot.set("Type", Object::Name(b"Annot".to_vec()));
+    annot.set("Subtype", Object::Name(b"Link".to_vec()));
+    annot.set(
+        "Rect",
+        Object::Array(rect.iter().map(|&f| Object::Real(f as f32)).collect()),
+    );
+    annot.set("Border", Object::Array(vec![0.into(), 0.into(), 0.into()]));
+    annot.set("A", Object::Reference(action_id));
+    let annot_id = doc.add_object(Object::Dictionary(annot));
+
+    let page_dict = doc
+        .get_object_mut(pid)
+        .and_then(|o| o.as_dict_mut())
+        .map_err(|e| anyhow!("page dict: {e}"))?;
+    match page_dict.get(b"Annots").ok().and_then(|o| o.as_array().ok()) {
+        Some(existing) => {
+            let mut a = existing.clone();
+            a.push(Object::Reference(annot_id));
+            page_dict.set("Annots", Object::Array(a));
+        }
+        None => {
+            page_dict.set("Annots", Object::Array(vec![Object::Reference(annot_id)]));
+        }
+    }
+
+    doc.save(&out).map_err(|e| anyhow!("save {out}: {e}"))?;
+    Ok(json!({ "ok": true, "path": out, "page": page }))
+}
+
+/// Extract every URI link annotation from a PDF (the analogue of `doc_links`).
+/// opts: path. Returns `{ links: [{ page, url, rect }], count }` with 1-based
+/// page numbers and the clickable rectangle in PDF points.
+fn op_pdf_links(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let doc = Document::load(path).map_err(|e| anyhow!("load {path}: {e}"))?;
+    let mut links = Vec::new();
+    for (num, pid) in doc.get_pages() {
+        let Some(annots) = doc
+            .get_object(pid)
+            .ok()
+            .and_then(|o| o.as_dict().ok())
+            .and_then(|d| d.get(b"Annots").ok())
+            .and_then(|o| o.as_array().ok())
+        else {
+            continue;
+        };
+        for a in annots {
+            // An annotation may be an inline dict or a reference to one.
+            let dict = match a {
+                Object::Reference(id) => doc.get_object(*id).ok().and_then(|o| o.as_dict().ok()),
+                Object::Dictionary(d) => Some(d),
+                _ => None,
+            };
+            let Some(dict) = dict else { continue };
+            if dict.get(b"Subtype").and_then(|o| o.as_name()).ok() != Some(b"Link".as_slice()) {
+                continue;
+            }
+            // Resolve the action dict (inline or referenced) and read /URI.
+            let action = match dict.get(b"A").ok() {
+                Some(Object::Reference(id)) => {
+                    doc.get_object(*id).ok().and_then(|o| o.as_dict().ok())
+                }
+                Some(Object::Dictionary(d)) => Some(d),
+                _ => None,
+            };
+            let Some(action) = action else { continue };
+            if action.get(b"S").and_then(|o| o.as_name()).ok() != Some(b"URI".as_slice()) {
+                continue;
+            }
+            let Some(url) = pdf_dict_str(action, b"URI") else {
+                continue;
+            };
+            let rect: Vec<f64> = dict
+                .get(b"Rect")
+                .ok()
+                .and_then(|o| o.as_array().ok())
+                .map(|a| a.iter().filter_map(obj_num).collect())
+                .unwrap_or_default();
+            links.push(json!({ "page": num, "url": url, "rect": rect }));
+        }
+    }
+    let count = links.len();
+    Ok(json!({ "links": links, "count": count }))
+}
