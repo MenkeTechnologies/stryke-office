@@ -694,7 +694,7 @@ fn Office::doc_merge ($inputs, $output, %opts) {
 ## opts: format => "docx"|"odt"|"html"|"md"|"rtf"|"txt"|"pdf",
 ## page_size => [w, h] (twips, docx), header => "...", footer => "..." (docx).
 fn Office::doc_write ($path, $blocks, %opts) {
-    val $r = { path => $path, blocks => $blocks, format => $opts{format}, page_size => $opts{page_size}, header => $opts{header}, footer => $opts{footer} }
+    val $r = { path => $path, blocks => $blocks, format => $opts{format}, page_size => $opts{page_size}, header => $opts{header}, footer => $opts{footer}, page_numbers => $opts{page_numbers} }
     Office::_decode("doc_write", office__doc_write(to_json($r)))
 }
 
