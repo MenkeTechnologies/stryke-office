@@ -2551,6 +2551,46 @@ fn op_sheet_chunk(opts: Value) -> Result<Value> {
     Ok(json!({ "count": files.len(), "files": files }))
 }
 
+/// Keep only the first (or last) N data rows of a sheet. opts: path, output,
+/// n => row count (default 10), tail => bool (take the last N instead), header
+/// => keep the first row (default true), sheet, format. Returns
+/// `{ ok, path, rows }` (data rows kept).
+fn op_sheet_head(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let n = opts.get("n").and_then(Value::as_u64).unwrap_or(10) as usize;
+    let tail = opts.get("tail").and_then(Value::as_bool).unwrap_or(false);
+    let keep_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+
+    let rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let (header, data) = if keep_header && !rows.is_empty() {
+        (Some(rows[0].clone()), &rows[1..])
+    } else {
+        (None, &rows[..])
+    };
+    let take: Vec<Value> = if tail {
+        let mut v: Vec<Value> = data.iter().rev().take(n).cloned().collect();
+        v.reverse();
+        v
+    } else {
+        data.iter().take(n).cloned().collect()
+    };
+
+    let kept = take.len();
+    let mut out_rows: Vec<Value> = Vec::with_capacity(kept + 1);
+    if let Some(h) = header {
+        out_rows.push(h);
+    }
+    out_rows.extend(take);
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Sheet1", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": kept }))
+}
+
 /// Read one sheet's rows from a file, selected by name/index (default first).
 fn select_sheet_rows(path: &str, sel: Option<&Value>) -> Result<Vec<Value>> {
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -3563,6 +3603,7 @@ export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
+export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_diff, op_sheet_diff);
 export!(office__sheet_info, op_sheet_info);
 export!(office__sheet_to_slides, op_sheet_to_slides);

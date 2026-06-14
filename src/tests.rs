@@ -338,6 +338,46 @@ fn sheet_diff_cells() {
 }
 
 #[test]
+fn sheet_head_and_tail() {
+    let path = tmp("head.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["h"],[1],[2],[3],[4],[5]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // head 2 -> header + rows 1,2
+    let h = tmp("head_h.xlsx");
+    let rh = call(
+        office__sheet_head,
+        &format!(r#"{{"path":"{path}","n":2,"output":"{h}"}}"#),
+    );
+    assert_eq!(rh["rows"], 2, "kept 2: {rh}");
+    let rdh = call(office__sheet_read, &format!(r#"{{"path":"{h}"}}"#));
+    let rows = rdh["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2: {rdh}");
+    assert_eq!(rows[1][0], 1.0, "first data: {rdh}");
+    assert_eq!(rows[2][0], 2.0, "second data: {rdh}");
+
+    // tail 2 -> header + rows 4,5
+    let t = tmp("head_t.xlsx");
+    call(
+        office__sheet_head,
+        &format!(r#"{{"path":"{path}","n":2,"tail":true,"output":"{t}"}}"#),
+    );
+    let rdt = call(office__sheet_read, &format!(r#"{{"path":"{t}"}}"#));
+    let trows = rdt["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(trows[1][0], 4.0, "tail first: {rdt}");
+    assert_eq!(trows[2][0], 5.0, "tail last: {rdt}");
+
+    for f in [&path, &h, &t] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(

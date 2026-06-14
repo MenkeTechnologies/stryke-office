@@ -163,6 +163,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/value, `by` columns, `value` constant |
 | `Office::sheet_split($path, $dir, %opts)` | `{count, files}` | explode a workbook into one file per sheet; `format`/`prefix` opts |
 | `Office::sheet_chunk($path, $size, $dir, %opts)` | `{count, files}` | split rows into fixed-size chunks across files (header repeated) |
+| `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
 | `Office::sheet_info($path)` | `{count, sheets:[{name,rows,cols}]}` | workbook overview: sheet names + dimensions |
 | `Office::sheet_diff($left, $right, %opts)` | `{count, changed:[{ref,row,col,left,right}], left_rows, right_rows}` | cell-by-cell diff of two sheets |
 | `Office::sheet_to_slides($path, $output, %opts)` | `{slides}` | one slide per row; `title_field` titles each, other fields → body lines |
