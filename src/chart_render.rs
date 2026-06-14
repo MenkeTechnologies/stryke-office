@@ -320,6 +320,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_smooth(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
         }
+        "bin2d" | "bin_2d" => {
+            require_series(&opts)?;
+            render_bin2d(&mut img, &fnt, series, &opts, l, t, r, b, black)
+        }
         _ => special = false,
     }
 
@@ -1867,6 +1871,86 @@ fn render_smooth(
             draw_line_segment_mut(img, w[0], w[1], color);
         }
     }
+}
+
+/// Rectangular 2-D histogram (ggplot2 `geom_bin2d`) — scatter `data => [[x,y],…]`
+/// (pooled across series) binned into a grid of rectangular cells colored by
+/// count, light→saturated. The square-cell counterpart to `hexbin`. opts:
+/// `bins` => cells per axis (default 20), `xbins`/`ybins` to override per axis.
+#[allow(clippy::too_many_arguments)]
+fn render_bin2d(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+) {
+    let pts: Vec<(f64, f64)> = series.iter().flat_map(series_points).collect();
+    if pts.is_empty() {
+        return;
+    }
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for &(x, y) in &pts {
+        xmin = xmin.min(x);
+        xmax = xmax.max(x);
+        ymin = ymin.min(y);
+        ymax = ymax.max(y);
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let bins = opts.get("bins").and_then(Value::as_u64).unwrap_or(20).clamp(2, 100) as usize;
+    let nx = opts.get("xbins").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(bins).clamp(2, 100);
+    let ny = opts.get("ybins").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(bins).clamp(2, 100);
+
+    let mut counts = vec![0u32; nx * ny];
+    for &(x, y) in &pts {
+        let mut ix = ((x - xmin) / (xmax - xmin) * nx as f64) as usize;
+        let mut iy = ((y - ymin) / (ymax - ymin) * ny as f64) as usize;
+        ix = ix.min(nx - 1);
+        iy = iy.min(ny - 1);
+        counts[iy * nx + ix] += 1;
+    }
+    let maxc = *counts.iter().max().unwrap_or(&1) as f64;
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let base = series_color(series.first().unwrap_or(&Value::Null), 0);
+    let cw = pw / nx as f64;
+    let ch = ph / ny as f64;
+    for iy in 0..ny {
+        for ix in 0..nx {
+            let c = counts[iy * nx + ix];
+            if c == 0 {
+                continue;
+            }
+            let tval = c as f64 / maxc;
+            // light tint -> saturated base color by count
+            let mix = |lo: u8, hi: u8| (lo as f64 + tval * (hi as f64 - lo as f64)) as u8;
+            let color = Rgba([mix(235, base.0[0]), mix(238, base.0[1]), mix(245, base.0[2]), 255]);
+            // row iy=0 is the bottom band (ymin); draw from bottom up
+            let x0 = l as f64 + ix as f64 * cw;
+            let y0 = b as f64 - (iy + 1) as f64 * ch;
+            draw_filled_rect_mut(img, Rect::at(x0 as i32, y0 as i32).of_size(cw.max(1.0) as u32, ch.max(1.0) as u32), color);
+        }
+    }
+    for i in 0..=5 {
+        let yv = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = (b as f64 - (yv - ymin) / (ymax - ymin) * ph) as i32;
+        draw_text_mut(img, black, 4, y - 6, PxScale::from(12.0), fnt, &fmt_num(yv));
+    }
+    draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmin));
+    draw_text_mut(img, black, ((l as f64 + pw) - 36.0) as i32, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmax));
 }
 
 #[allow(clippy::too_many_arguments)]

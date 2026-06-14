@@ -11197,6 +11197,33 @@ fn chart_smooth_loess_raster_and_svg() {
 }
 
 #[test]
+fn chart_bin2d_raster_and_svg() {
+    // points clustered into a few cells
+    let series = r#"[{"name":"d","data":[[1,1],[1,1],[1,1],[2,2],[2,2],[5,5],[1,5],[5,1]]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"bin2d","width":420,"height":340,"bins":5,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("bin2d raster: {c}"));
+    assert_eq!(c["type"], "bin2d", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"bin2d","bins":5,"series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "bin2d svg malformed"
+    );
+    // colored count cells are <rect> fills (only nonzero cells drawn)
+    assert!(svg.contains("<rect x="), "bin2d svg cells");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

@@ -692,7 +692,9 @@ distribution — ggbeeswarm `geom_beeswarm`; opt `radius`), `contour`/`density2d
 `ridgeline`/`ridge`/`joyplot` (ggridges `geom_density_ridges` — per-series KDE
 ridges stacked on their own baselines; opts `points`/`overlap`), `smooth`/`loess`
 (ggplot2 `geom_smooth` — locally weighted (LOESS) regression curve over scatter
-`[[x,y],…]`; opts `span`/`points`; distinct from scatter's linear `trendline`).
+`[[x,y],…]`; opts `span`/`points`; distinct from scatter's linear `trendline`),
+`bin2d` (ggplot2 `geom_bin2d` — rectangular 2-D count heatmap of pooled scatter
+points; opts `bins`/`xbins`/`ybins`; the square-cell counterpart to `hexbin`).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,

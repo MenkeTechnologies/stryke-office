@@ -86,6 +86,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "contour" | "density2d" => svg_contour(&mut s, series, opts, l, t, r, b),
         "ridgeline" | "ridge" | "joyplot" => svg_ridgeline(&mut s, series, opts, l, t, r, b),
         "smooth" | "loess" => svg_smooth(&mut s, series, opts, l, t, r, b),
+        "bin2d" | "bin_2d" => svg_bin2d(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1805,6 +1806,67 @@ fn svg_smooth(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r:
         }
         let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="2.5"/>"##);
     }
+}
+
+/// Rectangular 2-D histogram (vector; ggplot2 `geom_bin2d`). Pooled scatter
+/// points binned into colored cells. opts: `bins` (default 20), `xbins`/`ybins`.
+fn svg_bin2d(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let pts: Vec<(f64, f64)> = series.iter().flat_map(series_points).collect();
+    if pts.is_empty() {
+        return;
+    }
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for &(x, y) in &pts {
+        xmin = xmin.min(x);
+        xmax = xmax.max(x);
+        ymin = ymin.min(y);
+        ymax = ymax.max(y);
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let bins = opts.get("bins").and_then(Value::as_u64).unwrap_or(20).clamp(2, 100) as usize;
+    let nx = opts.get("xbins").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(bins).clamp(2, 100);
+    let ny = opts.get("ybins").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(bins).clamp(2, 100);
+
+    let mut counts = vec![0u32; nx * ny];
+    for &(x, y) in &pts {
+        let ix = (((x - xmin) / (xmax - xmin) * nx as f64) as usize).min(nx - 1);
+        let iy = (((y - ymin) / (ymax - ymin) * ny as f64) as usize).min(ny - 1);
+        counts[iy * nx + ix] += 1;
+    }
+    let maxc = *counts.iter().max().unwrap_or(&1) as f64;
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let base = palette(0);
+    let cw = pw / nx as f64;
+    let ch = ph / ny as f64;
+    for iy in 0..ny {
+        for ix in 0..nx {
+            let c = counts[iy * nx + ix];
+            if c == 0 {
+                continue;
+            }
+            let tv = c as f64 / maxc;
+            let mix = |lo: u8, hi: u8| (lo as f64 + tv * (hi as f64 - lo as f64)) as u8;
+            let col = svg_color(Rgba([mix(235, base.0[0]), mix(238, base.0[1]), mix(245, base.0[2]), 255]));
+            let x0 = l + ix as f64 * cw;
+            let y0 = b - (iy + 1) as f64 * ch;
+            let _ = write!(s, r##"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" fill="{col}"/>"##, cw, ch);
+        }
+    }
+    for i in 0..=5 {
+        let yv = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = b - (yv - ymin) / (ymax - ymin) * ph;
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(yv)));
+    }
+    let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(xmin)));
+    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(xmax)));
 }
 
 fn svg_pie(s: &mut String, series: &[Value], cats: &[String], w: f64, h: f64, donut: bool, labels: bool) {
