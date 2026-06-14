@@ -180,6 +180,13 @@ Office::sheet_map($gcx, "v", { a => "ALPHA" }, $smo)
 val $smr = Office::sheet_get_cell($smo, "B2")
 assert_eq $smr->{value}, "ALPHA", "sheet_map: value recoded"
 unlink $smo
+# partition by g (x, y -> 2 files)
+val $pdir = "$dir/$tag-part"
+Office::sheet_partition($gcx, "g", $pdir)
+val $pr2 = Office::sheet_get_cell("$pdir/y.xlsx", "A2")
+assert_eq $pr2->{value}, "y", "sheet_partition: group file written"
+unlink "$pdir/x.xlsx"
+unlink "$pdir/y.xlsx"
 # countif on the same file (g == x -> 2)
 val $cif = Office::sheet_countif($gcx, "g", op => "eq", value => "x")
 assert_eq $cif->{count}, 2, "sheet_countif: matched rows"

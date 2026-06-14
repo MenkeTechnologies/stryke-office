@@ -248,6 +248,13 @@ fn Office::sheet_map ($path, $column, $mapping, $output, %opts) {
         office__sheet_map(to_json({ path => $path, column => $column, mapping => $mapping, output => $output, default => $opts{default}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Partition a sheet into one file per distinct value of $column. opts: prefix,
+## format, header, sheet. Returns { count, files }.
+fn Office::sheet_partition ($path, $column, $dir, %opts) {
+    Office::_decode("sheet_partition",
+        office__sheet_partition(to_json({ path => $path, column => $column, dir => $dir, prefix => $opts{prefix}, format => $opts{format}, header => $opts{header}, sheet => $opts{sheet} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

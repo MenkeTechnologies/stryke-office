@@ -2990,6 +2990,97 @@ fn op_sheet_map(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "mapped": mapped }))
 }
 
+/// Partition a sheet into one file per distinct value of a column (e.g. split
+/// sales by region). opts: path, column => name or 0-based index (required),
+/// dir => output directory (required), prefix => filename prefix (default ""),
+/// format => output extension (default: source's), header => repeat the header
+/// row in each file (default true), sheet. Files are `{dir}/{prefix}{value}.{ext}`
+/// with the value sanitized for the filename. Returns `{ count, files }`.
+fn op_sheet_partition(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let dir = req_str(&opts, "dir")?;
+    let prefix = opts.get("prefix").and_then(Value::as_str).unwrap_or("");
+    let ext = opts
+        .get("format")
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| ext_of(path));
+    let keep_header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    std::fs::create_dir_all(dir)?;
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header_row = if keep_header { rows.first() } else { None };
+    let col = resolve_col(
+        opts.get("column"),
+        header_row.and_then(Value::as_array).map(|v| v.as_slice()),
+    )?;
+
+    // Group data rows by the column value, preserving first-seen order.
+    let data_start = if keep_header && !rows.is_empty() {
+        1
+    } else {
+        0
+    };
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
+    for row in &rows[data_start..] {
+        let key = row
+            .as_array()
+            .and_then(|a| a.get(col))
+            .map(cell_to_string)
+            .unwrap_or_default();
+        groups.entry(key.clone()).or_insert_with(|| {
+            order.push(key.clone());
+            Vec::new()
+        });
+        groups.get_mut(&key).unwrap().push(row.clone());
+    }
+
+    let sanitize = |s: &str| -> String {
+        let cleaned: String = s
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect();
+        if cleaned.is_empty() {
+            "blank".to_string()
+        } else {
+            cleaned
+        }
+    };
+
+    let mut files = Vec::new();
+    for key in &order {
+        let mut out_rows: Vec<Value> = Vec::new();
+        if let Some(h) = header_row {
+            out_rows.push(h.clone());
+        }
+        out_rows.extend(groups.remove(key).unwrap_or_default());
+        let out = format!("{dir}/{prefix}{}.{ext}", sanitize(key));
+        op_sheet_write(json!({
+            "path": out,
+            "sheets": [{ "name": "Sheet1", "rows": out_rows }],
+            "format": ext,
+        }))?;
+        files.push(out);
+    }
+    Ok(json!({ "count": files.len(), "files": files }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -7283,6 +7374,7 @@ export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_explode, op_sheet_explode);
 export!(office__sheet_map, op_sheet_map);
+export!(office__sheet_partition, op_sheet_partition);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
