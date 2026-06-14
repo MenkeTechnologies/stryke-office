@@ -182,6 +182,42 @@ fn sheet_stats_per_column_aggregates() {
 }
 
 #[test]
+fn sheet_describe_numeric_summary() {
+    let path = tmp("describe.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["label","v"],
+                ["a",1],
+                ["b",2],
+                ["c",3],
+                ["d",4]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(office__sheet_describe, &format!(r#"{{"path":"{path}"}}"#));
+    let cols = s["columns"].as_array().unwrap();
+    // Only the numeric "v" column is reported (text "label" skipped).
+    assert_eq!(cols.len(), 1, "one numeric column: {s}");
+    let v = &cols[0];
+    assert_eq!(v["name"], "v", "column name: {s}");
+    assert_eq!(v["count"], 4, "count: {s}");
+    assert_eq!(v["mean"], 2.5, "mean: {s}");
+    assert_eq!(v["min"], 1.0, "min: {s}");
+    assert_eq!(v["max"], 4.0, "max: {s}");
+    assert_eq!(v["p25"], 1.75, "p25 linear interp: {s}");
+    assert_eq!(v["p50"], 2.5, "median: {s}");
+    assert_eq!(v["p75"], 3.25, "p75 linear interp: {s}");
+    // sample std (ddof=1) of [1,2,3,4] = sqrt(5/3) ≈ 1.2909944
+    let std = v["std"].as_f64().unwrap();
+    assert!((std - 1.290_994_4).abs() < 1e-6, "sample std: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

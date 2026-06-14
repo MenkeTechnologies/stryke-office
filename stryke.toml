@@ -17,6 +17,7 @@ exports = [
     "office__sheet_merge",
     "office__sheet_union",
     "office__sheet_stats",
+    "office__sheet_describe",
     "office__sheet_find",
     "office__sheet_records",
     "office__records_write",

@@ -1249,6 +1249,98 @@ fn op_sheet_stats(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// Linear-interpolated percentile of a pre-sorted slice (pandas default method).
+/// q in 0.0..=1.0. Empty slice → 0.0.
+fn percentile_sorted(sorted: &[f64], q: f64) -> f64 {
+    if sorted.is_empty() {
+        return 0.0;
+    }
+    if sorted.len() == 1 {
+        return sorted[0];
+    }
+    let rank = q * (sorted.len() - 1) as f64;
+    let lo = rank.floor() as usize;
+    let hi = rank.ceil() as usize;
+    let frac = rank - lo as f64;
+    sorted[lo] + (sorted[hi] - sorted[lo]) * frac
+}
+
+/// Pandas-style numeric summary: per numeric column, count/mean/std/min/25%/
+/// 50%/75%/max. Distinct from `sheet_stats` (which adds blanks/sum but no
+/// std-dev, median, or quartiles). opts: path, sheet, header (default true).
+/// `std` is the sample standard deviation (ddof=1; 0 when count < 2). Only
+/// columns with at least one numeric value are reported. Returns `{ sheet, rows,
+/// columns: [{ name, count, mean, std, min, p25, p50, p75, max }] }`.
+fn op_sheet_describe(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    let mut columns = Vec::new();
+    for c in 0..ncols {
+        let mut vals: Vec<f64> = data
+            .iter()
+            .filter_map(|row| row.as_array().and_then(|a| a.get(c)))
+            .filter_map(sheet_cell_num)
+            .collect();
+        if vals.is_empty() {
+            continue;
+        }
+        vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        let n = vals.len();
+        let mean = vals.iter().sum::<f64>() / n as f64;
+        let std = if n > 1 {
+            (vals.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt()
+        } else {
+            0.0
+        };
+        columns.push(json!({
+            "name": cname,
+            "count": n,
+            "mean": mean,
+            "std": std,
+            "min": vals[0],
+            "p25": percentile_sorted(&vals, 0.25),
+            "p50": percentile_sorted(&vals, 0.50),
+            "p75": percentile_sorted(&vals, 0.75),
+            "max": vals[n - 1],
+        }));
+    }
+    Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -4223,6 +4315,7 @@ export!(office__sheet_write, op_sheet_write);
 export!(office__sheet_merge, op_sheet_merge);
 export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
+export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
