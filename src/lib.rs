@@ -5265,6 +5265,7 @@ export!(office__doc_to_html, op_doc_to_html);
 export!(office__doc_to_text, op_doc_to_text);
 export!(office__pdf_to_doc, op_pdf_to_doc);
 export!(office__pdf_to_slides, op_pdf_to_slides);
+export!(office__doc_to_pdf, op_doc_to_pdf);
 export!(office__doc_to_slides, op_doc_to_slides);
 export!(office__slides_to_doc, op_slides_to_doc);
 export!(office__slides_to_pdf, op_slides_to_pdf);

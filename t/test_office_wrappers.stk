@@ -84,4 +84,17 @@ assert_eq $stats->{pages}, 1, "pdf_stats: page count"
 assert_ok ($stats->{words} >= 3), "pdf_stats: word count"
 unlink $ps
 
+# ── document -> pdf ─────────────────────────────────────────────────
+val $d2p = "$dir/$tag-d2p.docx"
+Office::doc_write($d2p, [
+    { kind => "heading", level => 1, text => "Chapter" },
+    { kind => "para", text => "intro body" },
+])
+val $d2ppdf = "$dir/$tag-d2p.pdf"
+Office::doc_to_pdf($d2p, $d2ppdf)
+val $d2pr = Office::pdf_read($d2ppdf)
+assert_ok ($d2pr->{text} =~ /Chapter/), "doc_to_pdf: heading renders into pdf"
+unlink $d2p
+unlink $d2ppdf
+
 test_run

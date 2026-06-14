@@ -2563,6 +2563,39 @@ fn pdf_to_slides_one_per_page() {
 }
 
 #[test]
+fn doc_to_pdf_renders_blocks() {
+    let dx = tmp("d2pdf.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Chapter"}},
+                {{"kind":"para","text":"intro body"}},
+                {{"kind":"table","rows":[["K","V"],["x","1"]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "doc write: {w}");
+
+    let out = tmp("d2pdf.pdf");
+    let r = call(
+        office__doc_to_pdf,
+        &format!(r#"{{"path":"{dx}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "render: {r}");
+    assert!(r["elements"].as_u64().unwrap() >= 3, "elements mapped: {r}");
+
+    // text extractable back from the produced PDF
+    let pr = call(office__pdf_read, &format!(r#"{{"path":"{out}"}}"#));
+    let text = pr["text"].as_str().unwrap();
+    assert!(text.contains("Chapter"), "heading in pdf: {text:?}");
+    assert!(text.contains("intro body"), "paragraph in pdf: {text:?}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_html_structured() {
     let dx = tmp("tohtml.docx");
     let w = call(
