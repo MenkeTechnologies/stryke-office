@@ -8614,6 +8614,107 @@ fn op_sheet_strip(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "trimmed": trimmed }))
 }
 
+/// Pad a column's values to a fixed character width with a fill string (e.g.
+/// zero-pad ID codes: "5" -> "005"). opts: path, output, column => name/index
+/// (required), width => target length (required), fill => pad string (default
+/// "0"), side => "left" (default) or "right", into => write to a new column
+/// (default: pad in place), sheet, header, format. Values already at or above
+/// `width` are left unchanged. Returns `{ ok, path, padded }` (count of cells
+/// changed).
+fn op_sheet_pad(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let width = opts
+        .get("width")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("missing width (target length)"))? as usize;
+    let fill = opts.get("fill").and_then(Value::as_str).unwrap_or("0");
+    if fill.is_empty() {
+        return Err(anyhow!("fill must be non-empty"));
+    }
+    let right = opts.get("side").and_then(Value::as_str) == Some("right");
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+
+    // Build the pad prefix/suffix by repeating `fill` then trimming to length.
+    let pad_to = |s: &str| -> Option<String> {
+        let cur = s.chars().count();
+        if cur >= width {
+            return None;
+        }
+        let need = width - cur;
+        let mut filler: String = fill.chars().cycle().take(need).collect();
+        Some(if right {
+            format!("{s}{filler}")
+        } else {
+            filler.push_str(s);
+            filler
+        })
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut padded = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).cloned().unwrap_or(Value::Null);
+            let result = match pad_to(&cell_to_string(&src)) {
+                Some(p) => {
+                    padded += 1;
+                    json!(p)
+                }
+                None => json!(cell_to_string(&src)),
+            };
+            match &into {
+                Some(_) => cells.push(result),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = result;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = result;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "padded": padded }))
+}
+
 /// Append a column holding the first non-blank value across several columns, in
 /// priority order (SQL `COALESCE`). Distinct from `sheet_fill` (fills within one
 /// column) and `sheet_concat_columns` (joins values together). opts: path,
@@ -10748,6 +10849,7 @@ export!(office__sheet_sample, op_sheet_sample);
 export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
+export!(office__sheet_pad, op_sheet_pad);
 export!(office__sheet_coalesce, op_sheet_coalesce);
 export!(office__sheet_recode, op_sheet_recode);
 export!(office__sheet_top, op_sheet_top);

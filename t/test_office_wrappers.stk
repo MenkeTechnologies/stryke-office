@@ -476,6 +476,17 @@ assert_eq $spb->[0]{rows}[0][0], "name", "sheet_strip: header trimmed"
 assert_eq $spb->[0]{rows}[1][0], "apple", "sheet_strip: cell trimmed"
 unlink $spx
 unlink $spo
+# sheet_pad: zero-pad IDs to a fixed width
+val $pdx = "$dir/$tag-pad.xlsx"
+Office::sheet_write($pdx, [{ name => "D", rows => [["id"], ["5"], ["42"]] }])
+val $pdo = "$dir/$tag-pad-out.xlsx"
+val $pdr = Office::sheet_pad($pdx, $pdo, "id", 4)
+assert_eq $pdr->{padded}, 2, "sheet_pad: two values padded"
+val $pdb = Office::sheet_read($pdo)
+assert_eq $pdb->[0]{rows}[1][0], "0005", "sheet_pad: 5 -> 0005"
+assert_eq $pdb->[0]{rows}[2][0], "0042", "sheet_pad: 42 -> 0042"
+unlink $pdx
+unlink $pdo
 # sheet_coalesce: first non-blank across columns
 val $cox = "$dir/$tag-coalesce.xlsx"
 Office::sheet_write($cox, [{ name => "D", rows => [["primary", "fallback"], ["", "alt1"], ["main2", "alt2"]] }])
