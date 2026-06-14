@@ -656,6 +656,13 @@ fn Office::sheet_where ($path, $conditions, $output, %opts) {
         office__sheet_where(to_json({ path => $path, conditions => $conditions, output => $output, match => $opts{match}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Freeze panes on a sheet (xlsx). opts: row (default 1), col (default 0),
+## output, sheet, format. Returns { ok, path, row, col }.
+fn Office::sheet_freeze ($path, $output, %opts) {
+    Office::_decode("sheet_freeze",
+        office__sheet_freeze(to_json({ path => $path, output => $output, row => $opts{row}, col => $opts{col}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns

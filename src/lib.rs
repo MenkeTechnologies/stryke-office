@@ -5821,6 +5821,34 @@ fn op_sheet_where(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "kept": kept }))
 }
 
+/// Freeze panes on a sheet so the top rows / left columns stay visible while
+/// scrolling (xlsx only). opts: path, output (default in place), row => rows to
+/// freeze above the split (default 1 = freeze the header), col => columns to
+/// freeze left of the split (default 0), sheet, format. Returns
+/// `{ ok, path, row, col }`.
+fn op_sheet_freeze(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let row = opts.get("row").and_then(Value::as_u64).unwrap_or(1);
+    let col = opts.get("col").and_then(Value::as_u64).unwrap_or(0);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    sheets[target]["freeze"] = json!([row, col]);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "row": row, "col": col }))
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -7903,6 +7931,7 @@ export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_calc, op_sheet_calc);
 export!(office__sheet_where, op_sheet_where);
+export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
