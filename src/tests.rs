@@ -338,6 +338,44 @@ fn sheet_corr_pearson_matrix() {
 }
 
 #[test]
+fn sheet_cov_matrix() {
+    let path = tmp("cov.xlsx");
+    // x = [1,2,3], y = 2x. Sample var(x) = 1; cov(x,y) = 2; var(y) = 4.
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"C","rows":[
+                ["x","y"],
+                [1,2],
+                [2,4],
+                [3,6]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(office__sheet_cov, &format!(r#"{{"path":"{path}"}}"#));
+    let names = s["columns"].as_array().unwrap();
+    assert_eq!(names.len(), 2, "two numeric columns: {s}");
+    let m = &s["matrix"];
+    assert!(
+        (m[0][0].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "var(x)=1: {s}"
+    );
+    assert!(
+        (m[0][1].as_f64().unwrap() - 2.0).abs() < 1e-9,
+        "cov(x,y)=2: {s}"
+    );
+    assert!(
+        (m[1][1].as_f64().unwrap() - 4.0).abs() < 1e-9,
+        "var(y)=4: {s}"
+    );
+    // symmetric
+    assert_eq!(m[1][0], m[0][1], "symmetric: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_to_md_github_table() {
     let path = tmp("tomd.xlsx");
     let w = call(

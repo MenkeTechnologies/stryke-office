@@ -150,6 +150,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_quantile($path, $column, $q, %opts)` | `{column, q, value, count}` | arbitrary percentile of a numeric column (e.g. `q=0.9` for p90) |
 | `Office::sheet_agg($path, $column, %opts)` | `{column, agg, value, count}` | single-column scalar aggregate (`agg` sum/mean/min/max/count/median) |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | Pearson correlation matrix between numeric columns (pandas `df.corr()`) |
+| `Office::sheet_cov($path, %opts)` | `{sheet, columns, matrix}` | sample covariance matrix between numeric columns (diagonal = sample variance; pandas `df.cov()`) |
 | `Office::sheet_find($path, $query, %opts)` | `{count, matches:[{sheet,row,col,ref,value}]}` | locate cells (A1 refs); `ignore_case`/`whole`/`sheet` opts |
 | `Office::sheet_records($path, %opts)` | `{fields, count, records:[{field=>value}]}` | read a sheet as header-keyed objects |
 | `Office::records_write($path, $records, %opts)` | `{rows, fields}` | write objects to a sheet (header + rows); `fields`/`sheet_name` opts |

@@ -706,6 +706,13 @@ fn Office::sheet_outliers ($path, $column, %opts) {
         office__sheet_outliers(to_json({ path => $path, column => $column, method => $opts{method}, k => $opts{k}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Sample covariance matrix over a sheet's numeric columns (diagonal = sample
+## variance). opts: sheet, header. Returns { sheet, columns, matrix }.
+fn Office::sheet_cov ($path, %opts) {
+    Office::_decode("sheet_cov",
+        office__sheet_cov(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns
