@@ -7685,6 +7685,140 @@ fn op_sheet_date_diff(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Proleptic-Gregorian date (y, m, d) for a count of days since 1970-01-01 —
+/// the inverse of `days_from_civil` (Hinnant's `civil_from_days`).
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = z - era * 146097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    (y + (m <= 2) as i64, m, d)
+}
+
+/// Parse the leading `YYYY-MM-DD` of an ISO string into `(year, month, day)`.
+fn iso_to_ymd(s: &str) -> Option<(i64, i64, i64)> {
+    let c: Vec<char> = s.chars().take(10).collect();
+    if c.len() < 10 {
+        return None;
+    }
+    let part =
+        |a: usize, b: usize| -> Option<i64> { c[a..b].iter().collect::<String>().parse().ok() };
+    Some((part(0, 4)?, part(5, 7)?, part(8, 10)?))
+}
+
+/// Days in a given proleptic-Gregorian month (leap years handled).
+fn days_in_month(y: i64, m: i64) -> i64 {
+    match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 30,
+    }
+}
+
+/// Append a new column of an ISO-date column shifted by a fixed amount. opts:
+/// path, output, column => date column name/index (required), amount => integer
+/// offset (may be negative, required), unit => `days` (default) | `weeks` |
+/// `months`, into => new column (default `{column}_shift`), sheet, header
+/// (default true), format. Day/week math is exact; month math clamps to the
+/// target month's last day (Jan 31 + 1 month → Feb 28/29). Unparseable dates
+/// become blank. Returns `{ ok, path, column }`.
+fn op_sheet_date_add(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let amount = opts
+        .get("amount")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| anyhow!("missing amount (integer offset)"))?;
+    let unit = opts.get("unit").and_then(Value::as_str).unwrap_or("days");
+    if !matches!(unit, "days" | "weeks" | "months") {
+        return Err(anyhow!("unknown unit: {unit} (days|weeks|months)"));
+    }
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_shift"));
+
+    let shift = |s: &str| -> Option<String> {
+        let (y, m, d) = iso_to_ymd(s)?;
+        let (ny, nm, nd) = match unit {
+            "months" => {
+                let total = (y * 12 + (m - 1)) + amount;
+                let ny = total.div_euclid(12);
+                let nm = total.rem_euclid(12) + 1;
+                (ny, nm, d.min(days_in_month(ny, nm)))
+            }
+            _ => {
+                let delta = if unit == "weeks" { amount * 7 } else { amount };
+                civil_from_days(days_from_civil(y, m, d) + delta)
+            }
+        };
+        Some(format!("{ny:04}-{nm:02}-{nd:02}"))
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = cells
+                    .get(col)
+                    .map(cell_to_string)
+                    .and_then(|s| shift(&s))
+                    .map_or(json!(""), |s| json!(s));
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_date_part(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -14537,6 +14671,7 @@ export!(office__sheet_resample, op_sheet_resample);
 export!(office__sheet_group_stats, op_sheet_group_stats);
 export!(office__sheet_date_part, op_sheet_date_part);
 export!(office__sheet_date_diff, op_sheet_date_diff);
+export!(office__sheet_date_add, op_sheet_date_add);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);
