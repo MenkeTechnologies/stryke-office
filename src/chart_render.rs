@@ -288,6 +288,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_violin(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
         }
+        "ecdf" => {
+            require_series(&opts)?;
+            render_ecdf(&mut img, &fnt, series, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -988,6 +992,88 @@ fn render_violin(
         // category label
         let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         draw_text_mut(img, black, (cx - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(12.0), fnt, &name);
+    }
+}
+
+/// Build the empirical-CDF step vertices for `data` across `[xlo, xhi]`: starts
+/// at `(xlo, 0)`, steps up by `1/n` at each sorted value, ends at `(xhi, 1)`.
+/// Shared by the raster and SVG ECDF renderers.
+fn ecdf_steps(data: &[f64], xlo: f64, xhi: f64) -> Vec<(f64, f64)> {
+    let n = data.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut sorted = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut verts: Vec<(f64, f64)> = Vec::with_capacity(n * 2 + 2);
+    verts.push((xlo, 0.0));
+    let mut y = 0.0;
+    for (i, &v) in sorted.iter().enumerate() {
+        verts.push((v, y)); // horizontal run up to this value
+        y = (i + 1) as f64 / n as f64;
+        verts.push((v, y)); // vertical step
+    }
+    verts.push((xhi, 1.0));
+    verts
+}
+
+/// Empirical cumulative distribution plot (ggplot2 `stat_ecdf`) — a right-
+/// continuous step curve per series rising from 0 to 1 over a shared value (x)
+/// axis. Reads raw `data` per series. No options beyond the shared scale.
+#[allow(clippy::too_many_arguments)]
+fn render_ecdf(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let (mut xlo, mut xhi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            xlo = xlo.min(v);
+            xhi = xhi.max(v);
+        }
+    }
+    if !xlo.is_finite() || !xhi.is_finite() {
+        return;
+    }
+    if (xhi - xlo).abs() < f64::EPSILON {
+        xhi = xlo + 1.0;
+    }
+    let pad = (xhi - xlo) * 0.05;
+    let (xlo, xhi) = (xlo - pad, xhi + pad);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let xp = |x: f64| l as f64 + (x - xlo) / (xhi - xlo) * pw;
+    let yp = |f: f64| (b as f64 - f * ph) as f32;
+    for i in 0..=5 {
+        let f = i as f64 / 5.0;
+        let y = yp(f);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &format!("{f:.1}"));
+    }
+    draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &fmt_num(xlo));
+    draw_text_mut(img, black, ((l as f64 + pw) - 36.0) as i32, b + 6, PxScale::from(12.0), fnt, &fmt_num(xhi));
+
+    for (si, s) in series.iter().enumerate() {
+        let data = series_nums(s);
+        if data.is_empty() {
+            continue;
+        }
+        let color = series_color(s, si);
+        let verts: Vec<(f32, f32)> =
+            ecdf_steps(&data, xlo, xhi).iter().map(|&(x, f)| (xp(x) as f32, yp(f))).collect();
+        for w in verts.windows(2) {
+            draw_line_segment_mut(img, w[0], w[1], color);
+        }
     }
 }
 

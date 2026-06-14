@@ -1293,4 +1293,10 @@ assert_ok ($vlnsvg =~ /^<svg/), "chart violin: svg document"
 assert_ok ($vlnsvg =~ /ctrl/), "chart violin: category label"
 assert_ok ($vlnsvg =~ /stroke="#ffffff"/), "chart violin: median tick"
 
+# ── chart ecdf (ggplot2 stat_ecdf): step CDF to SVG ─────────────────
+val $ecdfsvg = Office::chart_svg("ecdf", [{ name => "a", data => [1, 2, 3, 4, 5, 6, 7, 8] }])
+assert_ok ($ecdfsvg =~ /^<svg/), "chart ecdf: svg document"
+assert_ok ($ecdfsvg =~ /polyline/), "chart ecdf: step curve"
+assert_ok ($ecdfsvg =~ />1\.0</), "chart ecdf: probability axis to 1.0"
+
 test_run

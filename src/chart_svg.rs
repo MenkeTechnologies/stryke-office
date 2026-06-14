@@ -78,6 +78,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "hexbin" => svg_hexbin(&mut s, opts, series, l, t, r, b),
         "density" => svg_density(&mut s, series, opts, l, t, r, b),
         "violin" => svg_violin(&mut s, series, opts, l, t, r, b),
+        "ecdf" => svg_ecdf(&mut s, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -1328,6 +1329,52 @@ fn svg_violin(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r:
         }
         let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&name));
+    }
+}
+
+/// Empirical CDF plot (vector; ggplot2 `stat_ecdf`). A right-continuous step
+/// curve per series climbing 0→1 over a shared value axis.
+fn svg_ecdf(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let (mut xlo, mut xhi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            xlo = xlo.min(v);
+            xhi = xhi.max(v);
+        }
+    }
+    if !xlo.is_finite() || !xhi.is_finite() {
+        return;
+    }
+    if (xhi - xlo).abs() < f64::EPSILON {
+        xhi = xlo + 1.0;
+    }
+    let pad = (xhi - xlo) * 0.05;
+    let (xlo, xhi) = (xlo - pad, xhi + pad);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let xp = |x: f64| l + (x - xlo) / (xhi - xlo) * pw;
+    let yp = |f: f64| b - f * ph;
+    for i in 0..=5 {
+        let f = i as f64 / 5.0;
+        let y = yp(f);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{f:.1}</text>"##, y + 4.0);
+    }
+    let _ = write!(s, r##"<text x="{l:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&fmt_num(xlo)));
+    let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, r - 36.0, b + 14.0, xml_escape(&fmt_num(xhi)));
+
+    for (si, ser) in series.iter().enumerate() {
+        let data = series_nums(ser);
+        if data.is_empty() {
+            continue;
+        }
+        let col = svg_palette(si);
+        let mut line = String::new();
+        for &(x, f) in &ecdf_steps(&data, xlo, xhi) {
+            let _ = write!(line, "{:.1},{:.1} ", xp(x), yp(f));
+        }
+        let _ = write!(s, r##"<polyline points="{line}" fill="none" stroke="{col}" stroke-width="2"/>"##);
     }
 }
 
