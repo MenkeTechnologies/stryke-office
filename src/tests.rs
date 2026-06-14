@@ -2529,6 +2529,40 @@ fn pdf_to_doc_converts_text() {
 }
 
 #[test]
+fn pdf_to_slides_one_per_page() {
+    let pdf = tmp("p2s.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{pdf}","elements":[
+                {{"type":"heading","level":1,"text":"First"}},
+                {{"type":"paragraph","text":"body one"}},
+                {{"type":"pagebreak"}},
+                {{"type":"heading","level":1,"text":"Second"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let out = tmp("p2s.pptx");
+    let r = call(
+        office__pdf_to_slides,
+        &format!(r#"{{"path":"{pdf}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "convert: {r}");
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides.len(), 2, "read two slides: {rd}");
+    assert_eq!(slides[0]["text"][0], "First", "page 1 title: {rd}");
+    assert_eq!(slides[1]["text"][0], "Second", "page 2 title: {rd}");
+
+    std::fs::remove_file(&pdf).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_html_structured() {
     let dx = tmp("tohtml.docx");
     let w = call(
