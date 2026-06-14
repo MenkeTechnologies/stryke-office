@@ -9714,6 +9714,59 @@ fn op_sheet_sample(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": kept }))
 }
 
+/// Reproducibly shuffle a sheet's data rows (seeded Fisher–Yates) — randomize
+/// order for train/test splits, A/B assignment, etc. Same `seed` always yields
+/// the same permutation. opts: path, output (default in place), seed => PRNG seed
+/// (default a fixed constant for deterministic output), sheet, header (default
+/// true; the header row stays on top), format. Returns `{ ok, path, rows }`.
+fn op_sheet_shuffle(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .filter(|&s| s != 0)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Fisher–Yates over the data region using the seeded xorshift PRNG.
+    let mut state = seed;
+    let len = rows.len();
+    if len > data_start {
+        for i in (data_start + 1..len).rev() {
+            let span = (i - data_start + 1) as u64;
+            let j = data_start + (xorshift64(&mut state) % span) as usize;
+            rows.swap(i, j);
+        }
+    }
+    let n = len - data_start;
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": n }))
+}
+
 /// Title-case a string: capitalize the first letter of each whitespace-separated
 /// word, lowercasing the rest.
 fn title_case(s: &str) -> String {
@@ -12694,6 +12747,7 @@ export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_sample, op_sheet_sample);
+export!(office__sheet_shuffle, op_sheet_shuffle);
 export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);

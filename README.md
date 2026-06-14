@@ -232,6 +232,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_head($path, $output, %opts)` | `{rows}` | keep first (or `tail`) N data rows; preview large data |
 | `Office::sheet_top($path, $by, $output, %opts)` | `{rows}` | top-N rows by a column (sort + limit); `n`/`ascending` |
 | `Office::sheet_sample($path, $output, %opts)` | `{ok, path, rows}` | randomly sample N data rows (header kept), reproducible via `seed`; `n` opt |
+| `Office::sheet_shuffle($path, %opts)` | `{ok, path, rows}` | reproducibly shuffle data rows (seeded Fisher–Yates); `seed` opt |
 | `Office::sheet_transform($path, $column, $op, $output, %opts)` | `{ok, path, transformed}` | apply a per-column op (upper/lower/trim/title/round/floor/ceil/abs/int); `digits`/`into` opts |
 | `Office::sheet_rename($path, $to, %opts)` | `{renamed}` | rename a sheet in a workbook; `from` selects which |
 | `Office::sheet_add($path, $name, %opts)` | `{sheets}` | add a new sheet to a workbook; `rows`/`position` opts |
