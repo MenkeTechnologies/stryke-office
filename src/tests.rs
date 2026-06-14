@@ -964,6 +964,49 @@ fn sheet_partition_by_column() {
 }
 
 #[test]
+fn sheet_multisort_two_keys() {
+    let path = tmp("msort.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region","amt"],
+                ["west",10],
+                ["east",20],
+                ["west",5]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // region ascending, then amt descending
+    let out = tmp("msort_out.xlsx");
+    let r = call(
+        office__sheet_multisort,
+        &serde_json::json!({
+            "path": path,
+            "keys": [{"column": "region"}, {"column": "amt", "descending": true}],
+            "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["sorted"], 3, "three rows sorted: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "east", "east first (region asc): {rd}");
+    assert_eq!(rows[2][0], "west", "then west: {rd}");
+    assert_eq!(
+        rows[2][1].as_f64().unwrap(),
+        10.0,
+        "west 10 before 5 (amt desc): {rd}"
+    );
+    assert_eq!(rows[3][1].as_f64().unwrap(), 5.0, "west 5 last: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(

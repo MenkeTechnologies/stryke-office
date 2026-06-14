@@ -156,6 +156,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::ndjson_to_sheet($output, %opts)` | `{ok, path, rows, fields}` | import JSON Lines/NDJSON into a spreadsheet; `input`/`ndjson`/`fields` opts |
 | `Office::json_to_sheet($input, $output, %opts)` | `{rows, fields}` | import a JSON array-of-objects file into a spreadsheet |
 | `Office::sheet_sort($path, $by, $output, %opts)` | `{sorted, column}` | sort data rows by a column (header kept); `descending`/`numeric`/`ignore_case` opts |
+| `Office::sheet_multisort($path, $keys, $output, %opts)` | `{ok, path, sorted}` | sort by multiple columns; `keys` = `[{column, descending?}]` in priority order |
 | `Office::sheet_rank($path, $by, $output, %opts)` | `{ok, path, ranked}` | append a rank column by a column without reordering (Excel `RANK`); `ascending`/`dense`/`name` opts |
 | `Office::sheet_freq($path, $column, %opts)` | `{column, total, distinct, values}` | value-counts of a column sorted by frequency (pandas `value_counts`); `ignore_case`/`top` opts |
 | `Office::sheet_group_concat($path, $group_by, $value, $output, %opts)` | `{ok, path, groups}` | group by a column, concatenate another's values (SQL `GROUP_CONCAT`); `sep`/`distinct` opts |

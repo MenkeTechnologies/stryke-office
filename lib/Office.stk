@@ -255,6 +255,13 @@ fn Office::sheet_partition ($path, $column, $dir, %opts) {
         office__sheet_partition(to_json({ path => $path, column => $column, dir => $dir, prefix => $opts{prefix}, format => $opts{format}, header => $opts{header}, sheet => $opts{sheet} })))
 }
 
+## Sort by multiple columns. $keys is an arrayref of { column, descending? } in
+## priority order. opts: sheet, header, format. Returns { ok, path, sorted }.
+fn Office::sheet_multisort ($path, $keys, $output, %opts) {
+    Office::_decode("sheet_multisort",
+        office__sheet_multisort(to_json({ path => $path, keys => $keys, output => $output, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

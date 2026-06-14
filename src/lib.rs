@@ -71,6 +71,18 @@ fn cell_to_string(v: &Value) -> String {
     }
 }
 
+/// Read a boolean option leniently. stryke has no distinct boolean type (Perl
+/// heritage), so callers pass `1`/`0` which serialize as JSON integers, not
+/// `true`/`false`. Accept JSON bools, non-zero numbers, and "true"/"1"/"yes"/"on".
+fn opt_flag(opts: &Value, key: &str) -> Option<bool> {
+    opts.get(key).map(|v| match v {
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|x| x != 0.0),
+        Value::String(s) => matches!(s.to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"),
+        _ => false,
+    })
+}
+
 // ── zip + xml helpers (OOXML / ODF readers) ──────────────────────────────────
 
 fn read_zip_entry(bytes: &[u8], name: &str) -> Result<Vec<u8>> {
@@ -3079,6 +3091,91 @@ fn op_sheet_partition(opts: Value) -> Result<Value> {
         files.push(out);
     }
     Ok(json!({ "count": files.len(), "files": files }))
+}
+
+/// Sort data rows by multiple columns (the multi-key analogue of `sheet_sort`).
+/// opts: path, output, keys => array of `{ column => name/index, descending? }`
+/// in priority order (required), sheet, header (default true), format. Cells
+/// compare numerically when both are numbers, else as text; `descending` flips a
+/// key's order. Returns `{ ok, path, sorted }`.
+fn op_sheet_multisort(opts: Value) -> Result<Value> {
+    use std::cmp::Ordering;
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+
+    let key_specs = opts
+        .get("keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing keys (expected array of {{column, descending?}})"))?;
+    if key_specs.is_empty() {
+        return Err(anyhow!("keys must list at least one column"));
+    }
+    // (column index, descending) per key, in priority order.
+    let keys: Vec<(usize, bool)> = key_specs
+        .iter()
+        .map(|k| {
+            let col = resolve_col(k.get("column"), header_row)?;
+            let desc = opt_flag(k, "descending").unwrap_or(false);
+            Ok((col, desc))
+        })
+        .collect::<Result<_>>()?;
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut data: Vec<Value> = rows[data_start..].to_vec();
+    data.sort_by(|a, b| {
+        for &(col, desc) in &keys {
+            let ca = a
+                .as_array()
+                .and_then(|x| x.get(col))
+                .unwrap_or(&Value::Null);
+            let cb = b
+                .as_array()
+                .and_then(|x| x.get(col))
+                .unwrap_or(&Value::Null);
+            let ord = match (sheet_cell_num(ca), sheet_cell_num(cb)) {
+                (Some(x), Some(y)) => x.partial_cmp(&y).unwrap_or(Ordering::Equal),
+                _ => cell_to_string(ca).cmp(&cell_to_string(cb)),
+            };
+            let ord = if desc { ord.reverse() } else { ord };
+            if ord != Ordering::Equal {
+                return ord;
+            }
+        }
+        Ordering::Equal
+    });
+
+    let sorted = data.len();
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        new_rows.push(rows[0].clone());
+    }
+    new_rows.extend(data);
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "sorted": sorted }))
 }
 
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
@@ -7375,6 +7472,7 @@ export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_explode, op_sheet_explode);
 export!(office__sheet_map, op_sheet_map);
 export!(office__sheet_partition, op_sheet_partition);
+export!(office__sheet_multisort, op_sheet_multisort);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
