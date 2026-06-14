@@ -3199,6 +3199,80 @@ fn sheet_fill_blanks() {
 }
 
 #[test]
+fn sheet_impute_statistics() {
+    let path = tmp("impute.xlsx");
+    // column v: 2, blank, 4, 6 -> mean 4, median 4
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["v"],[2],[null],[4],[6]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // mean imputation
+    let outm = tmp("impute_mean.xlsx");
+    let rm = call(
+        office__sheet_impute,
+        &format!(r#"{{"path":"{path}","output":"{outm}","strategy":"mean","by":"v"}}"#),
+    );
+    assert_eq!(rm["filled"].as_u64().unwrap(), 1, "one blank filled: {rm}");
+    assert_eq!(rm["columns"].as_u64().unwrap(), 1, "one column: {rm}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{outm}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[2][0].as_f64().unwrap(), 4.0, "mean of 2,4,6 = 4: {rd}");
+
+    // median imputation
+    let outd = tmp("impute_median.xlsx");
+    call(
+        office__sheet_impute,
+        &format!(r#"{{"path":"{path}","output":"{outd}","strategy":"median","by":"v"}}"#),
+    );
+    let rdd = call(office__sheet_read, &format!(r#"{{"path":"{outd}"}}"#));
+    assert_eq!(
+        rdd["sheets"][0]["rows"][2][0].as_f64().unwrap(),
+        4.0,
+        "median of 2,4,6 = 4: {rdd}"
+    );
+
+    // zero imputation
+    let outz = tmp("impute_zero.xlsx");
+    call(
+        office__sheet_impute,
+        &format!(r#"{{"path":"{path}","output":"{outz}","strategy":"zero","by":"v"}}"#),
+    );
+    let rdz = call(office__sheet_read, &format!(r#"{{"path":"{outz}"}}"#));
+    assert_eq!(
+        rdz["sheets"][0]["rows"][2][0].as_f64().unwrap(),
+        0.0,
+        "zero fill: {rdz}"
+    );
+
+    // mode imputation on a categorical column
+    let cpath = tmp("impute_cat.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{cpath}","sheets":[{{"name":"S","rows":[["c"],["x"],["x"],[null],["y"]]}}]}}"#
+        ),
+    );
+    let outc = tmp("impute_mode.xlsx");
+    call(
+        office__sheet_impute,
+        &format!(r#"{{"path":"{cpath}","output":"{outc}","strategy":"mode","by":"c"}}"#),
+    );
+    let rdc = call(office__sheet_read, &format!(r#"{{"path":"{outc}"}}"#));
+    assert_eq!(
+        rdc["sheets"][0]["rows"][3][0], "x",
+        "mode is most frequent 'x': {rdc}"
+    );
+
+    for f in [&path, &outm, &outd, &outz, &cpath, &outc] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_interpolate_linear() {
     let path = tmp("interp.xlsx");
     // gap of two blanks between 10 and 40 → 20, 30; a trailing gap stays blank.

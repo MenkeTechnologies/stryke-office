@@ -8976,6 +8976,191 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "filled": filled }))
 }
 
+/// Statistical imputation: replace blank cells in target column(s) with a
+/// column-wide statistic (sklearn `SimpleImputer`). Unlike `sheet_fill`
+/// (carry-forward/back) or `sheet_interpolate` (linear gap fill), this uses one
+/// value derived from the whole column. opts: path, output (default in place),
+/// strategy => `mean`|`median`|`mode`|`zero` (default mean), `by` => column
+/// name/index or array (default every column with numeric data),
+/// decimals => round mean/median, sheet, header (default true), format.
+/// `mean`/`median`/`zero` only fill numerically; `mode` fills with the most
+/// frequent non-blank cell value (ties broken by first-seen). Returns
+/// `{ ok, path, filled, columns }`.
+fn op_sheet_impute(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let strategy = opts
+        .get("strategy")
+        .and_then(Value::as_str)
+        .unwrap_or("mean");
+    if !matches!(strategy, "mean" | "median" | "mode" | "zero") {
+        return Err(anyhow!(
+            "unknown strategy: {strategy} (mean|median|mode|zero)"
+        ));
+    }
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let hr = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let target_cols: Vec<usize> = match opts.get("by") {
+        None | Some(Value::Null) => (0..ncols).collect(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), hr))
+            .collect::<Result<_>>()?,
+        Some(v) => vec![resolve_col(Some(v), hr)?],
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Pad data rows so trimmed trailing blanks become fillable.
+    for row in rows[data_start..].iter_mut() {
+        if let Some(arr) = row.as_array_mut() {
+            while arr.len() < ncols {
+                arr.push(Value::Null);
+            }
+        }
+    }
+
+    let round = |x: f64| -> f64 {
+        match decimals {
+            Some(d) => {
+                let f = 10f64.powi(d as i32);
+                (x * f).round() / f
+            }
+            None => x,
+        }
+    };
+
+    // Compute the imputation value per target column.
+    let mut fills: std::collections::HashMap<usize, Value> = std::collections::HashMap::new();
+    let mut columns = 0u64;
+    for &c in &target_cols {
+        let fill = match strategy {
+            "zero" => Some(json!(0)),
+            "mean" => {
+                let vals: Vec<f64> = rows[data_start..]
+                    .iter()
+                    .filter_map(|r| r.as_array().and_then(|a| a.get(c)).and_then(sheet_cell_num))
+                    .collect();
+                if vals.is_empty() {
+                    None
+                } else {
+                    Some(json!(round(vals.iter().sum::<f64>() / vals.len() as f64)))
+                }
+            }
+            "median" => {
+                let mut vals: Vec<f64> = rows[data_start..]
+                    .iter()
+                    .filter_map(|r| r.as_array().and_then(|a| a.get(c)).and_then(sheet_cell_num))
+                    .collect();
+                if vals.is_empty() {
+                    None
+                } else {
+                    vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    let n = vals.len();
+                    let m = if n % 2 == 1 {
+                        vals[n / 2]
+                    } else {
+                        (vals[n / 2 - 1] + vals[n / 2]) / 2.0
+                    };
+                    Some(json!(round(m)))
+                }
+            }
+            // mode: most frequent non-blank cell value, first-seen wins on ties.
+            _ => {
+                let mut counts: std::collections::HashMap<String, (u64, Value)> =
+                    std::collections::HashMap::new();
+                let mut order = 0u64;
+                let mut seen: std::collections::HashMap<String, u64> =
+                    std::collections::HashMap::new();
+                for r in &rows[data_start..] {
+                    let cell = r.as_array().and_then(|a| a.get(c)).unwrap_or(&Value::Null);
+                    if sheet_cell_blank(cell) {
+                        continue;
+                    }
+                    let key = cell_to_string(cell);
+                    seen.entry(key.clone()).or_insert_with(|| {
+                        let o = order;
+                        order += 1;
+                        o
+                    });
+                    counts.entry(key).or_insert((0, cell.clone())).0 += 1;
+                }
+                counts
+                    .into_iter()
+                    .max_by(|a, b| {
+                        a.1 .0.cmp(&b.1 .0).then_with(|| {
+                            // higher count wins; tie -> earlier first-seen (smaller order)
+                            seen[&b.0].cmp(&seen[&a.0])
+                        })
+                    })
+                    .map(|(_, (_, v))| v)
+            }
+        };
+        if let Some(v) = fill {
+            fills.insert(c, v);
+            columns += 1;
+        }
+    }
+
+    let mut filled = 0u64;
+    for row in rows[data_start..].iter_mut() {
+        let Some(arr) = row.as_array_mut() else {
+            continue;
+        };
+        for &c in &target_cols {
+            if c >= arr.len() {
+                continue;
+            }
+            if sheet_cell_blank(&arr[c]) {
+                if let Some(v) = fills.get(&c) {
+                    arr[c] = v.clone();
+                    filled += 1;
+                }
+            }
+        }
+    }
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "filled": filled, "columns": columns }))
+}
+
 /// Fill internal blank cells in numeric column(s) by linear interpolation
 /// between the nearest known neighbors (pandas `Series.interpolate`). Unlike
 /// `sheet_fill` (which carries the last value forward), this draws a straight
@@ -13200,6 +13385,7 @@ export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_hstack, op_sheet_hstack);
 export!(office__sheet_cross, op_sheet_cross);
 export!(office__sheet_fill, op_sheet_fill);
+export!(office__sheet_impute, op_sheet_impute);
 export!(office__sheet_interpolate, op_sheet_interpolate);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_dropna, op_sheet_dropna);
