@@ -2429,11 +2429,14 @@ fn block_plain_text(b: &Value) -> String {
             .filter_map(|r| r.get("text").and_then(Value::as_str))
             .collect::<Vec<_>>()
             .join("")
+    } else if let Some(t) = b.get("text").and_then(Value::as_str) {
+        t.to_string()
+    } else if b.is_object() {
+        // An object block with no text/runs (e.g. a structural wrapper).
+        String::new()
     } else {
-        b.get("text")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
+        // A bare scalar cell (string/number/bool), e.g. a table cell.
+        cell_to_string(b)
     }
 }
 
@@ -3227,6 +3230,7 @@ export!(office__doc_merge, op_doc_merge);
 export!(office__doc_append, op_doc_append);
 export!(office__doc_split, op_doc_split);
 export!(office__md_to_doc, op_md_to_doc);
+export!(office__doc_to_md, op_doc_to_md);
 export!(office__doc_wordfreq, op_doc_wordfreq);
 export!(office__doc_find, op_doc_find);
 export!(office__slides_find, op_slides_find);

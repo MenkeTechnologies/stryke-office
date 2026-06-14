@@ -477,6 +477,18 @@ fn op_md_to_doc(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "blocks": n }))
 }
 
+/// Convert a docx/odt (or any readable document) to structured Markdown,
+/// preserving headings and tables. opts: path, output (.md). The inverse of
+/// `md_to_doc`. Returns `{ ok, path, blocks }`.
+fn op_doc_to_md(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let blocks = doc_blocks_or_paras(path)?;
+    let n = blocks.len();
+    op_doc_write(json!({ "path": output, "blocks": blocks, "format": "md" }))?;
+    Ok(json!({ "ok": true, "path": output, "blocks": n }))
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via

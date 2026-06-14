@@ -1204,6 +1204,38 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn doc_to_md_structured() {
+    let dx = tmp("tomd.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Report"}},
+                {{"kind":"para","text":"body text"}},
+                {{"kind":"table","rows":[["a","b"],["1","2"]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let md = tmp("tomd.md");
+    let r = call(
+        office__doc_to_md,
+        &format!(r#"{{"path":"{dx}","output":"{md}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "doc_to_md: {r}");
+    let text = std::fs::read_to_string(&md).unwrap();
+    assert!(text.contains("# Report"), "heading markdown: {text}");
+    assert!(text.contains("body text"), "paragraph: {text}");
+    // table cells must be non-empty (the block_plain_text fix)
+    assert!(text.contains("| a | b |"), "table header row: {text}");
+    assert!(text.contains("| 1 | 2 |"), "table data row: {text}");
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&md).ok();
+}
+
+#[test]
 fn md_to_doc_structured() {
     let md = tmp("in.md");
     std::fs::write(
