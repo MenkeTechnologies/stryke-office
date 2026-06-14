@@ -158,6 +158,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_join($left, $right, $output, %opts)` | `{rows, matched}` | SQL JOIN two sheets on a key; `on`/`left_on`/`right_on`, `how` inner/left |
 | `Office::sheet_select($path, $columns, $output, %opts)` | `{columns}` | project/reorder columns by name or index |
 | `Office::sheet_drop($path, $columns, $output, %opts)` | `{columns}` | remove columns (complement of sheet_select) |
+| `Office::sheet_replace($path, $find, %opts)` | `{replaced}` | find/replace cell text (any format incl. csv); `ignore_case`/`whole`/`column` |
 | `Office::sheet_transpose($path, $output, %opts)` | `{rows, columns}` | swap rows and columns |
 | `Office::sheet_dedupe($path, $output, %opts)` | `{kept, removed}` | drop duplicate rows; `by` key columns, `keep` first/last |
 | `Office::sheet_append($path, %opts)` | `{added, rows}` | append `rows` or header-mapped `records` to a sheet (in place by default) |

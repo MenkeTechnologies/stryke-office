@@ -649,6 +649,34 @@ fn sheet_transpose_swaps_axes() {
 }
 
 #[test]
+fn sheet_replace_values() {
+    let path = tmp("srep.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","note"],["Alice","hello world"],["bob","HELLO there"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("srep_out.xlsx");
+    let r = call(
+        office__sheet_replace,
+        &format!(
+            r#"{{"path":"{path}","find":"hello","replace":"hi","ignore_case":true,"output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["replaced"], 2, "two replacements: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &rd["sheets"][0]["rows"];
+    assert_eq!(rows[1][1], "hi world", "row1 note: {rd}");
+    assert_eq!(rows[2][1], "hi there", "row2 note (ci): {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_drop_columns() {
     let path = tmp("drop.xlsx");
     let w = call(

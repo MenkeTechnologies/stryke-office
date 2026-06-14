@@ -29,6 +29,7 @@ exports = [
     "office__sheet_join",
     "office__sheet_select",
     "office__sheet_drop",
+    "office__sheet_replace",
     "office__sheet_transpose",
     "office__sheet_dedupe",
     "office__sheet_append",
