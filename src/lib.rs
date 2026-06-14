@@ -2781,6 +2781,47 @@ fn op_sheet_clamp(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "clamped": clamped }))
 }
 
+/// Rename a column's header (distinct from `sheet_rename`, which renames a sheet
+/// tab). opts: path, output, column => current name or 0-based index (required),
+/// to => new header (required), sheet, format. Returns `{ ok, path, column }`
+/// (the new header). Errors if the sheet has no header row.
+fn op_sheet_rename_column(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let to = req_str(&opts, "to")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = rows.first().and_then(Value::as_array).map(|v| v.as_slice());
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let hr = rows
+        .first_mut()
+        .and_then(|r| r.as_array_mut())
+        .ok_or_else(|| anyhow!("sheet has no header row"))?;
+    if col >= hr.len() {
+        hr.resize(col + 1, Value::Null);
+    }
+    hr[col] = json!(to);
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": to }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -7071,6 +7112,7 @@ export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_clamp, op_sheet_clamp);
+export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

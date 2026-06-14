@@ -226,6 +226,13 @@ fn Office::sheet_clamp ($path, $column, $output, %opts) {
         office__sheet_clamp(to_json({ path => $path, column => $column, output => $output, min => $opts{min}, max => $opts{max}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Rename a column's header (not the sheet tab). opts: sheet, format.
+## Returns { ok, path, column }.
+fn Office::sheet_rename_column ($path, $column, $to, $output, %opts) {
+    Office::_decode("sheet_rename_column",
+        office__sheet_rename_column(to_json({ path => $path, column => $column, to => $to, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

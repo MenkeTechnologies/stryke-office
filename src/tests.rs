@@ -808,6 +808,32 @@ fn sheet_clamp_caps_values() {
 }
 
 #[test]
+fn sheet_rename_column_header() {
+    let path = tmp("rencol.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b"],[1,2]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("rencol_out.xlsx");
+    let r = call(
+        office__sheet_rename_column,
+        &format!(r#"{{"path":"{path}","column":"a","to":"id","output":"{out}"}}"#),
+    );
+    assert_eq!(r["column"], "id", "new header name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "id", "column a renamed: {rd}");
+    assert_eq!(rows[0][1], "b", "other header intact: {rd}");
+    // data untouched
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.0, "data kept: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
