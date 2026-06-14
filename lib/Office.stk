@@ -184,6 +184,14 @@ fn Office::sheet_to_latex ($path, %opts) {
         office__sheet_to_latex(to_json({ path => $path, output => $opts{output}, align => $opts{align}, booktabs => $opts{booktabs}, caption => $opts{caption}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Serialize a sheet as an RFC-4180 CSV string (proper quoting). opts: delimiter
+## (default ","), output (write file; omit to return), sheet. Returns
+## { ok, rows, csv, path? }.
+fn Office::sheet_to_csv ($path, %opts) {
+    Office::_decode("sheet_to_csv",
+        office__sheet_to_csv(to_json({ path => $path, delimiter => $opts{delimiter}, output => $opts{output}, sheet => $opts{sheet} })))
+}
+
 ## Parse a GitHub-flavored Markdown table into a spreadsheet (inverse of
 ## sheet_to_md). opts: markdown (table text) or path (.md file), name, format.
 ## Returns { ok, path, rows, cols }.

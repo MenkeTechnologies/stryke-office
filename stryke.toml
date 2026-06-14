@@ -30,6 +30,7 @@ exports = [
     "office__sheet_to_md",
     "office__sheet_to_sql",
     "office__sheet_to_latex",
+    "office__sheet_to_csv",
     "office__md_to_sheet",
     "office__sheet_to_html",
     "office__sheet_to_text",

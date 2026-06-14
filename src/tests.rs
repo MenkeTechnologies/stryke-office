@@ -684,6 +684,43 @@ fn sheet_to_latex_tabular() {
 }
 
 #[test]
+fn sheet_to_csv_rfc4180() {
+    let path = tmp("tocsv.xlsx");
+    // a field with a comma and one with a quote must be quoted/escaped
+    let w = call(
+        office__sheet_write,
+        &serde_json::json!({
+            "path": path,
+            "sheets": [{ "name": "S", "rows": [["name","note"], ["a,b", 5], ["say \"hi\"", 6]] }]
+        })
+        .to_string(),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__sheet_to_csv, &format!(r#"{{"path":"{path}"}}"#));
+    let csv = r["csv"].as_str().unwrap();
+    let lines: Vec<&str> = csv.lines().collect();
+    assert_eq!(lines[0], "name,note", "header: {csv:?}");
+    assert_eq!(
+        lines[1], "\"a,b\",5",
+        "comma field quoted, int bare: {csv:?}"
+    );
+    assert_eq!(lines[2], "\"say \"\"hi\"\"\",6", "quotes doubled: {csv:?}");
+
+    // custom delimiter
+    let rt = call(
+        office__sheet_to_csv,
+        &format!(r#"{{"path":"{path}","delimiter":"\t"}}"#),
+    );
+    assert!(
+        rt["csv"].as_str().unwrap().contains("name\tnote"),
+        "tab delim: {rt}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn md_to_sheet_parses_table() {
     // Leading prose then a GFM table with an escaped pipe; prose must be ignored.
     let md =

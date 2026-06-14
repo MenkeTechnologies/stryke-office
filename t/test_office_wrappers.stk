@@ -133,6 +133,11 @@ assert_ok ($texr->{latex} =~ /Item & Count/), "sheet_to_latex: header row"
 # from this library; the FFI output is correct, see the Rust test).
 assert_ok ($texr->{latex} =~ /\\midrule/), "sheet_to_latex: booktabs rule"
 
+# sheet_to_csv: RFC-4180 string
+val $csvr = Office::sheet_to_csv($xl)
+assert_ok ($csvr->{csv} =~ /Item,Count/), "sheet_to_csv: header row"
+assert_ok ($csvr->{csv} =~ /apples,5/), "sheet_to_csv: data row"
+
 val $back = "$dir/$tag-md.xlsx"
 Office::md_to_sheet($back, markdown => "| A | B |\n| --- | --- |\n| 1 | 2 |")
 val $ms = Office::sheet_read($back)
