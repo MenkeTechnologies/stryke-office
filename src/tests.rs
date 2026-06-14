@@ -1608,6 +1608,32 @@ fn doc_to_slides_from_headings() {
 }
 
 #[test]
+fn doc_to_text_extracts() {
+    let dx = tmp("totxt.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[{{"kind":"para","text":"hello"}},{{"kind":"para","text":"world"}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("totxt.txt");
+    let r = call(
+        office__doc_to_text,
+        &format!(r#"{{"path":"{dx}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "doc_to_text: {r}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        text.contains("hello") && text.contains("world"),
+        "extracted text: {text:?}"
+    );
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_html_structured() {
     let dx = tmp("tohtml.docx");
     let w = call(

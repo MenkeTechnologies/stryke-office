@@ -93,6 +93,7 @@ exports = [
     "office__md_to_doc",
     "office__doc_to_md",
     "office__doc_to_html",
+    "office__doc_to_text",
     "office__doc_to_slides",
     "office__slides_to_doc",
     "office__slides_to_pdf",

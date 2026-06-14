@@ -651,6 +651,16 @@ fn op_doc_to_html(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "blocks": n }))
 }
 
+/// Extract any readable document's plain text to a file (docx/odt/html/md/rtf/
+/// txt/pdf). opts: path, output. Returns `{ ok, path, chars }`.
+fn op_doc_to_text(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let text = doc_full_text(path)?;
+    std::fs::write(&output, &text)?;
+    Ok(json!({ "ok": true, "path": output, "chars": text.chars().count() }))
+}
+
 /// Flatten a block into slide body lines (paragraph text, list items, or a
 /// table's rows joined by " | ").
 fn block_to_lines(b: &Value) -> Vec<String> {
