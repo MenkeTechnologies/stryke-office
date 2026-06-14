@@ -1970,6 +1970,62 @@ fn sheet_transform_column_ops() {
 }
 
 #[test]
+fn sheet_cast_messy_numbers() {
+    let path = tmp("cast.xlsx");
+    // messy money strings + accounting negative + percent
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["amt"],
+                ["$1,234.50"],
+                ["(2,000)"],
+                ["45%"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("cast_out.xlsx");
+    let r = call(
+        office__sheet_cast,
+        &format!(r#"{{"path":"{path}","output":"{out}","by":"amt","type":"number"}}"#),
+    );
+    assert_eq!(r["cast"], 3, "three cells cast: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows[1][0].as_f64().unwrap() - 1234.5).abs() < 1e-9,
+        "$1,234.50: {rd}"
+    );
+    assert!(
+        (rows[2][0].as_f64().unwrap() + 2000.0).abs() < 1e-9,
+        "(2,000)->-2000: {rd}"
+    );
+    assert!(
+        (rows[3][0].as_f64().unwrap() - 45.0).abs() < 1e-9,
+        "45%->45: {rd}"
+    );
+
+    // int cast truncates
+    let outi = tmp("cast_int.xlsx");
+    call(
+        office__sheet_cast,
+        &format!(r#"{{"path":"{path}","output":"{outi}","by":"amt","type":"int"}}"#),
+    );
+    let rdi = call(office__sheet_read, &format!(r#"{{"path":"{outi}"}}"#));
+    assert_eq!(
+        rdi["sheets"][0]["rows"][1][0].as_f64().unwrap(),
+        1234.0,
+        "int trunc: {rdi}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outi).ok();
+}
+
+#[test]
 fn sheet_chunk_rows() {
     let path = tmp("schunk.xlsx");
     let w = call(

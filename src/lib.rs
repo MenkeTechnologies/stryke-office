@@ -7367,6 +7367,127 @@ fn op_sheet_transform(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "transformed": transformed }))
 }
 
+/// Lenient numeric parse for messy imported cells: tolerates currency symbols,
+/// thousands separators, surrounding whitespace, a trailing percent sign, and
+/// parentheses for negatives (accounting style). Returns None if no number is
+/// recoverable. (`sheet_cell_num` already handles clean numerics; this is the
+/// dirtier sibling used by `sheet_cast`.)
+fn parse_messy_num(cell: &Value) -> Option<f64> {
+    if let Some(x) = sheet_cell_num(cell) {
+        return Some(x);
+    }
+    let s = cell_to_string(cell);
+    let t = s.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let negative = t.starts_with('(') && t.ends_with(')');
+    let cleaned: String = t
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-' || *c == '+')
+        .collect();
+    let n: f64 = cleaned.parse().ok()?;
+    Some(if negative { -n.abs() } else { n })
+}
+
+/// Cast (type-coerce) cells in one or more columns — clean up imported data.
+/// opts: path, output, `by` => column name/index or array (default: all
+/// columns), type => number|int|string|bool (default number), sheet, header,
+/// format. `number` leniently parses currency/commas/percent/accounting
+/// negatives; `int` parses then truncates; `string` stringifies; `bool` maps
+/// truthy values to 1 and the rest to 0. Cells that can't be parsed as a number
+/// are left unchanged. Returns `{ ok, path, cast }` (count of cells changed).
+fn op_sheet_cast(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let ty = opts.get("type").and_then(Value::as_str).unwrap_or("number");
+    if !matches!(ty, "number" | "int" | "string" | "bool") {
+        return Err(anyhow!("unknown type: {ty} (number|int|string|bool)"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let target_cols: std::collections::HashSet<usize> = match opts.get("by") {
+        None | Some(Value::Null) => (0..ncols).collect(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .map(|c| resolve_col(Some(c), header_row))
+            .collect::<Result<_>>()?,
+        Some(v) => [resolve_col(Some(v), header_row)?].into_iter().collect(),
+    };
+
+    let cast_cell = |cell: &Value| -> Value {
+        match ty {
+            "string" => json!(cell_to_string(cell)),
+            "bool" => json!(flag_of(cell).unwrap_or(false) as i64),
+            "int" => match parse_messy_num(cell) {
+                Some(x) => json!(x.trunc() as i64),
+                None => cell.clone(),
+            },
+            _ => match parse_messy_num(cell) {
+                Some(x) => json!(x),
+                None => cell.clone(),
+            },
+        }
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut cast = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            if i < data_start {
+                return row.clone();
+            }
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let out: Vec<Value> = cells
+                .into_iter()
+                .enumerate()
+                .map(|(c, cell)| {
+                    if !target_cols.contains(&c) {
+                        return cell;
+                    }
+                    let new = cast_cell(&cell);
+                    if new != cell {
+                        cast += 1;
+                    }
+                    new
+                })
+                .collect();
+            Value::Array(out)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "cast": cast }))
+}
+
 /// Top-N rows by a column (sort then take N). opts: path, output, by => column
 /// (required), n => row count (default 10), ascending => bool (default false =
 /// largest first), numeric, sheet, header, format. Returns `{ ok, path, rows }`.
@@ -9326,6 +9447,7 @@ export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
 export!(office__sheet_sample, op_sheet_sample);
 export!(office__sheet_transform, op_sheet_transform);
+export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_top, op_sheet_top);
 export!(office__sheet_rename, op_sheet_rename);
 export!(office__sheet_add, op_sheet_add);

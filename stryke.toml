@@ -96,6 +96,7 @@ exports = [
     "office__sheet_head",
     "office__sheet_sample",
     "office__sheet_transform",
+    "office__sheet_cast",
     "office__sheet_top",
     "office__sheet_rename",
     "office__sheet_add",
