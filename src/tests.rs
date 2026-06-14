@@ -1264,6 +1264,41 @@ fn sheet_info_dimensions() {
 }
 
 #[test]
+fn img_caption_adds_bar() {
+    // make a 40x20 source image
+    let png = tmp("capsrc.png");
+    let n = call(
+        office__img_new,
+        r#"{"width":40,"height":20,"color":[0,128,255,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    call(
+        office__img_save,
+        &format!(r#"{{"handle":{h},"path":"{png}"}}"#),
+    );
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let out = tmp("capout.png");
+    let r = call(
+        office__img_caption,
+        &format!(r#"{{"input":"{png}","output":"{out}","text":"Hello","height":30,"size":16}}"#),
+    );
+    assert_eq!(r["ok"], true, "caption: {r}");
+    assert_eq!(r["width"], 40, "width unchanged: {r}");
+    assert_eq!(r["height"], 50, "height = 20 + 30 bar: {r}");
+    // re-open to confirm a valid taller image was written
+    let re = call(office__img_open, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(re["height"], 50, "saved image is taller: {re}");
+    call(
+        office__img_close,
+        &format!(r#"{{"handle":{}}}"#, re["handle"]),
+    );
+
+    std::fs::remove_file(&png).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_diff_cells() {
     let a = tmp("diffa.xlsx");
     let b = tmp("diffb.xlsx");

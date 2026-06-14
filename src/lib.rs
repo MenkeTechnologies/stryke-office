@@ -7941,6 +7941,7 @@ export!(office__img_swap_channels, op_img_swap_channels);
 export!(office__img_dominant_colors, op_img_dominant_colors);
 export!(office__img_compare, op_img_compare);
 export!(office__img_text_size, op_img_text_size);
+export!(office__img_caption, op_img_caption);
 export!(office__img_crop_circle, op_img_crop_circle);
 export!(office__img_round_corners, op_img_round_corners);
 export!(office__img_drop_shadow, op_img_drop_shadow);

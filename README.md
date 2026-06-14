@@ -699,6 +699,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_dominant_colors($h, %opts)` | top-`count` palette → `[{r,g,b,hex,count}]` |
 | `img_compare($h, $other, %opts)` | `{mse,rmse,max_diff,identical}`; `diff` → `diff_handle` |
 | `img_text_size($text, %opts)` | measure → `{width,height}` |
+| `img_caption($input, $output, $text, %opts)` | add a caption bar with centered text above/below an image; `position`/`height`/`size`/`color`/`background` opts |
 | `img_crop_circle($h)` / `img_round_corners($h, %opts)` | circular / rounded mask |
 | `img_drop_shadow($h, %opts)` | soft shadow; `dx`/`dy`/`blur`/`color`/`opacity` |
 
