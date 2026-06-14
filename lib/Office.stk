@@ -190,6 +190,14 @@ fn Office::sheet_append ($path, %opts) {
         office__sheet_append(to_json({ path => $path, rows => $opts{rows}, records => $opts{records}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Compare two sheets cell by cell. opts: sheet => selector for both, left_sheet
+## / right_sheet => per-side override. Returns { count, changed => [{ ref, row,
+## col, left, right }], left_rows, right_rows } for cells that differ.
+fn Office::sheet_diff ($left, $right, %opts) {
+    Office::_decode("sheet_diff",
+        office__sheet_diff(to_json({ left => $left, right => $right, sheet => $opts{sheet}, left_sheet => $opts{left_sheet}, right_sheet => $opts{right_sheet} })))
+}
+
 ## Explode a multi-sheet workbook into one file per sheet, written to $dir as
 ## {prefix}{sheet}.{ext}. opts: format => output extension (default: the
 ## source's), prefix => filename prefix. Returns { count, files }.
