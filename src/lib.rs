@@ -1873,6 +1873,75 @@ fn op_sheet_irr(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "irr": irr, "n": cf.len() }))
 }
 
+/// Generate a loan amortization schedule from a fixed `rate`, term `nper`, and
+/// present value `pv` — writes a sheet with columns `[period, payment, principal,
+/// interest, balance]` (one row per period, plus header). opts: rate => periodic
+/// interest rate (required, e.g. 0.05/12 for 5% APR monthly), nper => number of
+/// periods (required, ≥1), pv => loan principal (required), output => sheet path
+/// (required), decimals => round money columns (default 2), format. The level
+/// payment is the standard annuity `PMT`. Returns `{ ok, path, payment, periods }`.
+fn op_sheet_amortize(opts: Value) -> Result<Value> {
+    let rate = opts
+        .get("rate")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing rate (periodic interest rate)"))?;
+    let nper = opts
+        .get("nper")
+        .and_then(Value::as_u64)
+        .filter(|&n| n >= 1)
+        .ok_or_else(|| anyhow!("missing nper (number of periods, >= 1)"))? as usize;
+    let pv = opts
+        .get("pv")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing pv (loan principal)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+    let decimals = opts.get("decimals").and_then(Value::as_i64).unwrap_or(2);
+    let round = |v: f64| {
+        let f = 10f64.powi(decimals as i32);
+        (v * f).round() / f
+    };
+
+    // Level payment: annuity formula (or straight-line when rate is 0).
+    let pmt = if rate.abs() < 1e-12 {
+        pv / nper as f64
+    } else {
+        pv * rate / (1.0 - (1.0 + rate).powi(-(nper as i32)))
+    };
+
+    let mut rows: Vec<Value> = vec![json!([
+        "period",
+        "payment",
+        "principal",
+        "interest",
+        "balance"
+    ])];
+    let mut balance = pv;
+    for p in 1..=nper {
+        let interest = balance * rate;
+        let mut principal = pmt - interest;
+        // Final period: absorb rounding drift so the balance lands exactly at 0.
+        if p == nper {
+            principal = balance;
+        }
+        balance -= principal;
+        let payment = principal + interest;
+        rows.push(json!([
+            p,
+            round(payment),
+            round(principal),
+            round(interest),
+            round(balance.max(0.0)),
+        ]));
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Amortization", "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "payment": round(pmt), "periods": nper }))
+}
+
 /// Distribution shape moments of one numeric column — mean, sample variance and
 /// std, plus skewness (Fisher–Pearson g1) and excess kurtosis (g2). Complements
 /// `sheet_describe` (which gives the quartile five-number summary). opts: path,
@@ -14858,6 +14927,7 @@ export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
 export!(office__sheet_npv, op_sheet_npv);
 export!(office__sheet_irr, op_sheet_irr);
+export!(office__sheet_amortize, op_sheet_amortize);
 export!(office__sheet_autocorr, op_sheet_autocorr);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_sparkline, op_sheet_sparkline);

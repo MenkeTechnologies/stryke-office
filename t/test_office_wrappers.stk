@@ -1390,6 +1390,15 @@ val $irr = Office::sheet_irr($irx, "cf")
 assert_ok ($irr->{irr} > 0.130 && $irr->{irr} < 0.131), "sheet_irr: ~13.07%"
 unlink $irx
 
+# ── sheet_amortize: loan schedule generator ─────────────────────────
+val $amo = "$dir/$tag-amort.xlsx"
+val $amr = Office::sheet_amortize(0.01, 12, 1000, $amo)
+assert_eq $amr->{periods}, 12, "sheet_amortize: 12 periods"
+val $amb = Office::sheet_read($amo)
+assert_eq $amb->[0]{rows}[1][3], 10, "sheet_amortize: first interest = 10"
+assert_eq $amb->[0]{rows}[12][4], 0, "sheet_amortize: final balance 0"
+unlink $amo
+
 # ── sheet_moments: skewness + kurtosis of a column ──────────────────
 val $mmx = "$dir/$tag-moments.xlsx"
 Office::sheet_write($mmx, [{ name => "M", rows => [["v"], [1], [2], [3], [4], [5]] }])
