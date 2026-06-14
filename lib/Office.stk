@@ -698,6 +698,14 @@ fn Office::sheet_histogram ($path, $column, %opts) {
         office__sheet_histogram(to_json({ path => $path, column => $column, bins => $opts{bins}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Detect outlier rows in a numeric column. opts: method (iqr default | zscore),
+## k (iqr fence 1.5 / zscore threshold 3), sheet, header. Returns
+## { column, method, count, lower, upper, outliers: [{row, value}] }.
+fn Office::sheet_outliers ($path, $column, %opts) {
+    Office::_decode("sheet_outliers",
+        office__sheet_outliers(to_json({ path => $path, column => $column, method => $opts{method}, k => $opts{k}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Remove duplicate data rows (SQL DISTINCT). opts: by => a column name/index or
 ## arrayref of them (default: whole row), keep => "first" (default) | "last",
 ## sheet, header => 0 if first row is data, format => override. Returns

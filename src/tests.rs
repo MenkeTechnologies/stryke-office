@@ -3110,6 +3110,66 @@ fn sheet_histogram_empty_column() {
 }
 
 #[test]
+fn sheet_outliers_iqr() {
+    let path = tmp("outliers.xlsx");
+    // Tight cluster 10..14 with one extreme value 100.
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[10],[11],[12],[13],[14],[100]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_outliers,
+        &format!(r#"{{"path":"{path}","column":"v"}}"#),
+    );
+    assert_eq!(r["method"], "iqr", "method: {r}");
+    assert_eq!(r["count"], 1, "one outlier: {r}");
+    let outs = r["outliers"].as_array().unwrap();
+    assert_eq!(
+        outs[0]["value"].as_f64().unwrap(),
+        100.0,
+        "outlier value: {r}"
+    );
+    // 100 is the 6th data row → 0-based index 5.
+    assert_eq!(
+        outs[0]["row"].as_u64().unwrap(),
+        5,
+        "outlier row index: {r}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn sheet_outliers_zscore() {
+    let path = tmp("outliers_z.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[1],[1],[1],[1],[1],[1],[1],[1],[50]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_outliers,
+        &format!(r#"{{"path":"{path}","column":"v","method":"zscore","k":2}}"#),
+    );
+    assert_eq!(r["method"], "zscore", "method: {r}");
+    assert_eq!(r["count"], 1, "one z-score outlier: {r}");
+    assert_eq!(
+        r["outliers"][0]["value"].as_f64().unwrap(),
+        50.0,
+        "outlier value: {r}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(

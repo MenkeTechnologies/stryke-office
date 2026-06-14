@@ -177,6 +177,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_autofilter($path, $output, %opts)` | `{ok, path, range}` | apply an autofilter over a sheet's range (xlsx); `range` opt (default used range) |
 | `Office::sheet_round($path, $output, %opts)` | `{ok, path, rounded}` | round every numeric cell to N decimals (`decimals` default 2); `columns` opt restricts which columns; header untouched |
 | `Office::sheet_histogram($path, $column, %opts)` | `{column, count, min, max, bins}` | bucket a numeric column into `bins` (default 10) equal-width intervals; each bin `{lo, hi, count}` |
+| `Office::sheet_outliers($path, $column, %opts)` | `{column, method, count, lower, upper, outliers}` | detect outlier rows via `iqr` Tukey fence (default, `k` 1.5) or `zscore` (`k` 3); each outlier `{row, value}` |
 | `Office::sheet_aggregate($path, $group_by, $output, %opts)` | `{groups}` | SQL-style GROUP BY; `agg` count/sum/mean/min/max over a `value` column |
 | `Office::sheet_pivot($path, $rows, $cols, $output, %opts)` | `{rows, cols}` | pivot table (rows × cols → aggregated `value`); Excel PivotTable |
 | `Office::sheet_unpivot($path, $output, %opts)` | `{rows}` | melt wide→long; `id_vars`/`value_vars`/`var_name`/`value_name` |

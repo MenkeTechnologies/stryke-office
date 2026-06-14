@@ -1594,6 +1594,99 @@ fn op_sheet_histogram(opts: Value) -> Result<Value> {
     Ok(json!({ "column": col_name, "count": n, "min": lo, "max": hi, "bins": bins }))
 }
 
+/// Detect outlier rows in a numeric column. method `iqr` (default) uses Tukey
+/// fences [Q1 - k·IQR, Q3 + k·IQR] (k default 1.5); method `zscore` flags rows
+/// whose |value − mean| / stddev exceeds k (default 3). opts: path, column,
+/// method, k, sheet, header. Returns
+/// `{ column, method, count, lower, upper, outliers: [{row, value}] }` where
+/// `row` is the 0-based data-row index (excluding the header).
+fn op_sheet_outliers(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let method = opts.get("method").and_then(Value::as_str).unwrap_or("iqr");
+    if !matches!(method, "iqr" | "zscore") {
+        return Err(anyhow!("unknown method: {method} (iqr|zscore)"));
+    }
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // (data-row index, value) pairs for numeric cells.
+    let pairs: Vec<(usize, f64)> = rows[data_start..]
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+                .map(|x| (i, x))
+        })
+        .collect();
+    let vals: Vec<f64> = pairs.iter().map(|&(_, x)| x).collect();
+    let n = vals.len();
+
+    let (lower, upper) = if n == 0 {
+        (f64::NEG_INFINITY, f64::INFINITY)
+    } else if method == "iqr" {
+        let k = opts.get("k").and_then(Value::as_f64).unwrap_or(1.5);
+        let mut sorted = vals.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let q1 = percentile_sorted(&sorted, 0.25);
+        let q3 = percentile_sorted(&sorted, 0.75);
+        let iqr = q3 - q1;
+        (q1 - k * iqr, q3 + k * iqr)
+    } else {
+        let k = opts.get("k").and_then(Value::as_f64).unwrap_or(3.0);
+        let mean = vals.iter().sum::<f64>() / n as f64;
+        let var = vals.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+        let std = var.sqrt();
+        if std == 0.0 {
+            (f64::NEG_INFINITY, f64::INFINITY)
+        } else {
+            (mean - k * std, mean + k * std)
+        }
+    };
+
+    let outliers: Vec<Value> = pairs
+        .iter()
+        .filter(|&&(_, x)| x < lower || x > upper)
+        .map(|&(i, x)| json!({ "row": i, "value": x }))
+        .collect();
+
+    Ok(json!({
+        "column": col_name,
+        "method": method,
+        "count": outliers.len(),
+        "lower": lower,
+        "upper": upper,
+        "outliers": outliers,
+    }))
+}
+
 /// Pearson correlation coefficient over paired observations. Returns None when
 /// fewer than two points or either side has zero variance.
 fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
@@ -8278,6 +8371,7 @@ export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);
+export!(office__sheet_outliers, op_sheet_outliers);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
