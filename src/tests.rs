@@ -12089,6 +12089,69 @@ fn text_wrap_lines() {
 }
 
 #[test]
+fn text_tr_translate_delete_squeeze() {
+    let path = tmp("tr.txt");
+    std::fs::write(&path, "Hello World").unwrap();
+
+    // translate lowercase -> uppercase via ranges
+    let out = tmp("tr_up.txt");
+    let r = call(
+        office__text_tr,
+        &format!(r#"{{"path":"{path}","from":"a-z","to":"A-Z","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "tr: {r}");
+    assert_eq!(
+        std::fs::read_to_string(&out).unwrap(),
+        "HELLO WORLD",
+        "ranged translate"
+    );
+
+    // shorter set2: vowels -> '*' (last char repeats)
+    let outv = tmp("tr_vowel.txt");
+    call(
+        office__text_tr,
+        &format!(r#"{{"path":"{path}","from":"aeiou","to":"*","output":"{outv}"}}"#),
+    );
+    assert_eq!(
+        std::fs::read_to_string(&outv).unwrap(),
+        "H*ll* W*rld",
+        "short set2 repeats last"
+    );
+
+    // delete digits
+    let pathd = tmp("tr_del.txt");
+    std::fs::write(&pathd, "a1b2c3").unwrap();
+    let outd = tmp("tr_del_out.txt");
+    call(
+        office__text_tr,
+        &format!(r#"{{"path":"{pathd}","from":"0-9","delete":true,"output":"{outd}"}}"#),
+    );
+    assert_eq!(
+        std::fs::read_to_string(&outd).unwrap(),
+        "abc",
+        "delete digit range"
+    );
+
+    // squeeze repeated spaces
+    let paths = tmp("tr_sq.txt");
+    std::fs::write(&paths, "a    b   c").unwrap();
+    let outs = tmp("tr_sq_out.txt");
+    call(
+        office__text_tr,
+        &format!(r#"{{"path":"{paths}","from":" ","squeeze":true,"output":"{outs}"}}"#),
+    );
+    assert_eq!(
+        std::fs::read_to_string(&outs).unwrap(),
+        "a b c",
+        "squeeze spaces"
+    );
+
+    for f in [&path, &out, &outv, &pathd, &outd, &paths, &outs] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

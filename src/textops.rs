@@ -753,3 +753,121 @@ fn op_text_wrap(opts: Value) -> Result<Value> {
     std::fs::write(&output, joined)?;
     Ok(json!({ "ok": true, "path": output, "lines": out.len() }))
 }
+
+/// Expand a `tr`-style character set, turning `a-z`/`0-9` ranges into the full
+/// inclusive sequence. A `-` that isn't between two ascending chars is literal.
+fn tr_expand_set(s: &str) -> Vec<char> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if i + 2 < chars.len() && chars[i + 1] == '-' && chars[i] <= chars[i + 2] {
+            for c in chars[i]..=chars[i + 2] {
+                out.push(c);
+            }
+            i += 3;
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Translate, delete, or squeeze characters (the Unix `tr` analogue). opts: path,
+/// output (default in place), from => set1 (required; supports `a-z`/`0-9`
+/// ranges), to => set2 (translation target; when shorter than set1 its last char
+/// repeats, like `tr`), delete => remove every char in set1 (ignores `to`),
+/// squeeze => collapse runs of repeated chars (set2 when translating, else set1),
+/// complement => operate on the complement of set1. Translation and deletion are
+/// mutually exclusive in effect (delete wins). Input bytes are passed through
+/// unchanged except for the transformed chars (no trailing newline added).
+/// Returns `{ ok, path }`.
+fn op_text_tr(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let from = req_str(&opts, "from")?;
+    let to = opts.get("to").and_then(Value::as_str).unwrap_or("");
+    let delete = opts.get("delete").and_then(flag_of).unwrap_or(false);
+    let squeeze = opts.get("squeeze").and_then(flag_of).unwrap_or(false);
+    let complement = opts.get("complement").and_then(flag_of).unwrap_or(false);
+
+    let set1 = tr_expand_set(from);
+    let set2 = tr_expand_set(to);
+    if set1.is_empty() {
+        return Err(anyhow!("from must be non-empty"));
+    }
+    let translating = !delete && !set2.is_empty();
+    if !delete && !translating && !squeeze {
+        return Err(anyhow!("need `to` (translate), delete, or squeeze"));
+    }
+
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let in_set1 = |c: char| -> bool {
+        let m = set1.contains(&c);
+        if complement {
+            !m
+        } else {
+            m
+        }
+    };
+
+    // Phase 1: delete or translate (squeeze-only leaves text unchanged here).
+    let mut result = String::with_capacity(text.len());
+    for c in text.chars() {
+        if delete {
+            if !in_set1(c) {
+                result.push(c);
+            }
+        } else if translating {
+            if in_set1(c) {
+                let mapped = if complement {
+                    *set2.last().unwrap_or(&c)
+                } else {
+                    set1.iter()
+                        .position(|&x| x == c)
+                        .and_then(|i| set2.get(i).or_else(|| set2.last()))
+                        .copied()
+                        .unwrap_or(c)
+                };
+                result.push(mapped);
+            } else {
+                result.push(c);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    // Phase 2: squeeze repeats. The squeeze set is set2 when a translation ran,
+    // otherwise set1 (with complement honored on the set1 case, like `tr`).
+    if squeeze {
+        let use_set2 = translating;
+        let sq: Vec<char> = if use_set2 { set2.clone() } else { set1.clone() };
+        let in_sq = |c: char| -> bool {
+            let m = sq.contains(&c);
+            if complement && !use_set2 {
+                !m
+            } else {
+                m
+            }
+        };
+        let mut squeezed = String::with_capacity(result.len());
+        let mut prev: Option<char> = None;
+        for c in result.chars() {
+            if prev == Some(c) && in_sq(c) {
+                continue;
+            }
+            squeezed.push(c);
+            prev = Some(c);
+        }
+        result = squeezed;
+    }
+
+    std::fs::write(&output, result)?;
+    Ok(json!({ "ok": true, "path": output }))
+}

@@ -2047,6 +2047,15 @@ fn Office::text_wrap ($path, %opts) {
         office__text_wrap(to_json({ path => $path, width => $opts{width}, break_words => $opts{break_words}, output => $opts{output} })))
 }
 
+## Translate/delete/squeeze characters (Unix tr). $from is set1 (supports a-z/0-9
+## ranges). opts: to => set2 (translation target), delete => remove set1 chars,
+## squeeze => collapse repeats, complement => operate on complement of set1,
+## output (default in place). Returns { ok, path }.
+fn Office::text_tr ($path, $from, %opts) {
+    Office::_decode("text_tr",
+        office__text_tr(to_json({ path => $path, from => $from, to => $opts{to}, delete => $opts{delete}, squeeze => $opts{squeeze}, complement => $opts{complement}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

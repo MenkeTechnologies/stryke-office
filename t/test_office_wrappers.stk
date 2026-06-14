@@ -58,6 +58,23 @@ val $gwt = slurp $gwo
 assert_ok ($gwt =~ /^the quick$/m), "text_wrap: greedy first line"
 unlink $gwx
 unlink $gwo
+# tr: translate lowercase to uppercase via ranges
+val $gtx = "$dir/$tag-tr.txt"
+spew $gtx, "Hello World"
+val $gto = "$dir/$tag-tr-out.txt"
+Office::text_tr($gtx, "a-z", to => "A-Z", output => $gto)
+val $gtt = slurp $gto
+assert_eq $gtt, "HELLO WORLD", "text_tr: ranged uppercase translate"
+# tr: squeeze repeated spaces
+val $gtsx = "$dir/$tag-trsq.txt"
+spew $gtsx, "a    b   c"
+val $gtso = "$dir/$tag-trsq-out.txt"
+Office::text_tr($gtsx, " ", squeeze => 1, output => $gtso)
+assert_eq slurp($gtso), "a b c", "text_tr: squeeze spaces"
+unlink $gtx
+unlink $gto
+unlink $gtsx
+unlink $gtso
 unlink $grx
 unlink $grt
 unlink $gso
