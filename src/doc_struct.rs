@@ -2005,6 +2005,79 @@ fn op_doc_wordfreq(opts: Value) -> Result<Value> {
     Ok(json!({ "total": total, "unique": unique, "words": words }))
 }
 
+/// Heuristic English syllable count for one word: count runs of vowels, drop a
+/// silent trailing `e`, floor at 1. Matches the common textstat/Flesch approach
+/// (approximate — English spelling is irregular).
+fn count_syllables(word: &str) -> usize {
+    let w = word.to_lowercase();
+    let chars: Vec<char> = w.chars().filter(|c| c.is_alphabetic()).collect();
+    if chars.is_empty() {
+        return 0;
+    }
+    let is_vowel = |c: char| matches!(c, 'a' | 'e' | 'i' | 'o' | 'u' | 'y');
+    let mut syl = 0usize;
+    let mut prev_vowel = false;
+    for &c in &chars {
+        let v = is_vowel(c);
+        if v && !prev_vowel {
+            syl += 1;
+        }
+        prev_vowel = v;
+    }
+    // Silent trailing 'e' (but never reduce below 1, and not for "le" endings).
+    if chars.len() >= 2 && chars[chars.len() - 1] == 'e' {
+        let pre = chars[chars.len() - 2];
+        if syl > 1 && pre != 'l' {
+            syl -= 1;
+        }
+    }
+    syl.max(1)
+}
+
+/// Readability scores for any readable document. Computes Flesch Reading Ease and
+/// Flesch–Kincaid Grade Level from word / sentence / syllable counts. opts: path.
+/// Returns `{ words, sentences, syllables, flesch_reading_ease,
+/// flesch_kincaid_grade }`. Syllable counting is heuristic (see count_syllables).
+fn op_doc_readability(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let text = doc_full_text(path)?;
+
+    let words: Vec<&str> = text
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .filter(|t| t.chars().any(char::is_alphanumeric))
+        .collect();
+    let nwords = words.len();
+    // Count sentence terminators; treat the whole text as ≥1 sentence.
+    let sentences = text
+        .chars()
+        .filter(|&c| matches!(c, '.' | '!' | '?'))
+        .count()
+        .max(1);
+    let syllables: usize = words.iter().map(|w| count_syllables(w)).sum();
+
+    if nwords == 0 {
+        return Ok(json!({
+            "words": 0,
+            "sentences": sentences,
+            "syllables": 0,
+            "flesch_reading_ease": Value::Null,
+            "flesch_kincaid_grade": Value::Null,
+        }));
+    }
+    let wps = nwords as f64 / sentences as f64;
+    let spw = syllables as f64 / nwords as f64;
+    let ease = 206.835 - 1.015 * wps - 84.6 * spw;
+    let grade = 0.39 * wps + 11.8 * spw - 15.59;
+
+    Ok(json!({
+        "words": nwords,
+        "sentences": sentences,
+        "syllables": syllables,
+        "flesch_reading_ease": (ease * 100.0).round() / 100.0,
+        "flesch_kincaid_grade": (grade * 100.0).round() / 100.0,
+    }))
+}
+
 // ── hyperlinks ────────────────────────────────────────────────────────────────
 
 /// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display
