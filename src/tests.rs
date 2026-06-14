@@ -2658,6 +2658,50 @@ fn sheet_json_interop_round_trip() {
 }
 
 #[test]
+fn sheet_drop_empty_rows_and_cols() {
+    let path = tmp("dropempty.xlsx");
+    // column "y" all-blank in data; one fully-blank row
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["x","y"],
+                [1,""],
+                ["",""],
+                [2,""]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("dropempty_out.xlsx");
+    let r = call(
+        office__sheet_drop_empty,
+        &format!(r#"{{"path":"{path}","output":"{out}","rows":true,"cols":true}}"#),
+    );
+    assert_eq!(r["rows_removed"], 1, "one blank row removed: {r}");
+    assert_eq!(r["cols_removed"], 1, "one blank column removed: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "header + 2 data rows: {rd}");
+    assert_eq!(
+        rows[0].as_array().unwrap().len(),
+        1,
+        "only column x kept: {rd}"
+    );
+    assert_eq!(rows[0][0], "x", "header x: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 1.0, "first data: {rd}");
+    assert_eq!(
+        rows[2][0].as_f64().unwrap(),
+        2.0,
+        "blank row gone, 2 remains: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(

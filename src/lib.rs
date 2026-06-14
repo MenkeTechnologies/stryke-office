@@ -5510,6 +5510,92 @@ fn op_sheet_fill(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "filled": filled }))
 }
 
+/// Drop fully-empty rows and/or columns (clean up sparse/scraped data). opts:
+/// path, output (default in place), rows => drop all-blank rows (default true),
+/// cols => drop columns whose data cells are all blank (default false; the
+/// header cell is dropped too), sheet, header (default true), format. The header
+/// row is always kept. Returns `{ ok, path, rows_removed, cols_removed }`.
+fn op_sheet_drop_empty(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let drop_rows = opts.get("rows").and_then(flag_of).unwrap_or(true);
+    let drop_cols = opts.get("cols").and_then(flag_of).unwrap_or(false);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    let cell_at = |row: &Value, c: usize| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let row_blank = |row: &Value| (0..ncols).all(|c| sheet_cell_blank(&cell_at(row, c)));
+
+    // A column is empty when every data-row cell is blank.
+    let keep_col: Vec<bool> = (0..ncols)
+        .map(|c| {
+            !drop_cols
+                || rows[data_start..].is_empty()
+                || rows[data_start..]
+                    .iter()
+                    .any(|r| !sheet_cell_blank(&cell_at(r, c)))
+        })
+        .collect();
+    let cols_removed = keep_col.iter().filter(|&&k| !k).count();
+
+    let mut rows_removed = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .filter(|(i, row)| {
+            if drop_rows && *i >= data_start && row_blank(row) {
+                rows_removed += 1;
+                false
+            } else {
+                true
+            }
+        })
+        .map(|(_, row)| {
+            if cols_removed == 0 {
+                return row.clone();
+            }
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let kept: Vec<Value> = (0..ncols)
+                .filter(|&c| keep_col[c])
+                .map(|c| cells.get(c).cloned().unwrap_or(Value::Null))
+                .collect();
+            Value::Array(kept)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(
+        json!({ "ok": true, "path": output, "rows_removed": rows_removed, "cols_removed": cols_removed }),
+    )
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -7525,6 +7611,7 @@ export!(office__sheet_transpose, op_sheet_transpose);
 export!(office__sheet_dedupe, op_sheet_dedupe);
 export!(office__sheet_append, op_sheet_append);
 export!(office__sheet_fill, op_sheet_fill);
+export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);

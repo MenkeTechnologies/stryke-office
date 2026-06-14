@@ -169,6 +169,11 @@ val $gco2 = "$dir/$tag-gc-out.xlsx"
 Office::sheet_group_concat($gcx, "g", "v", $gco2, sep => "|")
 val $gcr = Office::sheet_get_cell($gco2, "B2")
 assert_eq $gcr->{value}, "a|b", "sheet_group_concat: values joined per group"
+# drop empty: $gcx has no blank rows/cols, so nothing removed
+val $deo = "$dir/$tag-de-out.xlsx"
+val $der = Office::sheet_drop_empty($gcx, $deo)
+assert_eq $der->{rows_removed}, 0, "sheet_drop_empty: no blank rows in clean data"
+unlink $deo
 # vlookup on the same file
 val $lk = Office::sheet_lookup($gcx, "g", "y", "v")
 assert_eq $lk->{value}, "c", "sheet_lookup: returns matching value"
