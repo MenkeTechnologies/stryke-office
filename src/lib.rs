@@ -1621,6 +1621,93 @@ fn op_md_to_sheet(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "rows": rows.len(), "cols": cols }))
 }
 
+/// Render a spreadsheet as an HTML table (for web reports / HTML email). opts:
+/// path, output => write to an `.html` file (omit to return the markup), sheet =>
+/// selector, header => first row becomes `<thead><th>` cells (default true),
+/// title => optional `<h2>` caption, full => wrap in a complete `<html>` document
+/// (default false = bare `<table>`). Cells are HTML-escaped; whole-number floats
+/// render without a trailing `.0`. Returns `{ ok, rows, cols, html, path? }`.
+fn op_sheet_to_html(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let full = opts.get("full").and_then(Value::as_bool).unwrap_or(false);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+
+    let cell_html = |c: &Value| -> String {
+        let raw = match c.as_f64() {
+            Some(x) if c.is_number() && x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+            _ => cell_to_string(c),
+        };
+        xml_escape(&raw)
+    };
+    let row_cells = |row: &Value, tag: &str| -> String {
+        let cells: Vec<String> = (0..ncols)
+            .map(|c| {
+                let v = row
+                    .as_array()
+                    .and_then(|a| a.get(c))
+                    .unwrap_or(&Value::Null);
+                format!("<{tag}>{}</{tag}>", cell_html(v))
+            })
+            .collect();
+        format!("    <tr>{}</tr>", cells.join(""))
+    };
+
+    let mut body = String::new();
+    if let Some(title) = opts.get("title").and_then(Value::as_str) {
+        body.push_str(&format!("<h2>{}</h2>\n", xml_escape(title)));
+    }
+    body.push_str("<table>\n");
+    let data: &[Value] = if header && !rows.is_empty() {
+        body.push_str("  <thead>\n");
+        body.push_str(&row_cells(&rows[0], "th"));
+        body.push_str("\n  </thead>\n");
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+    body.push_str("  <tbody>\n");
+    for row in data {
+        body.push_str(&row_cells(row, "td"));
+        body.push('\n');
+    }
+    body.push_str("  </tbody>\n</table>\n");
+
+    let html = if full {
+        format!(
+            "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\">\n<style>table{{border-collapse:collapse}}th,td{{border:1px solid #ccc;padding:4px 8px}}</style>\n</head>\n<body>\n{body}</body>\n</html>\n"
+        )
+    } else {
+        body
+    };
+
+    let mut out = json!({ "ok": true, "rows": rows.len(), "cols": ncols, "html": html });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, &html)?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -4599,6 +4686,7 @@ export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__md_to_sheet, op_md_to_sheet);
+export!(office__sheet_to_html, op_sheet_to_html);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

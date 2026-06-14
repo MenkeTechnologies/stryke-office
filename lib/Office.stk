@@ -118,6 +118,14 @@ fn Office::md_to_sheet ($output, %opts) {
         office__md_to_sheet(to_json({ output => $output, markdown => $opts{markdown}, path => $opts{path}, name => $opts{name}, format => $opts{format} })))
 }
 
+## Render a spreadsheet as an HTML table. opts: output (write .html; omit to
+## return markup), sheet, header, title, full (wrap in a full <html> document).
+## Returns { ok, rows, cols, html, path? }.
+fn Office::sheet_to_html ($path, %opts) {
+    Office::_decode("sheet_to_html",
+        office__sheet_to_html(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, title => $opts{title}, full => $opts{full} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }
