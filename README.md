@@ -206,6 +206,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_transpose($path, $output, %opts)` | `{rows, columns}` | swap rows and columns |
 | `Office::sheet_dedupe($path, $output, %opts)` | `{kept, removed}` | drop duplicate rows; `by` key columns, `keep` first/last |
 | `Office::sheet_append($path, %opts)` | `{added, rows}` | append `rows` or header-mapped `records` to a sheet (in place by default) |
+| `Office::sheet_hstack($path, $right, $output, %opts)` | `{ok, path, rows, columns}` | concatenate two row-aligned sheets side by side (pandas `concat axis=1`); `sheet`/`right_sheet` opts |
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/value, `by` columns, `value` constant |
 | `Office::sheet_interpolate($path, %opts)` | `{ok, path, filled}` | fill internal blanks in numeric columns by linear interpolation (pandas `Series.interpolate`); `by`/`decimals` opts |
 | `Office::sheet_drop_empty($path, $output, %opts)` | `{ok, path, rows_removed, cols_removed}` | drop fully-empty rows and/or columns; `rows`/`cols` opts |

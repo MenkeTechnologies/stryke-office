@@ -507,6 +507,20 @@ assert_eq scalar(@{$dur->{groups}}), 1, "sheet_duplicates: one duplicated key"
 assert_eq $dur->{groups}[0]{key}, "a", "sheet_duplicates: duplicated key"
 assert_eq $dur->{groups}[0]{count}, 3, "sheet_duplicates: three occurrences"
 unlink $dux
+# sheet_hstack: concatenate two sheets side by side
+val $hlx = "$dir/$tag-hl.xlsx"
+val $hrx = "$dir/$tag-hr.xlsx"
+Office::sheet_write($hlx, [{ name => "L", rows => [["a", "b"], [1, 2]] }])
+Office::sheet_write($hrx, [{ name => "R", rows => [["c"], [9]] }])
+val $hso2 = "$dir/$tag-hstack-out.xlsx"
+val $hsr2 = Office::sheet_hstack($hlx, $hrx, $hso2)
+assert_eq $hsr2->{columns}, 3, "sheet_hstack: 2 + 1 columns"
+val $hsb = Office::sheet_read($hso2)
+assert_eq $hsb->[0]{rows}[0][2], "c", "sheet_hstack: right header appended"
+assert_eq $hsb->[0]{rows}[1][2], 9, "sheet_hstack: right value aligned"
+unlink $hlx
+unlink $hrx
+unlink $hso2
 # sheet_subtotal: group-wise subtotal rows
 val $stx = "$dir/$tag-subtot.xlsx"
 Office::sheet_write($stx, [{ name => "D", rows => [["region", "amt"], ["east", 10], ["east", 20], ["west", 30]] }])

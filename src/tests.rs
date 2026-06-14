@@ -2519,6 +2519,44 @@ fn sheet_append_rows_and_records() {
 }
 
 #[test]
+fn sheet_hstack_side_by_side() {
+    let left = tmp("hl.xlsx");
+    let right = tmp("hr.xlsx");
+    let wl = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{left}","sheets":[{{"name":"L","rows":[["a","b"],[1,2],[3,4]]}}]}}"#),
+    );
+    assert_eq!(wl["ok"], true, "write l: {wl}");
+    // right has fewer rows -> shorter side padded
+    let wr = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{right}","sheets":[{{"name":"R","rows":[["c"],[9]]}}]}}"#),
+    );
+    assert_eq!(wr["ok"], true, "write r: {wr}");
+
+    let out = tmp("hstack_out.xlsx");
+    let r = call(
+        office__sheet_hstack,
+        &format!(r#"{{"path":"{left}","right":"{right}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["rows"], 3, "max of 3 and 2 rows: {r}");
+    assert_eq!(r["columns"], 3, "2 + 1 columns: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][0], "a", "left header: {rd}");
+    assert_eq!(rows[0][2], "c", "right header appended: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 2.0, "left row1 b: {rd}");
+    assert_eq!(rows[1][2].as_f64().unwrap(), 9.0, "right row1 c: {rd}");
+    // row index 2 exists on left only; right side padded blank
+    assert_eq!(rows[2][0].as_f64().unwrap(), 3.0, "left row2: {rd}");
+    assert!(rows[2][2].as_f64().is_none(), "right padded blank: {rd}");
+
+    std::fs::remove_file(&left).ok();
+    std::fs::remove_file(&right).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_dedupe_rows() {
     let path = tmp("dedup.xlsx");
     let w = call(
