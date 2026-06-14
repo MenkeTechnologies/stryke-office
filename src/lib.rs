@@ -1341,6 +1341,112 @@ fn op_sheet_describe(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// Pearson correlation coefficient over paired observations. Returns None when
+/// fewer than two points or either side has zero variance.
+fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    let n = xs.len();
+    if n < 2 {
+        return None;
+    }
+    let mx = xs.iter().sum::<f64>() / n as f64;
+    let my = ys.iter().sum::<f64>() / n as f64;
+    let mut cov = 0.0;
+    let mut sx = 0.0;
+    let mut sy = 0.0;
+    for (x, y) in xs.iter().zip(ys) {
+        cov += (x - mx) * (y - my);
+        sx += (x - mx).powi(2);
+        sy += (y - my).powi(2);
+    }
+    if sx == 0.0 || sy == 0.0 {
+        return None;
+    }
+    Some(cov / (sx.sqrt() * sy.sqrt()))
+}
+
+/// Pearson correlation matrix between numeric columns (the analogue of pandas
+/// `df.corr()`). opts: path, sheet, header (default true). Each pair is computed
+/// over rows where both columns are numeric (pairwise-complete); the diagonal is
+/// 1.0 and undefined cells (fewer than two shared points or zero variance) are
+/// `null`. Only columns with at least one numeric value are included. Returns
+/// `{ sheet, columns: [name], matrix: [[r]] }`.
+fn op_sheet_corr(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    // Per-column aligned numeric values (None where the cell is non-numeric).
+    let mut cols: Vec<(String, Vec<Option<f64>>)> = Vec::new();
+    for c in 0..ncols {
+        let vals: Vec<Option<f64>> = data
+            .iter()
+            .map(|row| {
+                row.as_array()
+                    .and_then(|a| a.get(c))
+                    .and_then(sheet_cell_num)
+            })
+            .collect();
+        if !vals.iter().any(Option::is_some) {
+            continue;
+        }
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        cols.push((cname, vals));
+    }
+
+    let names: Vec<Value> = cols.iter().map(|(n, _)| json!(n)).collect();
+    let mut matrix = Vec::with_capacity(cols.len());
+    for (i, (_, xi)) in cols.iter().enumerate() {
+        let mut rowv = Vec::with_capacity(cols.len());
+        for (j, (_, xj)) in cols.iter().enumerate() {
+            if i == j {
+                rowv.push(json!(1.0));
+                continue;
+            }
+            let (mut xs, mut ys) = (Vec::new(), Vec::new());
+            for (a, b) in xi.iter().zip(xj) {
+                if let (Some(a), Some(b)) = (a, b) {
+                    xs.push(*a);
+                    ys.push(*b);
+                }
+            }
+            rowv.push(pearson(&xs, &ys).map_or(Value::Null, |r| json!(r)));
+        }
+        matrix.push(Value::Array(rowv));
+    }
+    Ok(json!({ "sheet": name, "columns": names, "matrix": matrix }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -4316,6 +4422,7 @@ export!(office__sheet_merge, op_sheet_merge);
 export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
+export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
