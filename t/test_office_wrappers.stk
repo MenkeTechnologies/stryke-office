@@ -1047,9 +1047,17 @@ val $nir = Office::ndjson_to_sheet($nb, input => $no)
 assert_eq $nir->{rows}, 2, "ndjson_to_sheet: rows imported"
 val $nbr = Office::sheet_read($nb)
 assert_eq $nbr->[0]{rows}[1][0], "a", "ndjson_to_sheet: value round-trips"
-unlink $nx
 unlink $no
 unlink $nb
+# sheet_to_xml: export rows to XML
+val $xmo = "$dir/$tag-toxml.xml"
+val $xmr = Office::sheet_to_xml($nx, $xmo, root => "people", row => "person")
+assert_eq $xmr->{count}, 2, "sheet_to_xml: row count"
+val $xmt = slurp $xmo
+assert_ok ($xmt =~ /<person>/), "sheet_to_xml: row element"
+assert_ok ($xmt =~ /<name>a<\/name>/), "sheet_to_xml: child element"
+unlink $nx
+unlink $xmo
 
 # ── sheet_to_map: key=>value hash from two columns ──────────────────
 val $tmx = "$dir/$tag-tomap.xlsx"
