@@ -359,6 +359,43 @@ fn sheet_agg_scalar() {
 }
 
 #[test]
+fn sheet_sparkline_blocks() {
+    let path = tmp("spark.xlsx");
+    // 1..8 maps linearly onto the eight block levels
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4],[5],[6],[7],[8]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_sparkline,
+        &format!(r#"{{"path":"{path}","column":"v"}}"#),
+    );
+    assert_eq!(r["count"], 8, "eight values: {r}");
+    assert_eq!(r["sparkline"], "▁▂▃▄▅▆▇█", "full ramp of blocks: {r}");
+    assert_eq!(r["min"].as_f64().unwrap(), 1.0, "min: {r}");
+    assert_eq!(r["max"].as_f64().unwrap(), 8.0, "max: {r}");
+
+    // a flat column renders at the lowest block
+    let pf = tmp("spark_flat.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{pf}","sheets":[{{"name":"D","rows":[["v"],[5],[5],[5]]}}]}}"#),
+    );
+    let rf = call(
+        office__sheet_sparkline,
+        &format!(r#"{{"path":"{pf}","column":"v"}}"#),
+    );
+    assert_eq!(rf["sparkline"], "▁▁▁", "flat -> lowest block: {rf}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&pf).ok();
+}
+
+#[test]
 fn sheet_corr_pearson_matrix() {
     let path = tmp("corr.xlsx");
     // y = 2x (perfect +), z = -x (perfect -).

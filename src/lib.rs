@@ -1710,6 +1710,74 @@ fn op_sheet_agg(opts: Value) -> Result<Value> {
     Ok(json!({ "column": col_name, "agg": agg, "value": value, "count": n }))
 }
 
+/// Render a numeric column as a one-line Unicode block sparkline (the eight
+/// levels ▁▂▃▄▅▆▇█) — a compact trend glyph for terminals, Markdown, or commit
+/// messages. Each value maps linearly from the column's [min, max] to one of the
+/// eight block heights; a flat column renders at the lowest block. opts: path,
+/// column => name/index (required), sheet, header. Non-numeric cells are skipped.
+/// Returns `{ column, sparkline, count, min, max }`.
+fn op_sheet_sparkline(opts: Value) -> Result<Value> {
+    const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if vals.is_empty() {
+        return Ok(json!({
+            "column": col_name, "sparkline": "", "count": 0,
+            "min": Value::Null, "max": Value::Null,
+        }));
+    }
+    let lo = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let span = hi - lo;
+    let spark: String = vals
+        .iter()
+        .map(|&x| {
+            let level = if span <= 0.0 {
+                0
+            } else {
+                (((x - lo) / span) * 7.0).round() as usize
+            };
+            BLOCKS[level.min(7)]
+        })
+        .collect();
+    Ok(json!({ "column": col_name, "sparkline": spark, "count": vals.len(), "min": lo, "max": hi }))
+}
+
 /// Histogram of a numeric column: bucket values into `bins` (default 10) equal-
 /// width intervals spanning [min, max], returning each bin's range and count.
 /// Distinct from sheet_freq (which counts exact categorical values). opts: path,
@@ -11445,6 +11513,7 @@ export!(office__sheet_dtypes, op_sheet_dtypes);
 export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_agg, op_sheet_agg);
+export!(office__sheet_sparkline, op_sheet_sparkline);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
