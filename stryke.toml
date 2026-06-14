@@ -121,6 +121,7 @@ exports = [
     "office__slides_to_doc",
     "office__slides_to_pdf",
     "office__slides_outline",
+    "office__slides_to_md",
     "office__html_to_doc",
     "office__doc_wordfreq",
     "office__doc_find",

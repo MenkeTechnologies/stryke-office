@@ -954,6 +954,67 @@ fn op_slides_outline(opts: Value) -> Result<Value> {
     Ok(json!({ "count": outline.len(), "outline": outline }))
 }
 
+/// Render a presentation as a Markdown outline: each slide's first text line
+/// becomes a heading and the rest become bullet items. opts: path (pptx/odp),
+/// output => write to a `.md` file (omit to return the text), level => heading
+/// level for slide titles (default 2), notes => append speaker notes as a blank-
+/// line-separated paragraph after each slide's bullets. Returns `{ ok, slides,
+/// markdown, path? }`.
+fn op_slides_to_md(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let level = opts
+        .get("level")
+        .and_then(Value::as_u64)
+        .unwrap_or(2)
+        .clamp(1, 6) as usize;
+    let hashes = "#".repeat(level);
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let str_lines = |v: Option<&Value>| -> Vec<String> {
+        v.and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let mut sections: Vec<String> = Vec::new();
+    for s in &slides {
+        let text = str_lines(s.get("text"));
+        let (title, body) = text
+            .split_first()
+            .map(|(h, rest)| (h.clone(), rest.to_vec()))
+            .unwrap_or_default();
+        let mut sec = format!("{hashes} {title}\n");
+        for b in &body {
+            sec.push_str(&format!("\n- {b}"));
+        }
+        if want_notes {
+            let notes = str_lines(s.get("notes"));
+            if !notes.is_empty() {
+                sec.push_str(&format!("\n\n{}", notes.join(" ")));
+            }
+        }
+        sections.push(sec);
+    }
+    let markdown = format!("{}\n", sections.join("\n\n"));
+
+    let mut out = json!({ "ok": true, "slides": slides.len(), "markdown": markdown });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, &markdown)?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 // ── merge / convert ───────────────────────────────────────────────────────────
 
 /// Read any supported document into `doc_write`-compatible blocks: docx/odt via
