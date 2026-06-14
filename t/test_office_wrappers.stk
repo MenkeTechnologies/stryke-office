@@ -225,6 +225,10 @@ val $clr = Office::sheet_get_cell($clo, "B2")
 assert_eq $clr->{value}, 6, "sheet_calc: n*2"
 unlink $clx
 unlink $clo
+# distinct values of g (x, y)
+val $unq = Office::sheet_unique($gcx, "g", sorted => 1)
+assert_eq $unq->{count}, 2, "sheet_unique: distinct count"
+assert_eq $unq->{values}[0], "x", "sheet_unique: sorted first"
 # vlookup on the same file
 val $lk = Office::sheet_lookup($gcx, "g", "y", "v")
 assert_eq $lk->{value}, "c", "sheet_lookup: returns matching value"

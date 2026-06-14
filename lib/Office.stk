@@ -395,6 +395,13 @@ fn Office::sheet_freq ($path, $column, %opts) {
         office__sheet_freq(to_json({ path => $path, column => $column, sheet => $opts{sheet}, header => $opts{header}, ignore_case => $opts{ignore_case}, top => $opts{top} })))
 }
 
+## Distinct values of a column (SQL DISTINCT). opts: sorted, ignore_case, sheet,
+## header. Returns { column, count, values }.
+fn Office::sheet_unique ($path, $column, %opts) {
+    Office::_decode("sheet_unique",
+        office__sheet_unique(to_json({ path => $path, column => $column, sorted => $opts{sorted}, ignore_case => $opts{ignore_case}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Split one column into several by a delimiter (Excel Text to Columns). opts:
 ## delimiter, into, max, trim, keep, sheet, header, format. Returns { ok, path, columns }.
 fn Office::sheet_split_column ($path, $column, $output, %opts) {
