@@ -1204,6 +1204,39 @@ fn slides_merge_combines_decks() {
 }
 
 #[test]
+fn doc_to_html_structured() {
+    let dx = tmp("tohtml.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{dx}","blocks":[
+                {{"kind":"heading","level":1,"text":"Report"}},
+                {{"kind":"para","text":"body text"}},
+                {{"kind":"table","rows":[["a","b"],["1","2"]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let html = tmp("tohtml.html");
+    let r = call(
+        office__doc_to_html,
+        &format!(r#"{{"path":"{dx}","output":"{html}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "doc_to_html: {r}");
+    let text = std::fs::read_to_string(&html).unwrap();
+    assert!(text.contains("<h1>Report</h1>"), "heading html: {text}");
+    assert!(text.contains("body text"), "paragraph: {text}");
+    assert!(
+        text.contains("<td>a</td>") && text.contains("<td>2</td>"),
+        "table cells: {text}"
+    );
+
+    std::fs::remove_file(&dx).ok();
+    std::fs::remove_file(&html).ok();
+}
+
+#[test]
 fn doc_to_md_structured() {
     let dx = tmp("tomd.docx");
     let w = call(
