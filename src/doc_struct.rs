@@ -896,9 +896,17 @@ fn op_doc_to_pdf(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
     let blocks = doc_blocks_or_paras(path)?;
+    let elements = blocks_to_pdf_elements(&blocks);
+    op_pdf_build(json!({ "path": output, "elements": elements }))?;
+    Ok(json!({ "ok": true, "path": output, "elements": elements.len() }))
+}
 
+/// Map `doc_write`-style blocks onto the `pdf_build` element model in document
+/// order (list items become bulleted paragraphs; images are skipped since the
+/// block carries no path). Shared by `doc_to_pdf` and `html_to_pdf`.
+fn blocks_to_pdf_elements(blocks: &[Value]) -> Vec<Value> {
     let mut elements: Vec<Value> = Vec::new();
-    for b in &blocks {
+    for b in blocks {
         match b.get("kind").and_then(Value::as_str) {
             Some("heading") => {
                 let level = b.get("level").and_then(Value::as_u64).unwrap_or(1);
@@ -936,7 +944,18 @@ fn op_doc_to_pdf(opts: Value) -> Result<Value> {
             }
         }
     }
+    elements
+}
 
+/// Render an HTML file straight to a PDF (the direct path alongside
+/// `html_to_doc` + `doc_to_pdf`). opts: input (.html), output (pdf, required).
+/// Headings/paragraphs/lists/tables map onto the `pdf_build` element model.
+/// Returns `{ ok, path, elements }`.
+fn op_html_to_pdf(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let blocks = parse_html_blocks(&std::fs::read(input)?);
+    let elements = blocks_to_pdf_elements(&blocks);
     op_pdf_build(json!({ "path": output, "elements": elements }))?;
     Ok(json!({ "ok": true, "path": output, "elements": elements.len() }))
 }
