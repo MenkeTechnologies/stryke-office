@@ -251,6 +251,7 @@ exports = [
     "office__html_to_sheet",
     "office__doc_wordfreq",
     "office__doc_readability",
+    "office__doc_sentences",
     "office__doc_find",
     "office__slides_find",
     "office__img_open",

@@ -1313,6 +1313,13 @@ fn Office::doc_readability ($path) {
         office__doc_readability(to_json({ path => $path })))
 }
 
+## Split a document's text into sentences. opts: max (cap returned). Returns
+## { count, sentences => [...] }.
+fn Office::doc_sentences ($path, %opts) {
+    Office::_decode("doc_sentences",
+        office__doc_sentences(to_json({ path => $path, max => $opts{max} })))
+}
+
 ## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts: regex
 ## (treat query as a regex), ignore_case => 1. Returns { count, matches =>
 ## [{ paragraph, count, snippet }] } with 1-based paragraph indexes.

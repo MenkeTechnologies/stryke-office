@@ -1016,6 +1016,8 @@ assert_eq $rdr->{words}, 6, "doc_readability: word count"
 assert_eq $rdr->{sentences}, 2, "doc_readability: sentence count"
 assert_eq $rdr->{syllables}, 6, "doc_readability: syllable count"
 assert_ok ($rdr->{flesch_reading_ease} > 100), "doc_readability: high reading ease for simple text"
+val $sents = Office::doc_sentences($rdt)
+assert_eq $sents->{count}, 2, "doc_sentences: two sentences"
 unlink $rdt
 
 # ── doc_diff: paragraph-level LCS diff between two docs ──────────────
