@@ -91,6 +91,16 @@ val $gci = Office::sheet_get_cell($cellx, "A1")
 assert_eq $gci->{value}, "id", "sheet_insert_column: new header at A1"
 unlink $cellx
 
+# ── sheet_cumsum running total ──────────────────────────────────────
+val $csx = "$dir/$tag-cumsum.xlsx"
+Office::sheet_write($csx, [{ name => "D", rows => [["amt"], [10], [20]] }])
+val $cso = "$dir/$tag-cumsum-out.xlsx"
+Office::sheet_cumsum($csx, "amt", $cso)
+val $csr = Office::sheet_get_cell($cso, "B3")
+assert_eq $csr->{value}, 30, "sheet_cumsum: running total"
+unlink $csx
+unlink $cso
+
 # ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"
 Office::slides_write($pptx, [{ title => "Intro", body => ["a", "b"] }])

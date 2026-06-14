@@ -204,6 +204,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_insert_rows($path, %opts)` | `{ok, path, inserted}` | insert blank rows at a 1-based position (shifts down); `at`/`count`/`sheet` opts |
 | `Office::sheet_delete_rows($path, $at, %opts)` | `{ok, path, deleted}` | delete rows from a 1-based position; `count`/`output`/`sheet` opts |
 | `Office::sheet_insert_column($path, %opts)` | `{ok, path, at}` | insert a column at a 1-based position (shifts right); `at`/`name`/`value` opts |
+| `Office::sheet_cumsum($path, $column, $output, %opts)` | `{ok, path, column}` | append a running-total (cumulative sum) column for a numeric column; `into` opt |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_outline($path)` | `{outline:[{level,text}], count}` | heading outline of a docx/odt (document analogue of pdf_outline) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |
