@@ -3355,6 +3355,95 @@ fn op_sheet_delta(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append a row-over-row percentage-change column (pandas `Series.pct_change`):
+/// (current − previous) / previous. The relative counterpart to `sheet_delta`'s
+/// absolute difference. opts: path, output, column => name/index (required),
+/// into => header (default "{column}_pctchg"), `fraction` => emit the raw ratio
+/// instead of a percentage (default false → multiply by 100), decimals => round,
+/// sheet, header, format. The first row and any row whose previous value is
+/// blank or zero get a blank. Returns `{ ok, path, column }`.
+fn op_sheet_pct_change(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let fraction = opts.get("fraction").and_then(flag_of).unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_pctchg"));
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let nums: Vec<Option<f64>> = rows[data_start..]
+        .iter()
+        .map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        let mut hr = rows[0].as_array().cloned().unwrap_or_default();
+        hr.push(json!(into));
+        new_rows.push(Value::Array(hr));
+    }
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        let mut cells = row.as_array().cloned().unwrap_or_default();
+        let cell = match (i.checked_sub(1).and_then(|p| nums[p]), nums[i]) {
+            (Some(prev), Some(cur)) if prev != 0.0 => {
+                let mut v = (cur - prev) / prev;
+                if !fraction {
+                    v *= 100.0;
+                }
+                let v = match decimals {
+                    Some(dp) => {
+                        let f = 10f64.powi(dp as i32);
+                        (v * f).round() / f
+                    }
+                    None => v,
+                };
+                json!(v)
+            }
+            _ => json!(""),
+        };
+        cells.push(cell);
+        new_rows.push(Value::Array(cells));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Clamp a numeric column's values to a range (winsorize / cap outliers). opts:
 /// path, output, column => name or 0-based index (required), min and/or max =>
 /// bounds (at least one required), into => write to a new column with this header
@@ -8858,6 +8947,7 @@ export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_rolling, op_sheet_rolling);
 export!(office__sheet_delta, op_sheet_delta);
+export!(office__sheet_pct_change, op_sheet_pct_change);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_explode, op_sheet_explode);

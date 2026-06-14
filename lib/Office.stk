@@ -240,6 +240,14 @@ fn Office::sheet_delta ($path, $column, $output, %opts) {
         office__sheet_delta(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a row-over-row percentage-change column (pandas pct_change): relative
+## counterpart to sheet_delta. opts: fraction (1 => raw ratio, default percent),
+## into, decimals, sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_pct_change ($path, $column, $output, %opts) {
+    Office::_decode("sheet_pct_change",
+        office__sheet_pct_change(to_json({ path => $path, column => $column, output => $output, fraction => $opts{fraction}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Clamp a numeric column to a range (cap outliers). opts: min and/or max
 ## (>=1 required), into (new column; default in place), sheet, header, format.
 ## Returns { ok, path, clamped }.

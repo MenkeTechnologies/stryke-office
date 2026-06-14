@@ -346,6 +346,17 @@ assert_eq $rlb->[0]{rows}[3][1], 60, "sheet_rolling: window sum 60"
 assert_eq $rlb->[0]{rows}[4][1], 90, "sheet_rolling: window sum 90"
 unlink $rlx
 unlink $rlo
+# sheet_pct_change: row-over-row percentage change
+val $pcx = "$dir/$tag-pctchg.xlsx"
+Office::sheet_write($pcx, [{ name => "D", rows => [["v"], [100], [150], [75]] }])
+val $pco = "$dir/$tag-pctchg-out.xlsx"
+val $pcr = Office::sheet_pct_change($pcx, "v", $pco)
+assert_eq $pcr->{column}, "v_pctchg", "sheet_pct_change: default column name"
+val $pcb = Office::sheet_read($pco)
+assert_eq $pcb->[0]{rows}[2][1], 50, "sheet_pct_change: +50%"
+assert_eq $pcb->[0]{rows}[3][1], -50, "sheet_pct_change: -50%"
+unlink $pcx
+unlink $pco
 # sheet_outliers: IQR fence flags the extreme value
 val $oux = "$dir/$tag-outliers.xlsx"
 Office::sheet_write($oux, [{ name => "D", rows => [["v"], [10], [11], [12], [13], [14], [100]] }])
