@@ -102,6 +102,9 @@ assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"
 val $qn = Office::sheet_quantile($xl, "Count", 0.5)
 assert_eq $qn->{value}, 5, "sheet_quantile: median of single value"
 
+val $ag = Office::sheet_agg($xl, "Count", agg => "sum")
+assert_eq $ag->{value}, 5, "sheet_agg: sum of single value"
+
 val $fr = Office::sheet_freq($xl, "Item")
 assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
 unlink $xl
