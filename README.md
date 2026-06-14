@@ -236,6 +236,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_outline($path)` | `{count, outline}` | extract slide titles as a deck outline/TOC (`[{slide, title}]`) |
 | `Office::slides_to_md($path, %opts)` | `{ok, slides, markdown, path?}` | render a deck as a Markdown outline (titles→headings, body→bullets); `output`/`level`/`notes` opts |
 | `Office::slides_to_html($path, %opts)` | `{ok, slides, html, path?}` | render a deck as an HTML page (section per slide, `<h2>`+`<ul>`); `output`/`notes`/`full` opts |
+| `Office::slides_to_text($path, %opts)` | `{ok, slides, text, path?}` | extract a deck's text as plain text, slide by slide; `output`/`notes`/`sep` opts |
 | `Office::md_to_slides($output, %opts)` | `{ok, path, slides}` | parse a Markdown outline into a deck (headings→slides, bullets→body); `markdown`/`path` opts |
 | `Office::slides_split($path, $dir, %opts)` | `{count, files}` | split a deck into one file per slide; `prefix`/`format` opts |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |

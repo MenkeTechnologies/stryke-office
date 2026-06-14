@@ -3194,6 +3194,27 @@ fn slides_to_html_sections() {
 }
 
 #[test]
+fn slides_to_text_extracts() {
+    let px = tmp("s2txt.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{px}","slides":[{{"title":"Intro","body":["alpha","beta"]}},{{"title":"End","body":[]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(office__slides_to_text, &format!(r#"{{"path":"{px}"}}"#));
+    assert_eq!(r["slides"], 2, "two slides: {r}");
+    let text = r["text"].as_str().unwrap();
+    assert!(text.contains("Intro"), "first title: {text:?}");
+    assert!(text.contains("alpha"), "body line: {text:?}");
+    assert!(text.contains("End"), "second slide: {text:?}");
+
+    std::fs::remove_file(&px).ok();
+}
+
+#[test]
 fn xml_entities_survive_text_extraction() {
     // Regression: quick-xml emits `&amp;` etc. as standalone GeneralRef events,
     // not inside Text, so the readers must resolve them or `&`/`<`/`>` vanish.

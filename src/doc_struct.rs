@@ -1341,6 +1341,52 @@ fn op_slides_to_html(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Extract a presentation's text as plain text, slide by slide (the deck
+/// analogue of `doc_to_text`). opts: path (pptx/odp), output => write to a file
+/// (omit to return the text), notes => append each slide's speaker notes, sep =>
+/// separator between slides (default "\n\n"). Returns `{ ok, slides, text,
+/// path? }`.
+fn op_slides_to_text(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let sep = opts.get("sep").and_then(Value::as_str).unwrap_or("\n\n");
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let str_lines = |v: Option<&Value>| -> Vec<String> {
+        v.and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let sections: Vec<String> = slides
+        .iter()
+        .map(|s| {
+            let mut lines = str_lines(s.get("text"));
+            if want_notes {
+                lines.extend(str_lines(s.get("notes")));
+            }
+            lines.join("\n")
+        })
+        .collect();
+    let text = format!("{}\n", sections.join(sep));
+
+    let mut out = json!({ "ok": true, "slides": slides.len(), "text": text });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, &text)?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// Parse a Markdown outline into a presentation (the inverse of `slides_to_md`).
 /// opts: markdown => outline text, or path => a `.md` file; output (required) =>
 /// pptx/odp; format => override. Each heading line (`#`..`######`) starts a new

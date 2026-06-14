@@ -120,6 +120,8 @@ val $smd = Office::slides_to_md($pptx)
 assert_ok ($smd->{markdown} =~ /## Intro/), "slides_to_md: title heading"
 val $shtml = Office::slides_to_html($pptx)
 assert_ok ($shtml->{html} =~ /<h2>Intro<\/h2>/), "slides_to_html: title section"
+val $stxt = Office::slides_to_text($pptx)
+assert_ok ($stxt->{text} =~ /Intro/), "slides_to_text: text extracted"
 unlink $pptx
 
 # ── pdf text statistics ─────────────────────────────────────────────
