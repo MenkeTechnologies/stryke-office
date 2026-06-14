@@ -11113,6 +11113,42 @@ fn chart_contour_raster_and_svg() {
 }
 
 #[test]
+fn chart_ridgeline_raster_and_svg() {
+    // three groups -> three stacked density ridges
+    let series = r#"[{"name":"a","data":[1,2,2,3,3,3,4,4,5]},{"name":"b","data":[3,4,4,5,5,5,6,6,7]},{"name":"c","data":[5,6,6,7,7,7,8,8,9]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"ridgeline","width":480,"height":360,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("ridgeline raster: {c}"));
+    assert_eq!(c["type"], "ridgeline", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"ridgeline","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "ridgeline svg malformed"
+    );
+    // one filled ridge path per series (3)
+    assert_eq!(
+        svg.matches("fill-opacity=\"0.6\"").count(),
+        3,
+        "one ridge per group"
+    );
+    // group labels present
+    assert!(
+        svg.contains(">a<") && svg.contains(">b<") && svg.contains(">c<"),
+        "ridgeline group labels"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

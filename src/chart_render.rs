@@ -312,6 +312,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_contour(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
         }
+        "ridgeline" | "ridge" | "joyplot" => {
+            require_series(&opts)?;
+            render_ridgeline(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -1651,6 +1655,91 @@ fn render_contour(
                 draw_line_segment_mut(img, (gpx(c0), gpy(r0)), (gpx(c1), gpy(r1)), color);
             });
         }
+    }
+}
+
+/// Ridgeline plot (ggridges `geom_density_ridges`) — one Gaussian-KDE curve per
+/// series stacked on its own baseline, each rising into the lane above so the
+/// ridges overlap. Shared value (x) axis; curves are height-normalized per lane.
+/// opts: `points` => KDE grid (default 128), `overlap` => how far a ridge climbs
+/// in lane-heights (default 1.4; >1 overlaps the next lane).
+#[allow(clippy::too_many_arguments)]
+fn render_ridgeline(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let (mut xlo, mut xhi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            xlo = xlo.min(v);
+            xhi = xhi.max(v);
+        }
+    }
+    if !xlo.is_finite() || !xhi.is_finite() {
+        return;
+    }
+    if (xhi - xlo).abs() < f64::EPSILON {
+        xhi = xlo + 1.0;
+    }
+    let pad = (xhi - xlo) * 0.05;
+    let (xlo, xhi) = (xlo - pad, xhi + pad);
+    let points = opts.get("points").and_then(Value::as_u64).unwrap_or(128).clamp(16, 1024) as usize;
+    let overlap = opts.get("overlap").and_then(Value::as_f64).unwrap_or(1.4).clamp(0.2, 4.0);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let xp = |x: f64| l as f64 + (x - xlo) / (xhi - xlo) * pw;
+    for i in 0..=5 {
+        let v = xlo + (xhi - xlo) * i as f64 / 5.0;
+        let x = xp(v) as f32;
+        draw_line_segment_mut(img, (x, t as f32), (x, b as f32), grid);
+        draw_text_mut(img, black, x as i32 - 10, b + 6, PxScale::from(12.0), fnt, &fmt_num(v));
+    }
+
+    let nser = series.len().max(1);
+    let lane = ph / nser as f64;
+    // Draw top lane first so lower (front) ridges paint over the ones behind.
+    for si in (0..series.len()).rev() {
+        let s = &series[si];
+        let data = series_nums(s);
+        if data.is_empty() {
+            continue;
+        }
+        let cur = kde_curve(&data, xlo, xhi, points);
+        let maxd = cur.iter().map(|&(_, d)| d).fold(f64::EPSILON, f64::max);
+        let baseline = b as f64 - si as f64 * lane;
+        let color = series_color(s, si);
+        let verts: Vec<(f32, f32)> = cur
+            .iter()
+            .map(|&(x, d)| (xp(x) as f32, (baseline - d / maxd * lane * overlap) as f32))
+            .collect();
+        let mut poly: Vec<Point<i32>> = Vec::with_capacity(verts.len() + 2);
+        poly.push(Point::new(xp(cur[0].0) as i32, baseline as i32));
+        for &(x, y) in &verts {
+            poly.push(Point::new(x as i32, y as i32));
+        }
+        poly.push(Point::new(xp(cur[cur.len() - 1].0) as i32, baseline as i32));
+        poly.dedup();
+        if poly.len() >= 3 && poly.first() != poly.last() {
+            let mut fillc = color;
+            fillc.0[3] = 150;
+            draw_polygon_mut(img, &poly, fillc);
+        }
+        for w in verts.windows(2) {
+            draw_line_segment_mut(img, w[0], w[1], color);
+        }
+        let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        draw_text_mut(img, black, l + 4, baseline as i32 - 12, PxScale::from(12.0), fnt, &name);
     }
 }
 

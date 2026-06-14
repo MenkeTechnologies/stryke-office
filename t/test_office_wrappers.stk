@@ -1332,4 +1332,10 @@ assert_ok ($cntsvg =~ /^<svg/), "chart contour: svg document"
 assert_ok ($cntsvg =~ /path/), "chart contour: iso-density lines"
 assert_ok ($cntsvg =~ /circle/), "chart contour: underlying points"
 
+# ── chart ridgeline (ggridges geom_density_ridges): stacked KDE ─────
+val $rdgsvg = Office::chart_svg("ridgeline", [{ name => "a", data => [1, 2, 2, 3, 3, 3, 4, 4, 5] }, { name => "b", data => [3, 4, 4, 5, 5, 5, 6, 6, 7] }])
+assert_ok ($rdgsvg =~ /^<svg/), "chart ridgeline: svg document"
+assert_ok ($rdgsvg =~ /fill-opacity="0.6"/), "chart ridgeline: filled ridge"
+assert_ok ($rdgsvg =~ />a</), "chart ridgeline: group label"
+
 test_run
