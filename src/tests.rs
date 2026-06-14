@@ -1236,6 +1236,43 @@ fn doc_to_md_structured() {
 }
 
 #[test]
+fn html_to_doc_structured() {
+    let html = tmp("in.html");
+    std::fs::write(
+        &html,
+        "<html><body>\n<h2>Sec</h2>\n<p>txt body</p>\n<ul><li>one</li><li>two</li></ul>\n<table><tr><td>a</td><td>b</td></tr><tr><td>1</td><td>2</td></tr></table>\n</body></html>",
+    )
+    .unwrap();
+
+    let out = tmp("html_out.docx");
+    let r = call(
+        office__html_to_doc,
+        &format!(r#"{{"input":"{html}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "html_to_doc: {r}");
+
+    let ol = call(office__doc_outline, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(ol["count"], 1, "one heading: {ol}");
+    assert_eq!(ol["outline"][0]["level"], 2, "h2 level: {ol}");
+    assert_eq!(ol["outline"][0]["text"], "Sec", "heading text: {ol}");
+
+    let tb = call(office__doc_tables, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(tb["count"], 1, "one table: {tb}");
+    assert_eq!(tb["tables"][0]["rows"][1][1], "2", "table cell: {tb}");
+
+    let rd = call(office__doc_read, &format!(r#"{{"path":"{out}"}}"#));
+    let joined = rd["paragraphs"].to_string();
+    assert!(joined.contains("txt body"), "paragraph: {joined}");
+    assert!(
+        joined.contains("one") && joined.contains("two"),
+        "list items: {joined}"
+    );
+
+    std::fs::remove_file(&html).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn md_to_doc_structured() {
     let md = tmp("in.md");
     std::fs::write(

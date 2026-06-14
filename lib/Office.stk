@@ -260,6 +260,14 @@ fn Office::doc_stats ($path) {
     Office::_decode("doc_stats", office__doc_stats(to_json({ path => $path })))
 }
 
+## Convert an HTML file into a document, preserving headings, paragraphs, lists,
+## and tables. $output's extension picks the format (docx/odt/pdf/md/...). opts:
+## format => override. Returns { ok, path, blocks }.
+fn Office::html_to_doc ($input, $output, %opts) {
+    Office::_decode("html_to_doc",
+        office__html_to_doc(to_json({ input => $input, output => $output, format => $opts{format} })))
+}
+
 ## Convert a Markdown file into a document, preserving headings, bullet/ordered
 ## lists, and pipe tables. $output's extension picks the format (docx/odt/pdf/
 ## html/...). opts: format => override. Returns { ok, path, blocks }.

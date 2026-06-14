@@ -360,6 +360,156 @@ fn op_doc_outline(opts: Value) -> Result<Value> {
     Ok(json!({ "count": outline.len(), "outline": outline }))
 }
 
+// ── html -> blocks ────────────────────────────────────────────────────────────
+
+/// Heading level for an `h1`..`h6` tag name (case-insensitive).
+fn html_heading_level(name: &str) -> Option<u64> {
+    let b = name.as_bytes();
+    (b.len() == 2 && (b[0] == b'h' || b[0] == b'H') && (b'1'..=b'6').contains(&b[1]))
+        .then(|| (b[1] - b'0') as u64)
+}
+
+/// Parse an HTML subset (h1-h6, p, table/tr/td-th, ul/ol/li) into `doc_write`
+/// blocks. Inline markup (b/i/…) is flattened to text; void/unclosed tags are
+/// tolerated (the reader runs with end-name checking off).
+fn parse_html_blocks(xml: &[u8]) -> Vec<Value> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    reader.config_mut().check_end_names = false;
+    let mut buf = Vec::new();
+    let mut blocks: Vec<Value> = Vec::new();
+
+    let mut in_table = 0i32;
+    let (mut rows, mut row, mut cell) = (Vec::<Value>::new(), Vec::<String>::new(), String::new());
+    let mut in_cell = false;
+    let mut in_list = 0i32;
+    let mut ordered = false;
+    let (mut items, mut item) = (Vec::<Value>::new(), String::new());
+    let mut in_li = false;
+    let mut in_block = false; // inside a top-level p / hN
+    let mut block_level: u64 = 0; // 0 = paragraph, 1..6 = heading
+    let mut cur = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_lowercase();
+                match name.as_str() {
+                    "table" => {
+                        in_table += 1;
+                        if in_table == 1 {
+                            rows = Vec::new();
+                        }
+                    }
+                    "tr" if in_table >= 1 => row = Vec::new(),
+                    "td" | "th" if in_table >= 1 => {
+                        cell = String::new();
+                        in_cell = true;
+                    }
+                    "ul" | "ol" => {
+                        in_list += 1;
+                        if in_list == 1 {
+                            ordered = name == "ol";
+                            items = Vec::new();
+                        }
+                    }
+                    "li" if in_list >= 1 => {
+                        item = String::new();
+                        in_li = true;
+                    }
+                    _ => {
+                        if in_table == 0 && in_list == 0 {
+                            if name == "p" {
+                                in_block = true;
+                                block_level = 0;
+                                cur.clear();
+                            } else if let Some(lv) = html_heading_level(&name) {
+                                in_block = true;
+                                block_level = lv;
+                                cur.clear();
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if let Ok(t) = e.xml10_content() {
+                    if in_cell {
+                        cell.push_str(&t);
+                    } else if in_li {
+                        item.push_str(&t);
+                    } else if in_block {
+                        cur.push_str(&t);
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_lowercase();
+                match name.as_str() {
+                    "td" | "th" if in_table >= 1 => {
+                        in_cell = false;
+                        row.push(std::mem::take(&mut cell));
+                    }
+                    "tr" if in_table >= 1 => rows.push(Value::Array(
+                        std::mem::take(&mut row).into_iter().map(Value::String).collect(),
+                    )),
+                    "table" => {
+                        in_table -= 1;
+                        if in_table == 0 {
+                            blocks.push(json!({ "kind": "table", "rows": std::mem::take(&mut rows) }));
+                        }
+                    }
+                    "li" if in_list >= 1 => {
+                        in_li = false;
+                        items.push(Value::String(std::mem::take(&mut item)));
+                    }
+                    "ul" | "ol" => {
+                        in_list -= 1;
+                        if in_list == 0 {
+                            blocks.push(json!({
+                                "kind": "list",
+                                "ordered": ordered,
+                                "items": std::mem::take(&mut items),
+                            }));
+                        }
+                    }
+                    _ if in_block && (name == "p" || html_heading_level(&name).is_some()) => {
+                        in_block = false;
+                        let text = std::mem::take(&mut cur).split_whitespace().collect::<Vec<_>>().join(" ");
+                        if block_level == 0 {
+                            blocks.push(json!({ "kind": "para", "text": text }));
+                        } else {
+                            blocks.push(json!({ "kind": "heading", "level": block_level, "text": text }));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    blocks
+}
+
+/// Convert an HTML file into a document, preserving headings, paragraphs,
+/// lists, and tables. opts: input (.html), output (target; format from ext —
+/// docx/odt/pdf/md/…), format => override. Returns `{ ok, path, blocks }`.
+fn op_html_to_doc(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let bytes = std::fs::read(input)?;
+    let blocks = parse_html_blocks(&bytes);
+    let n = blocks.len();
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "blocks": n }))
+}
+
 // ── markdown -> blocks ────────────────────────────────────────────────────────
 
 /// Parse an ATX heading line (`# `..`###### `) into a heading block.
