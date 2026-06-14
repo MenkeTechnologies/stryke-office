@@ -193,6 +193,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_dedupe($path, $output, %opts)` | `{kept, removed}` | drop duplicate rows; `by` key columns, `keep` first/last |
 | `Office::sheet_append($path, %opts)` | `{added, rows}` | append `rows` or header-mapped `records` to a sheet (in place by default) |
 | `Office::sheet_fill($path, %opts)` | `{filled}` | fill blank cells; `method` ffill/value, `by` columns, `value` constant |
+| `Office::sheet_interpolate($path, %opts)` | `{ok, path, filled}` | fill internal blanks in numeric columns by linear interpolation (pandas `Series.interpolate`); `by`/`decimals` opts |
 | `Office::sheet_drop_empty($path, $output, %opts)` | `{ok, path, rows_removed, cols_removed}` | drop fully-empty rows and/or columns; `rows`/`cols` opts |
 | `Office::sheet_add_header($path, $names, $output, %opts)` | `{ok, path, columns}` | prepend a header row of column names (for headerless data) |
 | `Office::sheet_calc($path, $left, $op, $output, %opts)` | `{ok, path, column}` | append a computed column (`+ - * / %`) between two columns or a column and `value`; `into` required |
