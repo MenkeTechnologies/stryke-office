@@ -276,6 +276,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_split($path, $dir, %opts)` | `{count, files}` | split a deck into one file per slide; `prefix`/`format` opts |
 | `Office::slides_reorder($path, $order, %opts)` | `{ok, path, slides}` | reorder/subset slides by a 1-based order list (deck analogue of `pdf_reorder`) |
 | `Office::slides_delete($path, $slides, %opts)` | `{ok, path, removed, slides}` | delete slides by 1-based number/array (deck analogue of `pdf_delete`); refuses to empty the deck |
+| `Office::slides_insert($path, %opts)` | `{ok, path, position, slides}` | insert a new slide at a 1-based position (default append); `title`/`body`/`position` opts |
 | `Office::doc_find($path, $query, %opts)` | `{count, matches:[{paragraph,count,snippet}]}` | search document paragraphs (docx/odt/html/md/rtf/txt/pdf) |
 | `Office::text_grep($path, $query, %opts)` | `{count, matches:[{line, text}]}` | grep matching lines from a text file; `ignore_case`/`invert`/`max` opts |
 | `Office::text_stats($path)` | `{lines, words, chars, bytes}` | `wc`-style stats for a raw text file |

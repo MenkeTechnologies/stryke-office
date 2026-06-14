@@ -4274,6 +4274,44 @@ fn slides_delete_by_number() {
 }
 
 #[test]
+fn slides_insert_at_position() {
+    let deck = tmp("sins.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{deck}","slides":[{{"title":"A","body":["a"]}},{{"title":"C","body":["c"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // insert "B" at position 2 → A, B, C
+    let out = tmp("sins_out.pptx");
+    let r = call(
+        office__slides_insert,
+        &format!(r#"{{"path":"{deck}","position":2,"title":"B","body":["b"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["slides"], 3, "three slides: {r}");
+    assert_eq!(r["position"], 2, "inserted at position 2: {r}");
+    let rd = call(office__slides_read, &format!(r#"{{"path":"{out}"}}"#));
+    let slides = rd["slides"].as_array().unwrap();
+    assert_eq!(slides[0]["text"][0], "A", "first A: {rd}");
+    assert_eq!(slides[1]["text"][0], "B", "second B (inserted): {rd}");
+    assert_eq!(slides[2]["text"][0], "C", "third C: {rd}");
+
+    // no position → append at end
+    let outa = tmp("sins_app.pptx");
+    let ra = call(
+        office__slides_insert,
+        &format!(r#"{{"path":"{deck}","title":"Z","output":"{outa}"}}"#),
+    );
+    assert_eq!(ra["position"], 3, "appended at end (deck had 2): {ra}");
+
+    std::fs::remove_file(&deck).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outa).ok();
+}
+
+#[test]
 fn slides_split_one_file_per_slide() {
     let deck = tmp("splitdeck.pptx");
     let w = call(

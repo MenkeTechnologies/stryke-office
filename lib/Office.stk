@@ -1179,6 +1179,14 @@ fn Office::slides_append ($path, $slides, %opts) {
         office__slides_append(to_json({ path => $path, slides => $slides, output => $opts{output}, format => $opts{format} })))
 }
 
+## Insert a new slide at a 1-based position (default append). opts: title, body
+## (arrayref of lines), position, output (default in place), format. Returns
+## { ok, path, position, slides }.
+fn Office::slides_insert ($path, %opts) {
+    Office::_decode("slides_insert",
+        office__slides_insert(to_json({ path => $path, title => $opts{title}, body => $opts{body}, position => $opts{position}, output => $opts{output}, format => $opts{format} })))
+}
+
 # ── pdf ─────────────────────────────────────────────────────────────
 
 ## Extract text from a PDF. Returns a hashref { pages => [...], text => "..." }.
