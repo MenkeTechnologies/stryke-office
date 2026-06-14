@@ -822,6 +822,14 @@ fn Office::sheet_sample ($path, $output, %opts) {
         office__sheet_sample(to_json({ path => $path, output => $output, n => $opts{n}, seed => $opts{seed}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Reproducibly shuffle data rows (seeded Fisher–Yates). Same seed => same order.
+## opts: seed, output (default in place), header, sheet, format. Returns
+## { ok, path, rows }.
+fn Office::sheet_shuffle ($path, %opts) {
+    Office::_decode("sheet_shuffle",
+        office__sheet_shuffle(to_json({ path => $path, seed => $opts{seed}, output => $opts{output}, header => $opts{header}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Apply a named transform to one column: upper/lower/trim/title or
 ## round/floor/ceil/abs/int. opts: digits (for round), into (new column; default
 ## replace), sheet, header, format. Returns { ok, path, transformed }.

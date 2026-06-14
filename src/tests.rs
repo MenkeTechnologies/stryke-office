@@ -2464,6 +2464,50 @@ fn sheet_sample_deterministic() {
 }
 
 #[test]
+fn sheet_shuffle_reproducible() {
+    let path = tmp("shuffle.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["h"],[1],[2],[3],[4],[5],[6],[7],[8]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let shuf = |seed: u64, out: &str| {
+        let r = call(
+            office__sheet_shuffle,
+            &format!(r#"{{"path":"{path}","seed":{seed},"output":"{out}"}}"#),
+        );
+        assert_eq!(r["rows"], 8, "all 8 data rows kept: {r}");
+        let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+        let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+        assert_eq!(rows[0][0], "h", "header stays on top: {rd}");
+        // collect the shuffled data values
+        rows[1..]
+            .iter()
+            .map(|r| r[0].as_f64().unwrap() as i64)
+            .collect::<Vec<_>>()
+    };
+
+    let (pa, pb, pc) = (tmp("shuf_a.xlsx"), tmp("shuf_b.xlsx"), tmp("shuf_c.xlsx"));
+    let a = shuf(7, &pa);
+    let b = shuf(7, &pb);
+    let c = shuf(99, &pc);
+    assert_eq!(a, b, "same seed -> same permutation");
+    // it's a permutation of 1..=7
+    let mut sorted = a.clone();
+    sorted.sort_unstable();
+    assert_eq!(sorted, vec![1, 2, 3, 4, 5, 6, 7, 8], "all rows present once");
+    // a different seed should (very likely) give a different order
+    assert_ne!(a, c, "different seed -> different order");
+
+    for f in [&path, &pa, &pb, &pc] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_transform_column_ops() {
     let path = tmp("xform.xlsx");
     let w = call(

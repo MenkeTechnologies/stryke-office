@@ -897,6 +897,13 @@ val $sr = Office::sheet_sample($sx, $so, n => 2, seed => 7)
 assert_eq $sr->{rows}, 2, "sheet_sample: sampled count"
 val $srd = Office::sheet_read($so)
 assert_eq $srd->[0]{rows}[0][0], "h", "sheet_sample: header kept"
+# sheet_shuffle: reproducible permutation
+val $sfo = "$dir/$tag-shuf-out.xlsx"
+val $sfr = Office::sheet_shuffle($sx, seed => 7, output => $sfo)
+assert_eq $sfr->{rows}, 5, "sheet_shuffle: all data rows kept"
+val $sfb = Office::sheet_read($sfo)
+assert_eq $sfb->[0]{rows}[0][0], "h", "sheet_shuffle: header stays on top"
+unlink $sfo
 unlink $sx
 unlink $so
 
