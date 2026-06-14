@@ -2593,6 +2593,115 @@ fn op_sheet_split_column(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "columns": ncols_new }))
 }
 
+/// Join several columns into one with a separator (Excel `TEXTJOIN`/`CONCAT`);
+/// the inverse of `sheet_split_column`. opts: path, output, columns => list of
+/// names or 0-based indices to join, in join order (required), separator =>
+/// default " ", into => new-column header (default "merged"), skip_blanks => drop
+/// blank cells before joining (default false), keep => keep the source columns and
+/// append the merged column at the end (default false = replace them with the
+/// merged column at the leftmost source position), sheet, header, format. Returns
+/// `{ ok, path, into }`.
+fn op_sheet_concat_columns(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let separator = opts.get("separator").and_then(Value::as_str).unwrap_or(" ");
+    let into = opts.get("into").and_then(Value::as_str).unwrap_or("merged");
+    let skip_blanks = opts
+        .get("skip_blanks")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let keep = opts.get("keep").and_then(Value::as_bool).unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+
+    let col_list = opts
+        .get("columns")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing columns (expected array of names or indices)"))?;
+    if col_list.is_empty() {
+        return Err(anyhow!("columns must list at least one column"));
+    }
+    // Resolve in user-specified join order.
+    let cols: Vec<usize> = col_list
+        .iter()
+        .map(|v| resolve_col(Some(v), header_row))
+        .collect::<Result<_>>()?;
+    let merge_set: std::collections::HashSet<usize> = cols.iter().copied().collect();
+    let leftmost = *cols.iter().min().unwrap();
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let cells = row.as_array().cloned().unwrap_or_default();
+            let merged = if i < data_start {
+                json!(into)
+            } else {
+                let mut parts: Vec<String> = cols
+                    .iter()
+                    .map(|&c| cells.get(c).map(cell_to_string).unwrap_or_default())
+                    .collect();
+                if skip_blanks {
+                    parts.retain(|p| !p.trim().is_empty());
+                }
+                json!(parts.join(separator))
+            };
+            if keep {
+                let mut out = cells.clone();
+                out.push(merged);
+                return Value::Array(out);
+            }
+            // Replace: emit merged at the leftmost source position, drop the rest.
+            let out: Vec<Value> = cells
+                .iter()
+                .enumerate()
+                .filter_map(|(j, cell)| {
+                    if j == leftmost {
+                        Some(merged.clone())
+                    } else if merge_set.contains(&j) {
+                        None
+                    } else {
+                        Some(cell.clone())
+                    }
+                })
+                .collect();
+            Value::Array(out)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "into": into }))
+}
+
 /// Build a pivot table: group rows by one column and columns by another, with a
 /// value aggregated into each cell (Excel PivotTable). opts: path, output,
 /// rows => row-group column, cols => column-group column, value => aggregated
@@ -5038,6 +5147,7 @@ export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
 export!(office__sheet_freq, op_sheet_freq);
 export!(office__sheet_split_column, op_sheet_split_column);
+export!(office__sheet_concat_columns, op_sheet_concat_columns);
 export!(office__sheet_pivot, op_sheet_pivot);
 export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);

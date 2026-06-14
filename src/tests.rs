@@ -1515,6 +1515,65 @@ fn sheet_split_column_text_to_columns() {
 }
 
 #[test]
+fn sheet_concat_columns_textjoin() {
+    let path = tmp("concatcol.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["first","last","age"],
+                ["John","Doe",30],
+                ["Jane","Smith",25]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // Join first+last into "name" with a space, replacing the source columns.
+    let out = tmp("concatcol_out.xlsx");
+    let r = call(
+        office__sheet_concat_columns,
+        &serde_json::json!({
+            "path": path, "columns": ["first", "last"], "separator": " ",
+            "into": "name", "output": out
+        })
+        .to_string(),
+    );
+    assert_eq!(r["into"], "name", "merged header: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // merged placed at leftmost source index; "age" preserved
+    assert_eq!(rows[0][0], "name", "merged header at col 0: {rd}");
+    assert_eq!(rows[0][1], "age", "trailing column preserved: {rd}");
+    assert_eq!(rows[1][0], "John Doe", "row1 joined: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 30.0, "row1 age intact: {rd}");
+    assert_eq!(rows[2][0], "Jane Smith", "row2 joined: {rd}");
+
+    // keep=true appends the merged column at the end, leaving originals intact.
+    let outk = tmp("concatcol_keep.xlsx");
+    call(
+        office__sheet_concat_columns,
+        &serde_json::json!({
+            "path": path, "columns": ["last", "first"], "separator": ", ",
+            "into": "full", "keep": true, "output": outk
+        })
+        .to_string(),
+    );
+    let rk = call(office__sheet_read, &format!(r#"{{"path":"{outk}"}}"#));
+    let rowsk = rk["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rowsk[0][0], "first", "original col 0 kept: {rk}");
+    assert_eq!(rowsk[0][3], "full", "merged appended at end: {rk}");
+    assert_eq!(
+        rowsk[1][3], "Doe, John",
+        "join uses user order last,first: {rk}"
+    );
+
+    for f in [&path, &out, &outk] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(
