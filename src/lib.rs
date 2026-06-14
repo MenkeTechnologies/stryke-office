@@ -2293,6 +2293,121 @@ fn op_sheet_to_sql(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Escape a string for LaTeX text: the ten special characters that would
+/// otherwise be interpreted as markup.
+fn latex_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' | '%' | '$' | '#' | '_' | '{' | '}' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '~' => out.push_str("\\textasciitilde{}"),
+            '^' => out.push_str("\\textasciicircum{}"),
+            '\\' => out.push_str("\\textbackslash{}"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Render a sheet as a LaTeX `tabular` (academic / typeset export), the LaTeX
+/// sibling of `sheet_to_md`/`sheet_to_html`. opts: path, output => write to a
+/// `.tex` file (omit to just return the text), sheet, header (default true; the
+/// first row becomes a bold-ruled heading), align => column spec like "lcr"
+/// (default: all "l"), booktabs => use \toprule/\midrule/\bottomrule instead of
+/// \hline (default false), caption => wrap in a `table` float with this caption.
+/// Whole-number floats lose the trailing ".0"; specials are escaped. Returns
+/// `{ ok, rows, cols, latex, path? }`.
+fn op_sheet_to_latex(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let booktabs = opts.get("booktabs").and_then(flag_of).unwrap_or(false);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    if ncols == 0 {
+        return Err(anyhow!("sheet has no columns"));
+    }
+    let align = match opts.get("align").and_then(Value::as_str) {
+        Some(a) if a.chars().count() == ncols => a.to_string(),
+        _ => "l".repeat(ncols),
+    };
+
+    let cell_text = |c: &Value| -> String {
+        let raw = match c.as_f64() {
+            Some(x) if c.is_number() && x.fract() == 0.0 && x.is_finite() => (x as i64).to_string(),
+            _ => cell_to_string(c),
+        };
+        latex_escape(&raw)
+    };
+    let fmt_row = |row: &Value| -> String {
+        let cells: Vec<String> = (0..ncols)
+            .map(|c| {
+                cell_text(
+                    row.as_array()
+                        .and_then(|a| a.get(c))
+                        .unwrap_or(&Value::Null),
+                )
+            })
+            .collect();
+        format!("{} \\\\", cells.join(" & "))
+    };
+    let (top, mid, bot) = if booktabs {
+        ("\\toprule", "\\midrule", "\\bottomrule")
+    } else {
+        ("\\hline", "\\hline", "\\hline")
+    };
+
+    let mut lines: Vec<String> = vec![format!("\\begin{{tabular}}{{{align}}}"), top.to_string()];
+    let body: &[Value] = if header && !rows.is_empty() {
+        lines.push(fmt_row(&rows[0]));
+        lines.push(mid.to_string());
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+    for row in body {
+        lines.push(fmt_row(row));
+    }
+    lines.push(bot.to_string());
+    lines.push("\\end{tabular}".to_string());
+
+    if let Some(cap) = opts.get("caption").and_then(Value::as_str) {
+        let mut wrapped = vec!["\\begin{table}".to_string(), "\\centering".to_string()];
+        wrapped.extend(lines);
+        wrapped.push(format!("\\caption{{{}}}", latex_escape(cap)));
+        wrapped.push("\\end{table}".to_string());
+        lines = wrapped;
+    }
+    let latex = format!("{}\n", lines.join("\n"));
+
+    let mut out = json!({ "ok": true, "rows": rows.len(), "cols": ncols, "latex": latex });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, out["latex"].as_str().unwrap_or(""))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// Split one Markdown table row into trimmed cells, honoring `\|` escapes.
 fn split_md_row(line: &str) -> Vec<String> {
     let t = line.trim();
@@ -11108,6 +11223,7 @@ export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_to_md, op_sheet_to_md);
 export!(office__sheet_to_sql, op_sheet_to_sql);
+export!(office__sheet_to_latex, op_sheet_to_latex);
 export!(office__md_to_sheet, op_md_to_sheet);
 export!(office__sheet_to_html, op_sheet_to_html);
 export!(office__sheet_to_text, op_sheet_to_text);
