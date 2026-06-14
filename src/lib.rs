@@ -1960,6 +1960,122 @@ fn op_sheet_set_cell(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "cell": cell }))
 }
 
+/// Read a rectangular A1 range (e.g. "A1:C3") as a subgrid. opts: path, range
+/// (required; a single cell like "B2" reads a 1×1 range), sheet => name/index.
+/// Out-of-bounds cells come back as null. Returns `{ range, nrows, ncols, rows }`.
+fn op_sheet_get_range(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let range = req_str(&opts, "range")?;
+    let (a, b) = match range.split_once(':') {
+        Some((l, r)) => (
+            parse_a1(l).ok_or_else(|| anyhow!("bad A1 reference: {l}"))?,
+            parse_a1(r).ok_or_else(|| anyhow!("bad A1 reference: {r}"))?,
+        ),
+        None => {
+            let p = parse_a1(range).ok_or_else(|| anyhow!("bad A1 reference: {range}"))?;
+            (p, p)
+        }
+    };
+    let (r0, r1) = (a.0.min(b.0), a.0.max(b.0));
+    let (c0, c1) = (a.1.min(b.1), a.1.max(b.1));
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+
+    let sub: Vec<Value> = (r0..=r1)
+        .map(|r| {
+            let row = rows.get(r).and_then(Value::as_array);
+            let cells: Vec<Value> = (c0..=c1)
+                .map(|c| row.and_then(|a| a.get(c)).cloned().unwrap_or(Value::Null))
+                .collect();
+            Value::Array(cells)
+        })
+        .collect();
+    Ok(json!({ "range": range, "nrows": r1 - r0 + 1, "ncols": c1 - c0 + 1, "rows": sub }))
+}
+
+/// Paste a 2D block of values at a top-left A1 cell, growing the grid as needed
+/// (the bulk analogue of `sheet_set_cell`). opts: path, cell => top-left (e.g.
+/// "B2", required), values => array of rows (required), output (default in
+/// place), sheet => name/index, format. Returns `{ ok, path, cells }` (cells
+/// written). Existing cells outside the block are untouched.
+fn op_sheet_set_range(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let cell = req_str(&opts, "cell")?;
+    let (r0, c0) = parse_a1(cell).ok_or_else(|| anyhow!("bad A1 reference: {cell}"))?;
+    let values = opts
+        .get("values")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing values (expected array of rows)"))?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if sheets.is_empty() {
+        sheets.push(json!({ "name": "Sheet1", "rows": [] }));
+    }
+    let target = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().position(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        _ => Some(0),
+    }
+    .filter(|&i| i < sheets.len())
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let mut rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut written = 0u64;
+    for (i, vrow) in values.iter().enumerate() {
+        let Some(vcells) = vrow.as_array() else {
+            continue;
+        };
+        let rr = r0 + i;
+        if rows.len() <= rr {
+            rows.resize(rr + 1, Value::Array(Vec::new()));
+        }
+        let mut row = rows[rr].as_array().cloned().unwrap_or_default();
+        for (j, val) in vcells.iter().enumerate() {
+            let cc = c0 + j;
+            if row.len() <= cc {
+                row.resize(cc + 1, Value::Null);
+            }
+            row[cc] = val.clone();
+            written += 1;
+        }
+        rows[rr] = Value::Array(row);
+    }
+    sheets[target]["rows"] = Value::Array(rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "cells": written }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -5940,6 +6056,8 @@ export!(office__sheet_to_html, op_sheet_to_html);
 export!(office__sheet_to_text, op_sheet_to_text);
 export!(office__sheet_get_cell, op_sheet_get_cell);
 export!(office__sheet_set_cell, op_sheet_set_cell);
+export!(office__sheet_get_range, op_sheet_get_range);
+export!(office__sheet_set_range, op_sheet_set_range);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

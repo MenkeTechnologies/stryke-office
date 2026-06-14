@@ -199,6 +199,8 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_to_text($path, %opts)` | `{ok, rows, cols, text, path?}` | render a spreadsheet as an aligned plain-text table; `border`/`output`/`header` opts |
 | `Office::sheet_get_cell($path, $cell, %opts)` | `{cell, row, col, value}` | read a single cell by A1 reference (e.g. "B2"); `sheet` opt |
 | `Office::sheet_set_cell($path, $cell, %opts)` | `{ok, path, cell}` | set a single cell by A1 reference (grows the grid); `value`/`output`/`sheet` opts |
+| `Office::sheet_get_range($path, $range, %opts)` | `{range, nrows, ncols, rows}` | read a rectangular A1 range (e.g. "A1:C3") as a subgrid; `sheet` opt |
+| `Office::sheet_set_range($path, $cell, $values, %opts)` | `{ok, path, cells}` | paste a 2D block at a top-left A1 cell (grows the grid); `output`/`sheet` opts |
 | `Office::doc_blocks($path)` | `{blocks:[{kind,…}], count}` | ordered structural read: heading/para/table in document order (docx/odt) |
 | `Office::doc_outline($path)` | `{outline:[{level,text}], count}` | heading outline of a docx/odt (document analogue of pdf_outline) |
 | `Office::doc_links($path)` | `{links:[{text,url}], count}` | extract hyperlinks (docx via rels, odt `text:a`); internal links → `#anchor` |

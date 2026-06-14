@@ -147,6 +147,20 @@ fn Office::sheet_set_cell ($path, $cell, %opts) {
         office__sheet_set_cell(to_json({ path => $path, cell => $cell, value => $opts{value}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Read a rectangular A1 range (e.g. "A1:C3") as a subgrid. opts: sheet.
+## Returns { range, nrows, ncols, rows }.
+fn Office::sheet_get_range ($path, $range, %opts) {
+    Office::_decode("sheet_get_range",
+        office__sheet_get_range(to_json({ path => $path, range => $range, sheet => $opts{sheet} })))
+}
+
+## Paste a 2D block of $values at a top-left A1 $cell, growing the grid. opts:
+## output (default in place), sheet, format. Returns { ok, path, cells }.
+fn Office::sheet_set_range ($path, $cell, $values, %opts) {
+    Office::_decode("sheet_set_range",
+        office__sheet_set_range(to_json({ path => $path, cell => $cell, values => $values, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

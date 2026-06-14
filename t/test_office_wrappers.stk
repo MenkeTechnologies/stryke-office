@@ -65,18 +65,24 @@ assert_ok ($html->{html} =~ /<th>Item<\/th>/), "sheet_to_html: header cell"
 val $txt = Office::sheet_to_text($xl)
 assert_ok ($txt->{text} =~ /Item/), "sheet_to_text: header rendered"
 
-# ── A1 cell get/set ─────────────────────────────────────────────────
-Office::sheet_set_cell($xl, "C1", value => "added")
-val $gc = Office::sheet_get_cell($xl, "C1")
-assert_eq $gc->{value}, "added", "sheet_set_cell/get_cell: A1 round-trips"
-
-# ── analytics: describe + freq ──────────────────────────────────────
+# ── analytics: describe + freq (before mutating $xl) ────────────────
 val $desc = Office::sheet_describe($xl)
 assert_eq $desc->{columns}[0]{mean}, 5, "sheet_describe: numeric mean"
 
 val $fr = Office::sheet_freq($xl, "Item")
 assert_eq $fr->{total}, 1, "sheet_freq: counted rows"
 unlink $xl
+
+# ── A1 cell + range get/set (own file; mutates the grid) ────────────
+val $cellx = "$dir/$tag-cell.xlsx"
+Office::sheet_write($cellx, [{ name => "D", rows => [["a", "b"], [1, 2]] }])
+Office::sheet_set_cell($cellx, "C1", value => "added")
+val $gc = Office::sheet_get_cell($cellx, "C1")
+assert_eq $gc->{value}, "added", "sheet_set_cell/get_cell: A1 round-trips"
+Office::sheet_set_range($cellx, "A5", [["p", "q"], ["r", "s"]])
+val $gr = Office::sheet_get_range($cellx, "A5:B6")
+assert_eq $gr->{rows}[1][1], "s", "sheet_set_range/get_range: block round-trips"
+unlink $cellx
 
 # ── deck -> markdown + html ─────────────────────────────────────────
 val $pptx = "$dir/$tag.pptx"

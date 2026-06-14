@@ -442,6 +442,58 @@ fn sheet_get_set_cell_a1() {
 }
 
 #[test]
+fn sheet_get_set_range_a1() {
+    let path = tmp("range.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[[1,2,3],[4,5,6],[7,8,9]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // read the A1:B2 sub-block
+    let g = call(
+        office__sheet_get_range,
+        &format!(r#"{{"path":"{path}","range":"A1:B2"}}"#),
+    );
+    assert_eq!(g["nrows"], 2, "2 rows: {g}");
+    assert_eq!(g["ncols"], 2, "2 cols: {g}");
+    assert_eq!(g["rows"][0][0].as_f64().unwrap(), 1.0, "A1: {g}");
+    assert_eq!(g["rows"][1][1].as_f64().unwrap(), 5.0, "B2: {g}");
+
+    // paste a 2x2 block at B2; original A-column + row1 untouched
+    let s = call(
+        office__sheet_set_range,
+        &serde_json::json!({
+            "path": path, "cell": "B2", "values": [[20, 30], [50, 60]]
+        })
+        .to_string(),
+    );
+    assert_eq!(s["cells"], 4, "4 cells written: {s}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1].as_f64().unwrap(), 20.0, "B2 pasted: {rd}");
+    assert_eq!(rows[2][2].as_f64().unwrap(), 60.0, "C3 pasted: {rd}");
+    assert_eq!(rows[0][0].as_f64().unwrap(), 1.0, "A1 untouched: {rd}");
+    assert_eq!(rows[1][0].as_f64().unwrap(), 4.0, "A2 untouched: {rd}");
+
+    // set_range grows the grid beyond current bounds
+    let s2 = call(
+        office__sheet_set_range,
+        &serde_json::json!({ "path": path, "cell": "E5", "values": [["x"]] }).to_string(),
+    );
+    assert_eq!(s2["ok"], true, "grow set: {s2}");
+    let g2 = call(
+        office__sheet_get_range,
+        &format!(r#"{{"path":"{path}","range":"E5"}}"#),
+    );
+    assert_eq!(g2["rows"][0][0], "x", "E5 grown + set: {g2}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
