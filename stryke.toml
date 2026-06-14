@@ -40,6 +40,7 @@ exports = [
     "office__sheet_rename",
     "office__sheet_add",
     "office__sheet_remove",
+    "office__sheet_reorder",
     "office__sheet_diff",
     "office__sheet_info",
     "office__sheet_to_slides",
