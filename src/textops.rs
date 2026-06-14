@@ -375,6 +375,52 @@ fn op_text_sed(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "replaced": replaced }))
 }
 
+/// Pull every regex match (or capture group) out of a text file into a list —
+/// e.g. all emails, URLs, or numbers (the extract-all complement of `text_grep`,
+/// which returns whole lines, and `text_sed`, which rewrites). opts: path,
+/// pattern => regex (required), group => capture-group index to collect (default
+/// 0 = whole match), unique => de-duplicate, preserving first-seen order (default
+/// false), ignore_case (default false), output => write the matches one per line
+/// to a file (omit to just return them). Returns `{ count, matches: [...], path? }`.
+fn op_text_extract(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let pattern = req_str(&opts, "pattern")?;
+    let group = opts.get("group").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let unique = opts.get("unique").and_then(flag_of).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+
+    let re = regex::RegexBuilder::new(pattern)
+        .case_insensitive(ignore_case)
+        .build()
+        .map_err(|e| anyhow!("invalid regex: {e}"))?;
+    let text = std::fs::read_to_string(path)?;
+    let mut matches: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for caps in re.captures_iter(&text) {
+        if let Some(m) = caps.get(group) {
+            let s = m.as_str().to_string();
+            if unique && !seen.insert(s.clone()) {
+                continue;
+            }
+            matches.push(s);
+        }
+    }
+
+    let mut out = json!({ "count": matches.len(), "matches": matches });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        let joined = out["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(output, format!("{joined}\n"))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
 /// Grep matching lines from a text file (the line-oriented complement of
 /// `doc_find`). opts: path, query (required, literal substring), ignore_case
 /// (default false), invert => return lines that do NOT match (default false),

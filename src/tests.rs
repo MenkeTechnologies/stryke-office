@@ -10698,6 +10698,39 @@ fn text_sed_regex_replace() {
 }
 
 #[test]
+fn text_extract_matches() {
+    let path = tmp("extract.txt");
+    std::fs::write(&path, "contact bob@acme.com or bob@acme.com or sue@x.org\n").unwrap();
+
+    // all email matches (with a repeat)
+    let r = call(
+        office__text_extract,
+        &serde_json::json!({ "path": path, "pattern": r"[\w.]+@[\w.]+" }).to_string(),
+    );
+    assert_eq!(r["count"], 3, "three matches incl repeat: {r}");
+    assert_eq!(r["matches"][0], "bob@acme.com", "first match: {r}");
+
+    // unique de-dupes
+    let ru = call(
+        office__text_extract,
+        &serde_json::json!({ "path": path, "pattern": r"[\w.]+@[\w.]+", "unique": true })
+            .to_string(),
+    );
+    assert_eq!(ru["count"], 2, "two distinct: {ru}");
+
+    // capture group 1: just the domain
+    let rg = call(
+        office__text_extract,
+        &serde_json::json!({ "path": path, "pattern": r"@([\w.]+)", "group": 1, "unique": true })
+            .to_string(),
+    );
+    assert_eq!(rg["matches"][0], "acme.com", "domain group: {rg}");
+    assert_eq!(rg["matches"][1], "x.org", "second domain: {rg}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn text_grep_matches_lines() {
     let path = tmp("grep.txt");
     std::fs::write(&path, "alpha\nbeta FOO\ngamma\nfoo bar\n").unwrap();
