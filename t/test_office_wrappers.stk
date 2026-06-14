@@ -311,6 +311,19 @@ assert_eq $hgr->{min}, 1, "sheet_histogram: min"
 assert_eq $hgr->{max}, 10, "sheet_histogram: max"
 assert_eq $hgr->{bins}[4]{count}, 2, "sheet_histogram: max lands in last bin"
 unlink $hgx
+# sheet_bin: pd.cut with explicit edges + labels
+val $bnx = "$dir/$tag-bin.xlsx"
+Office::sheet_write($bnx, [{ name => "D", rows => [["score"], [5], [55], [95]] }])
+val $bno = "$dir/$tag-bin-out.xlsx"
+val $bnr = Office::sheet_bin($bnx, $bno, "score", edges => [0, 50, 100], labels => ["low", "high"], into => "band")
+assert_eq $bnr->{bins}, 2, "sheet_bin: two bins"
+assert_eq $bnr->{into}, "band", "sheet_bin: new column name"
+val $bnb = Office::sheet_read($bno)
+assert_eq $bnb->[0]{rows}[0][1], "band", "sheet_bin: header appended"
+assert_eq $bnb->[0]{rows}[1][1], "low", "sheet_bin: 5 -> low"
+assert_eq $bnb->[0]{rows}[3][1], "high", "sheet_bin: 95 (max edge) -> high"
+unlink $bnx
+unlink $bno
 # sheet_outliers: IQR fence flags the extreme value
 val $oux = "$dir/$tag-outliers.xlsx"
 Office::sheet_write($oux, [{ name => "D", rows => [["v"], [10], [11], [12], [13], [14], [100]] }])

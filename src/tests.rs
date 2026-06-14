@@ -3148,6 +3148,67 @@ fn sheet_histogram_empty_column() {
 }
 
 #[test]
+fn sheet_bin_explicit_edges_with_labels() {
+    let path = tmp("bin.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["score"],[5],[55],[95]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("bin_out.xlsx");
+    // edges 0,50,100 → 2 bins; labels low/high.
+    let r = call(
+        office__sheet_bin,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","column":"score","edges":[0,50,100],"labels":["low","high"],"into":"band"}}"#
+        ),
+    );
+    assert_eq!(r["bins"], 2, "two bins: {r}");
+    assert_eq!(r["into"], "band", "new column name: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "band", "header appended: {rd}");
+    assert_eq!(rows[1][1], "low", "5 -> low: {rd}");
+    assert_eq!(rows[2][1], "high", "55 -> high: {rd}");
+    assert_eq!(rows[3][1], "high", "95 (max edge inclusive) -> high: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn sheet_bin_equal_width_index() {
+    let path = tmp("bin_eq.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[0],[5],[10]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("bin_eq_out.xlsx");
+    // 2 equal-width bins over [0,10]: [0,5) and [5,10]. Indices 0,0,1? 5 -> bin 1.
+    let r = call(
+        office__sheet_bin,
+        &format!(r#"{{"path":"{path}","output":"{out}","column":"v","bins":2}}"#),
+    );
+    assert_eq!(r["bins"], 2, "two bins: {r}");
+
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    // bin indices round-trip through xlsx as floats.
+    assert_eq!(rows[1][1].as_f64().unwrap(), 0.0, "0 -> bin 0: {rd}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 1.0, "5 -> bin 1: {rd}");
+    assert_eq!(rows[3][1].as_f64().unwrap(), 1.0, "10 (max) -> last bin: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_outliers_iqr() {
     let path = tmp("outliers.xlsx");
     // Tight cluster 10..14 with one extreme value 100.
