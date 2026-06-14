@@ -437,6 +437,11 @@ shared + inline strings) and **ods/odt/odp** (content + styles). Replacements
 are given as `{find => replacement}` or an ordered `replacements => [{find,
 replace}]` list.
 
+`Office::mail_merge($template, $dir, %opts)` runs that fill once per data
+record — `data =>` a spreadsheet (read as records) or `records =>` a list of
+hashes — emitting one document per row into `$dir`, named by `name_field` (or a
+1-based index). Returns `{count, files}`.
+
 ### Charting (data → image handle → any format)
 
 `Office::chart_render` rasterizes a chart and returns an **image handle**, so

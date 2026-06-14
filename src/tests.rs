@@ -4567,6 +4567,50 @@ fn replace_text_docx_round_trips() {
 }
 
 #[test]
+fn mail_merge_per_record() {
+    // template with {{name}} / {{city}} placeholders
+    let tmpl = tmp("mm_tmpl.docx");
+    call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{tmpl}","blocks":[{{"kind":"para","text":"Hello {{{{name}}}} from {{{{city}}}}"}}]}}"#
+        ),
+    );
+    // data sheet
+    let data = tmp("mm_data.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{data}","sheets":[{{"name":"D","rows":[["name","city"],["Alice","NYC"],["Bob","LA"]]}}]}}"#
+        ),
+    );
+
+    let dir = tmp("mm_out");
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = call(
+        office__mail_merge,
+        &format!(r#"{{"template":"{tmpl}","data":"{data}","dir":"{dir}","name_field":"name"}}"#),
+    );
+    assert_eq!(r["count"], 2, "two merged docs: {r}");
+    let a = call(
+        office__doc_read,
+        &format!(r#"{{"path":"{dir}/Alice.docx"}}"#),
+    );
+    let ja = a["paragraphs"].to_string();
+    assert!(ja.contains("Hello Alice from NYC"), "Alice filled: {ja}");
+    assert!(!ja.contains("{{"), "no leftover placeholders: {ja}");
+    let b = call(office__doc_read, &format!(r#"{{"path":"{dir}/Bob.docx"}}"#));
+    assert!(
+        b["paragraphs"].to_string().contains("Hello Bob from LA"),
+        "Bob filled: {b}"
+    );
+
+    std::fs::remove_file(&tmpl).ok();
+    std::fs::remove_file(&data).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn replace_text_xlsx_strings() {
     let path = tmp("tmpl.xlsx");
     call(

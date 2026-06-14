@@ -3218,6 +3218,7 @@ export!(office__extract_images, op_extract_images);
 // document text search/replace (template / mail-merge filling)
 include!("textops.rs");
 export!(office__replace_text, op_replace_text);
+export!(office__mail_merge, op_mail_merge);
 
 // structured document reads (tables) — read-side mirror of doc_write blocks
 include!("doc_struct.rs");

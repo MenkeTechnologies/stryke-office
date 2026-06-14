@@ -653,6 +653,16 @@ fn Office::replace_text ($path, $replace, %opts) {
     Office::_decode("replace_text", office__replace_text(to_json(\%r)))
 }
 
+## Mail-merge: fill a {{field}}-placeholder template (docx/pptx/xlsx/odf) once
+## per data record, writing one file per record into $dir. opts: data =>
+## spreadsheet path (read as records) or records => arrayref of hashes, sheet =>
+## source sheet selector, prefix => filename prefix, name_field => field that
+## names each file (default: 1-based index). Returns { count, files }.
+fn Office::mail_merge ($template, $dir, %opts) {
+    Office::_decode("mail_merge",
+        office__mail_merge(to_json({ template => $template, dir => $dir, data => $opts{data}, records => $opts{records}, sheet => $opts{sheet}, prefix => $opts{prefix}, name_field => $opts{name_field} })))
+}
+
 # ── images (PIL-style I/O + manipulation) ───────────────────────────
 #
 # Images are handle-based, like a PIL Image object: img_open / img_new
