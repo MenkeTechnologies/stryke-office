@@ -1504,6 +1504,86 @@ fn op_sheet_dtypes(opts: Value) -> Result<Value> {
     Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
 }
 
+/// The most-frequent value (statistical mode) of each column — profiling that
+/// works on text and numbers alike, complementing `sheet_describe` (numeric
+/// stats) and `sheet_freq` (full single-column breakdown). opts: path, sheet,
+/// header. Ties resolve to the first-seen value; blank cells are ignored. Returns
+/// `{ sheet, rows, columns: [{ name, mode, count }] }` (`mode` is null for an
+/// all-blank column).
+fn op_sheet_mode(opts: Value) -> Result<Value> {
+    use std::collections::HashMap;
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+
+    let mut columns = Vec::new();
+    for c in 0..ncols {
+        // Count occurrences while remembering first-seen order for tie-breaks.
+        let mut counts: HashMap<String, (Value, u64, usize)> = HashMap::new();
+        let mut seen = 0usize;
+        for row in data {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(c))
+                .cloned()
+                .unwrap_or(Value::Null);
+            if sheet_cell_blank(&cell) {
+                continue;
+            }
+            let key = cell_to_string(&cell);
+            let e = counts.entry(key).or_insert_with(|| {
+                let order = seen;
+                seen += 1;
+                (cell.clone(), 0, order)
+            });
+            e.1 += 1;
+        }
+        // Pick max count, breaking ties by earliest first-seen.
+        let best = counts
+            .values()
+            .max_by(|a, b| a.1.cmp(&b.1).then(b.2.cmp(&a.2)));
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        match best {
+            Some((val, count, _)) => columns.push(json!({
+                "name": cname, "mode": val, "count": count,
+            })),
+            None => columns.push(json!({ "name": cname, "mode": Value::Null, "count": 0 })),
+        }
+    }
+    Ok(json!({ "sheet": name, "rows": data.len(), "columns": columns }))
+}
+
 /// Compute an arbitrary percentile of a numeric column (generalizes the fixed
 /// quartiles in `sheet_describe`). opts: path, column => name or 0-based index
 /// (required), q => quantile in 0.0..=1.0 (required; e.g. 0.9 for p90), sheet,
@@ -10943,6 +11023,7 @@ export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_dtypes, op_sheet_dtypes);
+export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_agg, op_sheet_agg);
 export!(office__sheet_corr, op_sheet_corr);

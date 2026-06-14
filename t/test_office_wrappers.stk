@@ -131,6 +131,14 @@ assert_eq $dt->{columns}[1]{type}, "integer", "sheet_dtypes: qty -> integer"
 assert_eq $dt->{columns}[2]{type}, "float", "sheet_dtypes: price -> float"
 unlink $dtx
 
+# mode: most-frequent value per column
+val $mox = "$dir/$tag-mode.xlsx"
+Office::sheet_write($mox, [{ name => "D", rows => [["color"], ["red"], ["blue"], ["red"]] }])
+val $mor = Office::sheet_mode($mox)
+assert_eq $mor->{columns}[0]{mode}, "red", "sheet_mode: most frequent value"
+assert_eq $mor->{columns}[0]{count}, 2, "sheet_mode: occurrence count"
+unlink $mox
+
 val $qn = Office::sheet_quantile($xl, "Count", 0.5)
 assert_eq $qn->{value}, 5, "sheet_quantile: median of single value"
 
