@@ -234,6 +234,7 @@ exports = [
     "office__text_uniq",
     "office__text_cut",
     "office__text_tr",
+    "office__text_paste",
     "office__text_wrap",
     "office__text_head",
     "office__doc_tables",

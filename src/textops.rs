@@ -871,3 +871,55 @@ fn op_text_tr(opts: Value) -> Result<Value> {
     std::fs::write(&output, result)?;
     Ok(json!({ "ok": true, "path": output }))
 }
+
+/// Merge corresponding lines of several files side by side (the Unix `paste`
+/// analogue). opts: paths => array of input file paths (required, ≥1), delim =>
+/// field separator (default tab), output => write the result there. Files of
+/// unequal length are padded with empty fields to the longest. Returns
+/// `{ count, lines, path? }`.
+fn op_text_paste(opts: Value) -> Result<Value> {
+    let paths: Vec<String> = opts
+        .get("paths")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing paths (array of file paths)"))?
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect();
+    if paths.is_empty() {
+        return Err(anyhow!("paths must list at least one file"));
+    }
+    let delim = opts.get("delim").and_then(Value::as_str).unwrap_or("\t");
+
+    // Read every file's lines up front.
+    let files: Vec<Vec<String>> = paths
+        .iter()
+        .map(|p| {
+            std::fs::read(p)
+                .map(|b| String::from_utf8_lossy(&b).lines().map(String::from).collect())
+        })
+        .collect::<std::io::Result<_>>()?;
+    let rows = files.iter().map(Vec::len).max().unwrap_or(0);
+    let lines: Vec<String> = (0..rows)
+        .map(|i| {
+            files
+                .iter()
+                .map(|f| f.get(i).map(String::as_str).unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join(delim)
+        })
+        .collect();
+
+    let mut out = json!({ "count": lines.len(), "lines": lines });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        let joined = out["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(output, format!("{joined}\n"))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}

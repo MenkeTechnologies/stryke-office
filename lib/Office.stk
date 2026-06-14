@@ -2107,6 +2107,14 @@ fn Office::text_tr ($path, $from, %opts) {
         office__text_tr(to_json({ path => $path, from => $from, to => $opts{to}, delete => $opts{delete}, squeeze => $opts{squeeze}, complement => $opts{complement}, output => $opts{output} })))
 }
 
+## Merge corresponding lines of several files side by side (Unix paste). $paths
+## is an arrayref of input files. opts: delim (default tab), output. Shorter
+## files are padded with empty fields. Returns { count, lines, path? }.
+fn Office::text_paste ($paths, %opts) {
+    Office::_decode("text_paste",
+        office__text_paste(to_json({ paths => $paths, delim => $opts{delim}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {
