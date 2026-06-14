@@ -10815,6 +10815,57 @@ fn chart_violin_raster_and_svg() {
 }
 
 #[test]
+fn ecdf_steps_monotone_zero_to_one() {
+    let data = [3.0, 1.0, 2.0, 4.0]; // n=4
+    let v = ecdf_steps(&data, 0.0, 5.0);
+    // starts at (xlo, 0), ends at (xhi, 1)
+    assert_eq!(v.first().copied(), Some((0.0, 0.0)), "starts at 0");
+    assert_eq!(v.last().copied(), Some((5.0, 1.0)), "ends at 1");
+    // y is non-decreasing across the whole step sequence
+    let mut prev = -1.0;
+    for &(_, y) in &v {
+        assert!(y >= prev - 1e-12, "monotone non-decreasing");
+        prev = y;
+    }
+    // after the value 2 (the 2nd smallest) the level is exactly 2/4 = 0.5
+    assert!(
+        v.iter()
+            .any(|&(x, y)| (x - 2.0).abs() < 1e-9 && (y - 0.5).abs() < 1e-9),
+        "ecdf at 2 = 0.5: {v:?}"
+    );
+}
+
+#[test]
+fn chart_ecdf_raster_and_svg() {
+    let series = r#"[{"name":"a","data":[1,2,3,4,5,6,7,8]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"ecdf","width":460,"height":320,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("ecdf raster: {c}"));
+    assert_eq!(c["type"], "ecdf", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"ecdf","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "ecdf svg malformed"
+    );
+    assert!(svg.contains("<polyline"), "ecdf svg step curve");
+    // y axis runs 0.0..1.0 (cumulative probability ticks)
+    assert!(
+        svg.contains(">0.0<") && svg.contains(">1.0<"),
+        "ecdf svg probability axis"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
