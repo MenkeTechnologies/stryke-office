@@ -1227,6 +1227,14 @@ fn Office::img_resize_file ($input, $output, %opts) {
         office__img_resize_file(to_json({ input => $input, output => $output, max => $opts{max}, width => $opts{width}, height => $opts{height} })))
 }
 
+## Build a contact sheet (thumbnail grid) image from a list of image files.
+## $images is an arrayref of paths. opts: thumb => max px per cell (default 128),
+## cols, gap, bg. Returns { ok, path, count, width, height }.
+fn Office::contact_sheet ($images, $output, %opts) {
+    Office::_decode("contact_sheet",
+        office__contact_sheet(to_json({ images => $images, output => $output, thumb => $opts{thumb}, cols => $opts{cols}, gap => $opts{gap}, bg => $opts{bg} })))
+}
+
 # ── shapes, fills, masks, color analysis ────────────────────────────
 
 ## Draw a rounded rectangle. opts: radius (8), fill => 1 (default) or 0
