@@ -524,6 +524,17 @@ assert_eq $pcb->[0]{rows}[2][1], 50, "sheet_pct_change: +50%"
 assert_eq $pcb->[0]{rows}[3][1], -50, "sheet_pct_change: -50%"
 unlink $pcx
 unlink $pco
+# sheet_group_pct: share within group
+val $gpx = "$dir/$tag-grouppct.xlsx"
+Office::sheet_write($gpx, [{ name => "D", rows => [["region", "amt"], ["west", 10], ["east", 5], ["west", 30]] }])
+val $gpo = "$dir/$tag-grouppct-out.xlsx"
+val $gpr = Office::sheet_group_pct($gpx, $gpo, "region", "amt")
+assert_eq $gpr->{column}, "amt_grouppct", "sheet_group_pct: default column name"
+val $gpb = Office::sheet_read($gpo)
+assert_eq $gpb->[0]{rows}[1][2], 25, "sheet_group_pct: west 10/40 = 25%"
+assert_eq $gpb->[0]{rows}[2][2], 100, "sheet_group_pct: east 5/5 = 100%"
+unlink $gpx
+unlink $gpo
 # sheet_shift: lag a column by one row
 val $shx = "$dir/$tag-shift.xlsx"
 Office::sheet_write($shx, [{ name => "D", rows => [["v"], [10], [20], [30]] }])

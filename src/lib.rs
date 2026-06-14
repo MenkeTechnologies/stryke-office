@@ -2826,6 +2826,105 @@ fn op_sheet_cumsum(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append a "percent of group total" column: each value as a percentage of the
+/// sum of its group (pandas `groupby(group)[value].transform(lambda s: s/s.sum())
+/// * 100`). The group-aware counterpart to `sheet_pct` (percent of the whole
+/// column). Rows are grouped by the `group` column's value (no sorting required).
+/// opts: path, output, group => column name/index (required), value => numeric
+/// column name/index (required), into => header (default "{value}_grouppct"),
+/// decimals, sheet, header, format. Non-numeric cells and zero-sum groups get a
+/// blank. Returns `{ ok, path, column }`.
+fn op_sheet_group_pct(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let gcol = resolve_col(opts.get("group"), header_row)?;
+    let vcol = resolve_col(opts.get("value"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(vcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", vcol + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_grouppct"));
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let group_key = |row: &Value| -> String {
+        row.as_array()
+            .and_then(|a| a.get(gcol))
+            .map(cell_to_string)
+            .unwrap_or_default()
+    };
+    // First pass: total per group.
+    let mut totals: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    for row in &rows[data_start..] {
+        if let Some(x) = row
+            .as_array()
+            .and_then(|a| a.get(vcol))
+            .and_then(sheet_cell_num)
+        {
+            *totals.entry(group_key(row)).or_insert(0.0) += x;
+        }
+    }
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let total = totals.get(&group_key(row)).copied().unwrap_or(0.0);
+            let cell = match cells.get(vcol).and_then(sheet_cell_num) {
+                Some(x) if total != 0.0 => {
+                    let pct = x / total * 100.0;
+                    let v = match decimals {
+                        Some(d) => {
+                            let f = 10f64.powi(d as i32);
+                            (pct * f).round() / f
+                        }
+                        None => pct,
+                    };
+                    json!(v)
+                }
+                _ => json!(""),
+            };
+            cells.push(cell);
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Append an expanding-window cumulative column for the running maximum, minimum,
 /// or product (pandas `cummax`/`cummin`/`cumprod`; the running-sum case is the
 /// dedicated `sheet_cumsum`). opts: path, output, column => name/index
@@ -10456,6 +10555,7 @@ export!(office__sheet_insert_column, op_sheet_insert_column);
 export!(office__sheet_cumsum, op_sheet_cumsum);
 export!(office__sheet_cumulative, op_sheet_cumulative);
 export!(office__sheet_pct, op_sheet_pct);
+export!(office__sheet_group_pct, op_sheet_group_pct);
 export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_rolling, op_sheet_rolling);
