@@ -3936,6 +3936,58 @@ fn sheet_aggregate_group_by() {
 }
 
 #[test]
+fn sheet_resample_by_month() {
+    let path = tmp("resample.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["date","amt"],
+                ["2026-01-05",10],
+                ["2026-01-20",20],
+                ["2026-02-02",5]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // monthly sum -> 2026-01: 30, 2026-02: 5
+    let out = tmp("resample_out.xlsx");
+    let r = call(
+        office__sheet_resample,
+        &format!(
+            r#"{{"path":"{path}","date":"date","value":"amt","freq":"month","output":"{out}"}}"#
+        ),
+    );
+    assert_eq!(r["buckets"], 2, "two month buckets: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][0], "2026-01", "first bucket key: {rd}");
+    assert_eq!(rows[1][1].as_f64().unwrap(), 30.0, "Jan sum: {rd}");
+    assert_eq!(rows[2][0], "2026-02", "second bucket: {rd}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 5.0, "Feb sum: {rd}");
+
+    // yearly -> one bucket
+    let outy = tmp("resample_y.xlsx");
+    let ry = call(
+        office__sheet_resample,
+        &format!(
+            r#"{{"path":"{path}","date":"date","value":"amt","freq":"year","output":"{outy}"}}"#
+        ),
+    );
+    assert_eq!(ry["buckets"], 1, "one year bucket: {ry}");
+    let rdy = call(office__sheet_read, &format!(r#"{{"path":"{outy}"}}"#));
+    assert_eq!(
+        rdy["sheets"][0]["rows"][1][0], "2026",
+        "year bucket key: {rdy}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outy).ok();
+}
+
+#[test]
 fn sheet_freq_value_counts() {
     let path = tmp("freq.xlsx");
     // west x3, east x2, north x1; one blank (skipped)

@@ -546,6 +546,15 @@ fn Office::sheet_aggregate ($path, $group_by, $output, %opts) {
         office__sheet_aggregate(to_json({ path => $path, group_by => $group_by, output => $output, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Roll up an ISO-date column into time buckets and aggregate $opts{value}
+## (time-series resample). opts: freq (day|month|year, default month), value,
+## agg (count|sum|mean|min|max, default sum), sheet, header, format. Returns
+## { ok, path, buckets }.
+fn Office::sheet_resample ($path, $date, $output, %opts) {
+    Office::_decode("sheet_resample",
+        office__sheet_resample(to_json({ path => $path, date => $date, output => $output, freq => $opts{freq}, value => $opts{value}, agg => $opts{agg}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Group by a column and concatenate another column's values per group (SQL
 ## GROUP_CONCAT). opts: sep, distinct, sheet, header, format. Returns { ok, path, groups }.
 fn Office::sheet_group_concat ($path, $group_by, $value, $output, %opts) {
