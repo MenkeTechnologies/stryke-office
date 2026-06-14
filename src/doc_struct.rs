@@ -766,6 +766,44 @@ fn op_doc_to_text(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "chars": text.chars().count() }))
 }
 
+/// Convert a PDF's extracted text into a word-processor document (docx/odt) or a
+/// flow format (md/html/txt). opts: path (pdf), output (required), format =>
+/// override (default from output extension). Each page's non-blank lines become
+/// paragraphs; a page break separates pages (docx/odt only — flow formats ignore
+/// it). Returns `{ ok, path, pages, paragraphs }`.
+fn op_pdf_to_doc(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_pdf_read(json!({ "path": path }))?;
+    let pages = read
+        .get("pages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut paragraphs = 0u64;
+    for (i, page) in pages.iter().enumerate() {
+        if i > 0 {
+            blocks.push(json!({ "kind": "pagebreak" }));
+        }
+        for line in page.as_str().unwrap_or("").lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            blocks.push(json!({ "kind": "para", "text": line }));
+            paragraphs += 1;
+        }
+    }
+
+    let mut wopts = json!({ "path": output, "blocks": blocks });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "pages": pages.len(), "paragraphs": paragraphs }))
+}
+
 /// Flatten a block into slide body lines (paragraph text, list items, or a
 /// table's rows joined by " | ").
 fn block_to_lines(b: &Value) -> Vec<String> {

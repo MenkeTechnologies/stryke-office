@@ -2493,6 +2493,42 @@ fn doc_to_text_extracts() {
 }
 
 #[test]
+fn pdf_to_doc_converts_text() {
+    // Build a 2-page PDF, then convert it back to a docx.
+    let pdf = tmp("p2d.pdf");
+    let b = call(
+        office__pdf_build,
+        &format!(
+            r#"{{"path":"{pdf}","elements":[
+                {{"type":"paragraph","text":"alpha line"}},
+                {{"type":"pagebreak"}},
+                {{"type":"paragraph","text":"delta line"}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(b["ok"], true, "build: {b}");
+
+    let out = tmp("p2d.docx");
+    let r = call(
+        office__pdf_to_doc,
+        &format!(r#"{{"path":"{pdf}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "convert: {r}");
+    assert_eq!(r["pages"], 2, "two pages: {r}");
+    assert!(r["paragraphs"].as_u64().unwrap() >= 2, "paragraphs: {r}");
+
+    let rd = call(office__doc_read, &format!(r#"{{"path":"{out}"}}"#));
+    let joined = rd["paragraphs"].to_string();
+    assert!(
+        joined.contains("alpha") && joined.contains("delta"),
+        "both pages carried into doc: {joined}"
+    );
+
+    std::fs::remove_file(&pdf).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn doc_to_html_structured() {
     let dx = tmp("tohtml.docx");
     let w = call(
