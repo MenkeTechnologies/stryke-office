@@ -1693,6 +1693,13 @@ fn Office::img_thumbnail ($handle, $max, %opts) {
         office__img_thumbnail(to_json({ handle => $handle, max => $max, filter => $opts{filter} })))
 }
 
+## Letterbox-fit into an exact $width x $height canvas, preserving aspect ratio
+## and centering on a background fill. opts: color (default black), filter.
+fn Office::img_fit ($handle, $width, $height, %opts) {
+    Office::_decode("img_fit",
+        office__img_fit(to_json({ handle => $handle, width => $width, height => $height, color => $opts{color}, filter => $opts{filter} })))
+}
+
 ## Crop to a rectangle.
 fn Office::img_crop ($handle, $x, $y, $width, $height) {
     Office::_decode("img_crop",
