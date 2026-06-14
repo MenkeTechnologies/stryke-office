@@ -190,8 +190,8 @@ fn op_chart_render(opts: Value) -> Result<Value> {
         .map(|a| a.iter().map(cell_to_string).collect())
         .unwrap_or_default();
     let title = opts.get("title").and_then(Value::as_str).unwrap_or("");
-    let labels = opts.get("labels").and_then(Value::as_bool).unwrap_or(false);
-    let smooth = opts.get("smooth").and_then(Value::as_bool).unwrap_or(false);
+    let labels = opts.get("labels").and_then(flag_of).unwrap_or(false);
+    let smooth = opts.get("smooth").and_then(flag_of).unwrap_or(false);
     set_palette(&opts);
     let bg = match opts.get("background") {
         Some(c) => parse_color(Some(c)),
@@ -362,7 +362,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             xmax = xmin + 1.0;
         }
         // Optional logarithmic Y (only when the whole range is positive).
-        let logy = opts.get("log_y").and_then(Value::as_bool) == Some(true) && ymin > 0.0;
+        let logy = opts.get("log_y").and_then(flag_of) == Some(true) && ymin > 0.0;
         let lmin = ymin.max(1e-9).log10();
         let lspan = (ymax.max(1e-9).log10() - lmin).max(1e-9);
         let yp = |v: f64| {
@@ -410,7 +410,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             _ => render_bars(&mut img, &fnt, series, &cats, l, pw, b, &yp, black, false, labels),
         }
         // markers on line-family points
-        if opts.get("markers").and_then(Value::as_bool) == Some(true)
+        if opts.get("markers").and_then(flag_of) == Some(true)
             && matches!(kind.as_str(), "line" | "area" | "step" | "stacked_area")
         {
             for (si, s) in series.iter().enumerate() {
@@ -438,7 +438,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             }
         }
         // optional least-squares trendline over scatter points
-        if scatter && opts.get("trendline").and_then(Value::as_bool) == Some(true) {
+        if scatter && opts.get("trendline").and_then(flag_of) == Some(true) {
             for (si, s) in series.iter().enumerate() {
                 let pts = series_points(s);
                 if let Some((m, c)) = linfit(&pts) {
@@ -500,7 +500,7 @@ fn op_chart_render(opts: Value) -> Result<Value> {
     }
 
     // Shared legend (series names, or pie/funnel categories).
-    if opts.get("legend").and_then(Value::as_bool) != Some(false) {
+    if opts.get("legend").and_then(flag_of) != Some(false) {
         let entries = legend_entries(&kind, series, &cats);
         draw_legend(&mut img, &fnt, &entries, w as i32, t, black);
     }
@@ -534,7 +534,7 @@ fn op_chart_from_sheet(opts: Value) -> Result<Value> {
 
     let empty: Vec<Value> = Vec::new();
     let rows = sheet["rows"].as_array().unwrap_or(&empty);
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let hr = if header {
         rows.first().and_then(Value::as_array).map(|v| v.as_slice())
     } else {

@@ -174,7 +174,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let y = el.get("y").and_then(Value::as_f64).unwrap_or(ty);
                 let w = el.get("width").and_then(Value::as_f64).unwrap_or(100.0);
                 let hh = el.get("height").and_then(Value::as_f64).unwrap_or(40.0);
-                let fill = el.get("fill").and_then(Value::as_bool).unwrap_or(true);
+                let fill = el.get("fill").and_then(flag_of).unwrap_or(true);
                 let (r, g, b) = pdf_rgb(el.get("color"));
                 let pdf_y = ph - y - hh;
                 let p = pages.last_mut().unwrap();
@@ -198,7 +198,7 @@ fn op_pdf_build(opts: Value) -> Result<Value> {
                 let x0 = el.get("x").and_then(Value::as_f64).unwrap_or(margin);
                 let size = el.get("size").and_then(Value::as_f64).unwrap_or(10.0);
                 let rh = el.get("row_height").and_then(Value::as_f64).unwrap_or(size * 1.6);
-                let head = el.get("header").and_then(Value::as_bool).unwrap_or(false);
+                let head = el.get("header").and_then(flag_of).unwrap_or(false);
                 let trows = el.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
                 let ncols = trows
                     .iter()
@@ -342,7 +342,7 @@ fn op_sheet_to_pdf(opts: Value) -> Result<Value> {
     }
     .ok_or_else(|| anyhow!("sheet not found"))?;
     let rows = sheet["rows"].clone();
-    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
     let size = opts.get("size").and_then(Value::as_f64).unwrap_or(10.0);
 
     let mut elements: Vec<Value> = Vec::new();
@@ -352,7 +352,7 @@ fn op_sheet_to_pdf(opts: Value) -> Result<Value> {
     elements.push(json!({ "type": "table", "rows": rows, "header": header, "size": size }));
 
     // Landscape A4 by default keeps wide tables readable when requested.
-    let page_size = if opts.get("landscape").and_then(Value::as_bool) == Some(true) {
+    let page_size = if opts.get("landscape").and_then(flag_of) == Some(true) {
         json!([842.0, 595.0])
     } else {
         json!([595.0, 842.0])

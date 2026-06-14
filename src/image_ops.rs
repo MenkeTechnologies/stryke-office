@@ -301,7 +301,7 @@ fn op_img_draw_rect(opts: Value) -> Result<Value> {
     let w = req_u64_img(&opts, "width")? as u32;
     let h = req_u64_img(&opts, "height")? as u32;
     let color = parse_color(opts.get("color"));
-    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let fill = opts.get("fill").and_then(flag_of).unwrap_or(true);
     transform(handle, |img| {
         let mut buf = img.to_rgba8();
         let rect = Rect::at(x, y).of_size(w.max(1), h.max(1));
@@ -338,7 +338,7 @@ fn op_img_draw_circle(opts: Value) -> Result<Value> {
     let cy = opt_i64(&opts, "y", 0) as i32;
     let r = req_u64_img(&opts, "radius")? as i32;
     let color = parse_color(opts.get("color"));
-    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let fill = opts.get("fill").and_then(flag_of).unwrap_or(true);
     transform(handle, |img| {
         let mut buf = img.to_rgba8();
         if fill {
@@ -1358,7 +1358,7 @@ fn op_img_draw_ellipse(opts: Value) -> Result<Value> {
     let rx = req_u64_img(&opts, "rx")? as i32;
     let ry = req_u64_img(&opts, "ry")? as i32;
     let color = parse_color(opts.get("color"));
-    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let fill = opts.get("fill").and_then(flag_of).unwrap_or(true);
     transform(h, move |img| {
         let mut buf = img.to_rgba8();
         if fill {
@@ -1679,7 +1679,7 @@ fn op_img_draw_rounded_rect(opts: Value) -> Result<Value> {
     let ht = req_u64_img(&opts, "height")? as i64;
     let r = opts.get("radius").and_then(Value::as_i64).unwrap_or(8);
     let color = parse_color(opts.get("color"));
-    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(true);
+    let fill = opts.get("fill").and_then(flag_of).unwrap_or(true);
     let stroke = opts.get("stroke").and_then(Value::as_i64).unwrap_or(2).max(1);
     transform(h, move |img| {
         let mut buf = img.to_rgba8();
@@ -1739,7 +1739,7 @@ fn op_img_draw_arc(opts: Value) -> Result<Value> {
     let a0 = opts.get("start").and_then(Value::as_f64).unwrap_or(0.0).to_radians();
     let a1 = opts.get("end").and_then(Value::as_f64).unwrap_or(90.0).to_radians();
     let color = parse_color(opts.get("color"));
-    let fill = opts.get("fill").and_then(Value::as_bool).unwrap_or(false);
+    let fill = opts.get("fill").and_then(flag_of).unwrap_or(false);
     transform(h, move |img| {
         let mut buf = img.to_rgba8();
         let steps = (((a1 - a0).abs() / 0.05).ceil().max(2.0)) as usize;
@@ -1875,7 +1875,7 @@ fn op_img_dominant_colors(opts: Value) -> Result<Value> {
 fn op_img_compare(opts: Value) -> Result<Value> {
     let h = req_u64_img(&opts, "handle")?;
     let other = req_u64_img(&opts, "other")?;
-    let want_diff = opts.get("diff").and_then(Value::as_bool).unwrap_or(false);
+    let want_diff = opts.get("diff").and_then(flag_of).unwrap_or(false);
     let a = rgba_of(h)?;
     let mut b = rgba_of(other)?;
     if b.width() != a.width() || b.height() != a.height() {

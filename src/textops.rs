@@ -316,7 +316,7 @@ fn op_text_replace(opts: Value) -> Result<Value> {
     if repls.is_empty() {
         return Err(anyhow!("no replacements supplied (use `replace` or `replacements`)"));
     }
-    let ignore_case = opts.get("ignore_case").and_then(Value::as_bool).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
 
     let mut text = std::fs::read_to_string(path)?;
     let mut total = 0usize;

@@ -919,7 +919,7 @@ fn op_doc_add_toc(opts: Value) -> Result<Value> {
         .unwrap_or("Table of Contents");
     let pagebreak = opts
         .get("pagebreak")
-        .and_then(Value::as_bool)
+        .and_then(flag_of)
         .unwrap_or(true);
 
     let blocks = doc_blocks_or_paras(path)?;
@@ -1101,7 +1101,7 @@ fn op_doc_to_slides(opts: Value) -> Result<Value> {
 fn op_slides_to_doc(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
-    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let want_notes = opts.get("notes").and_then(flag_of).unwrap_or(false);
     let read = op_slides_read(json!({ "path": path }))?;
     let slides = read
         .get("slides")
@@ -1145,7 +1145,7 @@ fn op_slides_to_doc(opts: Value) -> Result<Value> {
 fn op_slides_to_pdf(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
-    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let want_notes = opts.get("notes").and_then(flag_of).unwrap_or(false);
     let read = op_slides_read(json!({ "path": path }))?;
     let slides = read
         .get("slides")
@@ -1216,7 +1216,7 @@ fn op_slides_outline(opts: Value) -> Result<Value> {
 /// markdown, path? }`.
 fn op_slides_to_md(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
-    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let want_notes = opts.get("notes").and_then(flag_of).unwrap_or(false);
     let level = opts
         .get("level")
         .and_then(Value::as_u64)
@@ -1278,8 +1278,8 @@ fn op_slides_to_md(opts: Value) -> Result<Value> {
 /// path? }`.
 fn op_slides_to_html(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
-    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
-    let full = opts.get("full").and_then(Value::as_bool).unwrap_or(false);
+    let want_notes = opts.get("notes").and_then(flag_of).unwrap_or(false);
+    let full = opts.get("full").and_then(flag_of).unwrap_or(false);
     let read = op_slides_read(json!({ "path": path }))?;
     let slides = read
         .get("slides")
@@ -1348,7 +1348,7 @@ fn op_slides_to_html(opts: Value) -> Result<Value> {
 /// path? }`.
 fn op_slides_to_text(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
-    let want_notes = opts.get("notes").and_then(Value::as_bool).unwrap_or(false);
+    let want_notes = opts.get("notes").and_then(flag_of).unwrap_or(false);
     let sep = opts.get("sep").and_then(Value::as_str).unwrap_or("\n\n");
     let read = op_slides_read(json!({ "path": path }))?;
     let slides = read
@@ -1632,7 +1632,7 @@ fn op_doc_merge(opts: Value) -> Result<Value> {
     let output = req_str(&opts, "output")?.to_string();
     let page_breaks = opts
         .get("page_breaks")
-        .and_then(Value::as_bool)
+        .and_then(flag_of)
         .unwrap_or(true);
 
     let mut blocks: Vec<Value> = Vec::new();
@@ -1673,7 +1673,7 @@ fn op_doc_append(opts: Value) -> Result<Value> {
         .ok_or_else(|| anyhow!("missing blocks (expected array)"))?;
 
     let mut blocks = doc_blocks_or_paras(path)?;
-    if opts.get("page_break").and_then(Value::as_bool).unwrap_or(false) {
+    if opts.get("page_break").and_then(flag_of).unwrap_or(false) {
         blocks.push(json!({ "kind": "pagebreak" }));
     }
     let added = add.len();
@@ -1752,7 +1752,7 @@ fn op_doc_find(opts: Value) -> Result<Value> {
     }
     let ignore_case = opts
         .get("ignore_case")
-        .and_then(Value::as_bool)
+        .and_then(flag_of)
         .unwrap_or(false);
     let paras: Vec<String> = match ext_of(path).as_str() {
         "pdf" => {
@@ -1812,7 +1812,7 @@ fn op_slides_find(opts: Value) -> Result<Value> {
     }
     let ignore_case = opts
         .get("ignore_case")
-        .and_then(Value::as_bool)
+        .and_then(flag_of)
         .unwrap_or(false);
     let needle = if ignore_case {
         query.to_lowercase()
@@ -1930,8 +1930,8 @@ fn op_doc_wordfreq(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let top = opts.get("top").and_then(Value::as_u64).unwrap_or(20) as usize;
     let min_len = opts.get("min_length").and_then(Value::as_u64).unwrap_or(1) as usize;
-    let ignore_case = opts.get("ignore_case").and_then(Value::as_bool).unwrap_or(true);
-    let use_stop = opts.get("stopwords").and_then(Value::as_bool).unwrap_or(false);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(true);
+    let use_stop = opts.get("stopwords").and_then(flag_of).unwrap_or(false);
 
     let text = doc_full_text(path)?;
     let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();

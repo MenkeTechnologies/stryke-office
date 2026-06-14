@@ -136,8 +136,8 @@ fn block_runs(b: &Value) -> Vec<(String, bool, bool)> {
     let one = |v: &Value| {
         (
             v.get("text").and_then(Value::as_str).unwrap_or("").to_string(),
-            v.get("bold").and_then(Value::as_bool).unwrap_or(false),
-            v.get("italic").and_then(Value::as_bool).unwrap_or(false),
+            v.get("bold").and_then(flag_of).unwrap_or(false),
+            v.get("italic").and_then(flag_of).unwrap_or(false),
         )
     };
     if let Some(runs) = b.get("runs").and_then(Value::as_array) {
