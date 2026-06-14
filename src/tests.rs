@@ -6959,6 +6959,37 @@ fn doc_readability_flesch() {
 }
 
 #[test]
+fn doc_sentences_segments() {
+    let path = tmp("sent.txt");
+    std::fs::write(
+        &path,
+        "First sentence here. Second one!  Third? And a trailing tail",
+    )
+    .unwrap();
+
+    let r = call(office__doc_sentences, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 4, "four sentences incl trailing tail: {r}");
+    assert_eq!(
+        r["sentences"][0], "First sentence here.",
+        "first sentence: {r}"
+    );
+    assert_eq!(r["sentences"][1], "Second one!", "second sentence: {r}");
+    assert_eq!(
+        r["sentences"][3], "And a trailing tail",
+        "trailing no-terminator: {r}"
+    );
+
+    // max caps the count
+    let rm = call(
+        office__doc_sentences,
+        &format!(r#"{{"path":"{path}","max":2}}"#),
+    );
+    assert_eq!(rm["count"], 2, "max caps to 2: {rm}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn doc_find_and_slides_find() {
     // doc_find over a docx with three paragraphs
     let dx = tmp("find.docx");

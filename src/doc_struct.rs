@@ -2172,6 +2172,44 @@ fn op_doc_readability(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Split a document's text into sentences (segmentation for NLP / summarization
+/// prep) — a sentence ends at `.`/`!`/`?` followed by whitespace or end of text.
+/// opts: path, max => cap the number returned (optional). The heuristic does not
+/// special-case abbreviations. Returns `{ count, sentences: [...] }` with
+/// whitespace-normalized, non-empty sentences.
+fn op_doc_sentences(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let max = opts.get("max").and_then(Value::as_u64).map(|n| n as usize);
+    let text = doc_full_text(path)?;
+
+    let mut sentences: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let chars: Vec<char> = text.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        cur.push(c);
+        if matches!(c, '.' | '!' | '?') {
+            // End the sentence when the terminator is followed by whitespace or EOF.
+            let ends = chars.get(i + 1).is_none_or(|n| n.is_whitespace());
+            if ends {
+                let s: String = cur.split_whitespace().collect::<Vec<_>>().join(" ");
+                if !s.is_empty() {
+                    sentences.push(s);
+                }
+                cur.clear();
+            }
+        }
+    }
+    // Trailing text with no terminator is still a sentence.
+    let tail: String = cur.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !tail.is_empty() {
+        sentences.push(tail);
+    }
+    if let Some(m) = max {
+        sentences.truncate(m);
+    }
+    Ok(json!({ "count": sentences.len(), "sentences": sentences }))
+}
+
 // ── hyperlinks ────────────────────────────────────────────────────────────────
 
 /// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display
