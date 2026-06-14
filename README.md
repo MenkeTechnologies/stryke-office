@@ -236,6 +236,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_to_sheet($path, $output, %opts)` | `{ok, path, rows}` | extract a document into a spreadsheet (one row per block: level, text) |
 | `Office::sheet_to_doc($path, $output, %opts)` | `{ok, path, rows, cols}` | render a spreadsheet as a table inside a docx/odt; `sheet`/`title` opts |
 | `Office::sheet_to_md($path, %opts)` | `{ok, rows, cols, markdown, path?}` | render a spreadsheet as a GitHub-flavored Markdown table; `output`/`sheet`/`header` opts |
+| `Office::sheet_to_sql($path, $table, %opts)` | `{ok, statements, rows, sql, path?}` | emit SQL `INSERT` statements for a sheet; `columns`/`batch`/`output` opts |
 | `Office::md_to_sheet($output, %opts)` | `{ok, path, rows, cols}` | parse a Markdown table into a spreadsheet file; `markdown`/`path`/`name` opts |
 | `Office::html_to_sheet($input, $output, %opts)` | `{ok, path, rows, cols}` | parse an HTML table into a spreadsheet (web scraping); `index`/`name` opts |
 | `Office::sheet_to_html($path, %opts)` | `{ok, rows, cols, html, path?}` | render a spreadsheet as an HTML table (thead/tbody, escaped); `output`/`title`/`full` opts |

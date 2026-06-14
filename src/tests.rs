@@ -435,6 +435,48 @@ fn sheet_to_md_github_table() {
 }
 
 #[test]
+fn sheet_to_sql_inserts() {
+    let path = tmp("tosql.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[
+                ["name","qty"],
+                ["o'brien",5],
+                ["",2]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_to_sql,
+        &format!(r#"{{"path":"{path}","table":"people"}}"#),
+    );
+    assert_eq!(r["statements"], 2, "one statement per row: {r}");
+    let sql = r["sql"].as_str().unwrap();
+    assert!(
+        sql.contains(r#"INSERT INTO "people" ("name", "qty") VALUES"#),
+        "header columns + table: {sql}"
+    );
+    // numeric bare, blank -> NULL, quote doubled
+    assert!(
+        sql.contains("('o''brien', 5);"),
+        "string escaped, number bare: {sql}"
+    );
+    assert!(sql.contains("(NULL, 2);"), "blank -> NULL: {sql}");
+
+    // batch mode: both rows in one multi-row statement
+    let rb = call(
+        office__sheet_to_sql,
+        &format!(r#"{{"path":"{path}","table":"people","batch":10}}"#),
+    );
+    assert_eq!(rb["statements"], 1, "batched into one statement: {rb}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn md_to_sheet_parses_table() {
     // Leading prose then a GFM table with an escaped pipe; prose must be ignored.
     let md =

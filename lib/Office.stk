@@ -131,6 +131,14 @@ fn Office::sheet_to_md ($path, %opts) {
         office__sheet_to_md(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Emit SQL INSERT statements for a sheet. $table is the target table. opts:
+## output (.sql file; omit to return), columns (override names), batch (rows per
+## statement, default 1), sheet, header. Returns { ok, statements, rows, sql, path? }.
+fn Office::sheet_to_sql ($path, $table, %opts) {
+    Office::_decode("sheet_to_sql",
+        office__sheet_to_sql(to_json({ path => $path, table => $table, output => $opts{output}, columns => $opts{columns}, batch => $opts{batch}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Parse a GitHub-flavored Markdown table into a spreadsheet (inverse of
 ## sheet_to_md). opts: markdown (table text) or path (.md file), name, format.
 ## Returns { ok, path, rows, cols }.
