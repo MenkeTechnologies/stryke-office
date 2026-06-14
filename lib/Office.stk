@@ -702,6 +702,13 @@ fn Office::md_to_pdf ($input, $output) {
         office__md_to_pdf(to_json({ input => $input, output => $output })))
 }
 
+## Generate a Table of Contents from a document's headings and prepend it.
+## opts: output, title, pagebreak, format. Returns { ok, path, entries }.
+fn Office::doc_add_toc ($path, %opts) {
+    Office::_decode("doc_add_toc",
+        office__doc_add_toc(to_json({ path => $path, output => $opts{output}, title => $opts{title}, pagebreak => $opts{pagebreak}, format => $opts{format} })))
+}
+
 ## Convert a document into a presentation: each heading at $opts{level} (default
 ## 1) becomes a slide title, following content becomes body bullets. $output is
 ## a pptx/odp path. opts: level, format => override. Returns { ok, path, slides }.

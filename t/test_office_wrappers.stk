@@ -251,6 +251,18 @@ unlink $h2sx
 unlink $m2pin
 unlink $m2pout
 
+# ── doc_add_toc ─────────────────────────────────────────────────────
+val $tocd = "$dir/$tag-toc.docx"
+Office::doc_write($tocd, [
+    { kind => "heading", level => 1, text => "Alpha" },
+    { kind => "heading", level => 1, text => "Beta" },
+])
+val $tr = Office::doc_add_toc($tocd)
+assert_eq $tr->{entries}, 2, "doc_add_toc: heading count"
+val $tol = Office::doc_outline($tocd)
+assert_eq $tol->{outline}[0]{text}, "Table of Contents", "doc_add_toc: TOC heading prepended"
+unlink $tocd
+
 # ── document -> pdf ─────────────────────────────────────────────────
 val $d2p = "$dir/$tag-d2p.docx"
 Office::doc_write($d2p, [

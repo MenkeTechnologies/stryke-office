@@ -901,6 +901,52 @@ fn op_doc_to_pdf(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "elements": elements.len() }))
 }
 
+/// Generate a Table of Contents from a document's headings and prepend it.
+/// opts: path (docx/odt/...), output (default in place), title => the TOC heading
+/// (default "Table of Contents"), pagebreak => insert a page break after the TOC
+/// (default true), format => override. Each entry is indented by its heading
+/// level. Returns `{ ok, path, entries }`.
+fn op_doc_add_toc(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let title = opts
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("Table of Contents");
+    let pagebreak = opts
+        .get("pagebreak")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    let blocks = doc_blocks_or_paras(path)?;
+    let mut toc: Vec<Value> = vec![json!({ "kind": "heading", "level": 1, "text": title })];
+    let mut entries = 0u64;
+    for b in &blocks {
+        if b.get("kind").and_then(Value::as_str) == Some("heading") {
+            let level = b.get("level").and_then(Value::as_u64).unwrap_or(1);
+            let text = b.get("text").and_then(Value::as_str).unwrap_or("");
+            let indent = "    ".repeat(level.saturating_sub(1) as usize);
+            toc.push(json!({ "kind": "para", "text": format!("{indent}{text}") }));
+            entries += 1;
+        }
+    }
+    if pagebreak {
+        toc.push(json!({ "kind": "pagebreak" }));
+    }
+    toc.extend(blocks);
+
+    let mut wopts = json!({ "path": output, "blocks": toc });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_doc_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "entries": entries }))
+}
+
 /// Map `doc_write`-style blocks onto the `pdf_build` element model in document
 /// order (list items become bulleted paragraphs; images are skipped since the
 /// block carries no path). Shared by `doc_to_pdf` and `html_to_pdf`.
