@@ -208,6 +208,16 @@ val $clo = "$dir/$tag-clamp-out.xlsx"
 Office::sheet_clamp($csx, "amt", $clo, max => 15)
 val $clr = Office::sheet_get_cell($clo, "A3")
 assert_eq $clr->{value}, 15, "sheet_clamp: value capped to max"
+# winsorize: clip to percentile bounds
+val $wsx = "$dir/$tag-winsor.xlsx"
+Office::sheet_write($wsx, [{ name => "D", rows => [["v"], [1], [2], [3], [4], [5], [6], [7], [8], [9], [10]] }])
+val $wso = "$dir/$tag-winsor-out.xlsx"
+val $wsr = Office::sheet_winsorize($wsx, "v", $wso, decimals => 2)
+assert_eq $wsr->{clipped}, 2, "sheet_winsorize: two extremes clipped"
+val $wsb = Office::sheet_read($wso)
+assert_eq $wsb->[0]{rows}[5][0], 5, "sheet_winsorize: middle value unchanged"
+unlink $wsx
+unlink $wso
 # rename the column header
 val $rco = "$dir/$tag-rencol-out.xlsx"
 Office::sheet_rename_column($csx, "amt", "total", $rco)

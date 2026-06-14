@@ -1341,6 +1341,52 @@ fn sheet_clamp_caps_values() {
 }
 
 #[test]
+fn sheet_winsorize_percentile_clip() {
+    let path = tmp("winsor.xlsx");
+    // 1..10 with default 5%/95% bounds → low≈1.45, high≈9.55: 1→1.45, 10→9.55
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("winsor_out.xlsx");
+    let r = call(
+        office__sheet_winsorize,
+        &format!(r#"{{"path":"{path}","column":"v","output":"{out}","decimals":2}}"#),
+    );
+    // low = p05, high = p95 of 1..10 (linear interp): 1.45 and 9.55
+    assert!(
+        (r["low"].as_f64().unwrap() - 1.45).abs() < 0.01,
+        "low bound: {r}"
+    );
+    assert!(
+        (r["high"].as_f64().unwrap() - 9.55).abs() < 0.01,
+        "high bound: {r}"
+    );
+    assert_eq!(r["clipped"], 2, "the two extremes clipped: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows[1][0].as_f64().unwrap() - 1.45).abs() < 0.01,
+        "1 -> low: {rd}"
+    );
+    assert!(
+        (rows[10][0].as_f64().unwrap() - 9.55).abs() < 0.01,
+        "10 -> high: {rd}"
+    );
+    assert!(
+        (rows[5][0].as_f64().unwrap() - 5.0).abs() < 1e-9,
+        "mid unchanged: {rd}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_rename_column_header() {
     let path = tmp("rencol.xlsx");
     let w = call(

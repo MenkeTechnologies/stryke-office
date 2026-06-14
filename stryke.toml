@@ -48,6 +48,7 @@ exports = [
     "office__sheet_pct_change",
     "office__sheet_shift",
     "office__sheet_clamp",
+    "office__sheet_winsorize",
     "office__sheet_rename_column",
     "office__sheet_rename_columns",
     "office__sheet_explode",

@@ -318,6 +318,14 @@ fn Office::sheet_clamp ($path, $column, $output, %opts) {
         office__sheet_clamp(to_json({ path => $path, column => $column, output => $output, min => $opts{min}, max => $opts{max}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Winsorize a numeric column: clip values to percentile bounds from the data
+## (robust outlier capping). opts: lower (default 0.05), upper (default 0.95),
+## into, decimals, sheet, header, format. Returns { ok, path, clipped, low, high }.
+fn Office::sheet_winsorize ($path, $column, $output, %opts) {
+    Office::_decode("sheet_winsorize",
+        office__sheet_winsorize(to_json({ path => $path, column => $column, output => $output, lower => $opts{lower}, upper => $opts{upper}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Rename a column's header (not the sheet tab). opts: sheet, format.
 ## Returns { ok, path, column }.
 fn Office::sheet_rename_column ($path, $column, $to, $output, %opts) {

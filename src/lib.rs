@@ -4426,6 +4426,114 @@ fn op_sheet_clamp(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "clamped": clamped }))
 }
 
+/// Winsorize a numeric column: clip values to percentile bounds computed from the
+/// data (robust outlier capping). Unlike `sheet_clamp` (fixed bounds) the limits
+/// are derived from the column itself, and unlike `sheet_outliers` (report-only)
+/// it rewrites the values. opts: path, output, column => name/index (required),
+/// lower => lower quantile in 0..1 (default 0.05), upper => upper quantile
+/// (default 0.95), into => write to a new column (default in place), decimals,
+/// sheet, header, format. Returns `{ ok, path, clipped, low, high }` (the bounds
+/// applied and the count of values moved).
+fn op_sheet_winsorize(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let lower = opts.get("lower").and_then(Value::as_f64).unwrap_or(0.05);
+    let upper = opts.get("upper").and_then(Value::as_f64).unwrap_or(0.95);
+    if !(0.0..=1.0).contains(&lower) || !(0.0..=1.0).contains(&upper) || lower > upper {
+        return Err(anyhow!("lower/upper must be in 0..1 with lower <= upper"));
+    }
+    let into = opts.get("into").and_then(Value::as_str).map(str::to_string);
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if vals.is_empty() {
+        return Err(anyhow!("no numeric values to winsorize"));
+    }
+    vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let low = percentile_sorted(&vals, lower);
+    let high = percentile_sorted(&vals, upper);
+    let round = |x: f64| match decimals {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (x * f).round() / f
+        }
+        None => x,
+    };
+
+    let mut clipped = 0u64;
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                if let Some(name) = &into {
+                    cells.push(json!(name));
+                }
+                return Value::Array(cells);
+            }
+            let src = cells.get(col).cloned().unwrap_or(Value::Null);
+            let result = match sheet_cell_num(&src) {
+                Some(x) => {
+                    let y = x.clamp(low, high);
+                    if y != x {
+                        clipped += 1;
+                    }
+                    json!(round(y))
+                }
+                None => src.clone(),
+            };
+            match &into {
+                Some(_) => cells.push(result),
+                None => {
+                    if col < cells.len() {
+                        cells[col] = result;
+                    } else {
+                        cells.resize(col + 1, Value::Null);
+                        cells[col] = result;
+                    }
+                }
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "clipped": clipped, "low": low, "high": high }))
+}
+
 /// Rename a column's header (distinct from `sheet_rename`, which renames a sheet
 /// tab). opts: path, output, column => current name or 0-based index (required),
 /// to => new header (required), sheet, format. Returns `{ ok, path, column }`
@@ -11246,6 +11354,7 @@ export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_pct_change, op_sheet_pct_change);
 export!(office__sheet_shift, op_sheet_shift);
 export!(office__sheet_clamp, op_sheet_clamp);
+export!(office__sheet_winsorize, op_sheet_winsorize);
 export!(office__sheet_rename_column, op_sheet_rename_column);
 export!(office__sheet_rename_columns, op_sheet_rename_columns);
 export!(office__sheet_explode, op_sheet_explode);
