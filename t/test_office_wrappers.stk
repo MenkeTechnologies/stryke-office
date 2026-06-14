@@ -1338,4 +1338,10 @@ assert_ok ($rdgsvg =~ /^<svg/), "chart ridgeline: svg document"
 assert_ok ($rdgsvg =~ /fill-opacity="0.6"/), "chart ridgeline: filled ridge"
 assert_ok ($rdgsvg =~ />a</), "chart ridgeline: group label"
 
+# ── chart smooth (ggplot2 geom_smooth): LOESS curve to SVG ──────────
+val $smsvg = Office::chart_svg("smooth", [{ name => "s", data => [[1, 2], [2, 2.5], [3, 4], [4, 3.5], [5, 6], [6, 5.5], [7, 8], [8, 7.5], [9, 10]] }], span => 0.6)
+assert_ok ($smsvg =~ /^<svg/), "chart smooth: svg document"
+assert_ok ($smsvg =~ /stroke-width="2.5"/), "chart smooth: loess curve"
+assert_ok ($smsvg =~ /circle/), "chart smooth: underlying points"
+
 test_run

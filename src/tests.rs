@@ -11149,6 +11149,54 @@ fn chart_ridgeline_raster_and_svg() {
 }
 
 #[test]
+fn loess_fit_recovers_linear_trend() {
+    // perfectly linear y = 2x + 1 -> LOESS should reproduce it closely
+    let pts: Vec<(f64, f64)> = (0..20).map(|i| (i as f64, 2.0 * i as f64 + 1.0)).collect();
+    let grid = [2.0, 9.0, 17.0];
+    let fit = loess_fit(&pts, 0.5, &grid);
+    assert_eq!(fit.len(), 3);
+    for &(x, yhat) in &fit {
+        let expected = 2.0 * x + 1.0;
+        assert!(
+            (yhat - expected).abs() < 0.25,
+            "loess ~ linear at x={x}: got {yhat}, want {expected}"
+        );
+    }
+}
+
+#[test]
+fn chart_smooth_loess_raster_and_svg() {
+    // noisy-ish upward data
+    let series =
+        r#"[{"name":"s","data":[[1,2],[2,2.5],[3,4],[4,3.5],[5,6],[6,5.5],[7,8],[8,7.5],[9,10]]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"smooth","width":460,"height":340,"span":0.6,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("smooth raster: {c}"));
+    assert_eq!(c["type"], "smooth", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"loess","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "smooth svg malformed"
+    );
+    // the LOESS curve is a thick polyline over faint points
+    assert!(
+        svg.contains("stroke-width=\"2.5\""),
+        "smooth svg loess curve"
+    );
+    assert!(svg.contains("<circle"), "smooth svg underlying points");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;
