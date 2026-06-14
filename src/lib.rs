@@ -2822,6 +2822,85 @@ fn op_sheet_rename_column(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": to }))
 }
 
+/// Explode a column of delimited values into multiple rows (SQL `unnest`; the
+/// inverse of `group_concat`). Each data row is repeated once per split value,
+/// with the other columns duplicated. opts: path, output, column => name or
+/// 0-based index (required), sep => delimiter (default ","), trim => strip each
+/// part (default true), sheet, header (default true), format. A blank cell yields
+/// a single row with that cell blank. Returns `{ ok, path, rows }` (data rows
+/// after exploding).
+fn op_sheet_explode(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let sep = opts.get("sep").and_then(Value::as_str).unwrap_or(",");
+    if sep.is_empty() {
+        return Err(anyhow!("sep must be non-empty"));
+    }
+    let trim = opts.get("trim").and_then(Value::as_bool).unwrap_or(true);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut new_rows: Vec<Value> = Vec::new();
+    if data_start == 1 {
+        new_rows.push(rows[0].clone());
+    }
+    let mut emitted = 0u64;
+    for row in &rows[data_start..] {
+        let cells = row.as_array().cloned().unwrap_or_default();
+        let raw = cells.get(col).map(cell_to_string).unwrap_or_default();
+        let parts: Vec<String> = if raw.is_empty() {
+            vec![String::new()]
+        } else {
+            raw.split(sep)
+                .map(|p| {
+                    if trim {
+                        p.trim().to_string()
+                    } else {
+                        p.to_string()
+                    }
+                })
+                .collect()
+        };
+        for part in parts {
+            let mut nc = cells.clone();
+            if col < nc.len() {
+                nc[col] = Value::String(part);
+            } else {
+                nc.resize(col + 1, Value::Null);
+                nc[col] = Value::String(part);
+            }
+            new_rows.push(Value::Array(nc));
+            emitted += 1;
+        }
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "rows": emitted }))
+}
+
 /// 0-based column index → spreadsheet letters (0→A, 25→Z, 26→AA).
 fn col_letters(mut c: usize) -> String {
     let mut s = String::new();
@@ -7113,6 +7192,7 @@ export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_rename_column, op_sheet_rename_column);
+export!(office__sheet_explode, op_sheet_explode);
 export!(office__sheet_find, op_sheet_find);
 export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);

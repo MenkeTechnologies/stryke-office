@@ -233,6 +233,13 @@ fn Office::sheet_rename_column ($path, $column, $to, $output, %opts) {
         office__sheet_rename_column(to_json({ path => $path, column => $column, to => $to, output => $output, sheet => $opts{sheet}, format => $opts{format} })))
 }
 
+## Explode a delimited column into multiple rows (SQL unnest; inverse of
+## group_concat). opts: sep, trim, sheet, header, format. Returns { ok, path, rows }.
+fn Office::sheet_explode ($path, $column, $output, %opts) {
+    Office::_decode("sheet_explode",
+        office__sheet_explode(to_json({ path => $path, column => $column, output => $output, sep => $opts{sep}, trim => $opts{trim}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Find cells matching $query across a workbook. opts: ignore_case => 1,
 ## whole => 1 (exact cell match instead of substring), sheet => restrict to one
 ## sheet name. Returns { count, matches => [{ sheet, row, col, ref, value }] }

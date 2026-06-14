@@ -834,6 +834,44 @@ fn sheet_rename_column_header() {
 }
 
 #[test]
+fn sheet_explode_delimited_column() {
+    let path = tmp("explode.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["id","tags"],[1,"a,b"],[2,"c"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("explode_out.xlsx");
+    let r = call(
+        office__sheet_explode,
+        &format!(r#"{{"path":"{path}","column":"tags","output":"{out}","sep":","}}"#),
+    );
+    assert_eq!(r["rows"], 3, "1/a,1/b,2/c -> 3 rows: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 4, "header + 3 data: {rd}");
+    assert_eq!(
+        rows[1][0].as_f64().unwrap(),
+        1.0,
+        "row1 id duplicated: {rd}"
+    );
+    assert_eq!(rows[1][1], "a", "row1 tag a: {rd}");
+    assert_eq!(
+        rows[2][0].as_f64().unwrap(),
+        1.0,
+        "row2 id duplicated: {rd}"
+    );
+    assert_eq!(rows[2][1], "b", "row2 tag b: {rd}");
+    assert_eq!(rows[3][1], "c", "row3 tag c: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_find_locates_cells() {
     let path = tmp("find.xlsx");
     let w = call(
