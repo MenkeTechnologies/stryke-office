@@ -82,6 +82,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "qq" | "qqplot" => svg_qq(&mut s, series, l, t, r, b),
         "jitter" | "strip" => svg_jitter(&mut s, series, opts, l, t, r, b, kind == "jitter"),
         "rug" => svg_rug(&mut s, series, l, t, r, b),
+        "beeswarm" => svg_beeswarm(&mut s, series, opts, l, t, r, b),
         _ => special = false,
     }
 
@@ -1566,6 +1567,53 @@ fn svg_rug(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
         }
         let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, l + 4.0, baseline - tick - 4.0, xml_escape(&name));
+    }
+}
+
+/// Beeswarm plot (vector). Collision-free point swarm per series over a shared
+/// value axis. opts: `radius` (point size, default 3).
+fn svg_beeswarm(s: &mut String, series: &[Value], opts: &Value, l: f64, t: f64, r: f64, b: f64) {
+    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ser in series {
+        for v in series_nums(ser) {
+            ymin = ymin.min(v);
+            ymax = ymax.max(v);
+        }
+    }
+    if !ymin.is_finite() || !ymax.is_finite() {
+        return;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let pad = (ymax - ymin) * 0.05;
+    let (ymin, ymax) = (ymin - pad, ymax + pad);
+    let (pw, ph) = (r - l, b - t);
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{b}" x2="{r}" y2="{b}" stroke="#1e1e1e"/><line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    let yp = |v: f64| b - (v - ymin) / (ymax - ymin) * ph;
+    for i in 0..=5 {
+        let v = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(v);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(v)));
+    }
+
+    let nser = series.len().max(1);
+    let slot = pw / nser as f64;
+    let half = slot * 0.45;
+    let radius = opts.get("radius").and_then(Value::as_f64).unwrap_or(3.0).clamp(1.0, 12.0);
+    for (si, ser) in series.iter().enumerate() {
+        let col = svg_palette(si);
+        let cx = l + (si as f64 + 0.5) * slot;
+        let data = series_nums(ser);
+        let ys: Vec<f64> = data.iter().map(|&v| yp(v)).collect();
+        let offs = beeswarm_offsets(&ys, radius, half);
+        for (j, &y) in ys.iter().enumerate() {
+            let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="{radius}" fill="{col}"/>"##, cx + offs[j], y);
+        }
+        let name = ser.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        let _ = write!(s, r##"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, b + 14.0, xml_escape(&name));
     }
 }
 

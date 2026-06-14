@@ -304,6 +304,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_rug(&mut img, &fnt, series, l, t, r, b, black, grid)
         }
+        "beeswarm" => {
+            require_series(&opts)?;
+            render_beeswarm(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -1358,6 +1362,107 @@ fn render_rug(
         }
         let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         draw_text_mut(img, black, l + 4, (baseline - tick - 14.0) as i32, PxScale::from(12.0), fnt, &name);
+    }
+}
+
+/// Compute collision-avoiding x offsets for a beeswarm: given each point's pixel
+/// y, return an x offset (≤ `halfwidth`) per point so no two non-overlapping in
+/// y also overlap in x. Points are placed in ascending-y order, each taking the
+/// position closest to center that is free. Shared by both backends.
+fn beeswarm_offsets(ys: &[f64], radius: f64, halfwidth: f64) -> Vec<f64> {
+    let n = ys.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &c| ys[a].partial_cmp(&ys[c]).unwrap_or(std::cmp::Ordering::Equal));
+    let step = (radius * 1.2).max(1.0);
+    let maxk = ((halfwidth / step) as i64).max(1);
+    let mut placed: Vec<(f64, f64)> = Vec::with_capacity(n);
+    let mut off = vec![0.0f64; n];
+    for &i in &order {
+        let y = ys[i];
+        let mut chosen = None;
+        'search: for k in 0..=maxk {
+            let cands = if k == 0 {
+                vec![0.0]
+            } else {
+                vec![k as f64 * step, -(k as f64) * step]
+            };
+            for c in cands {
+                let collide = placed
+                    .iter()
+                    .any(|&(px, py)| (py - y).abs() < 2.0 * radius && (px - c).abs() < 2.0 * radius - 1e-6);
+                if !collide {
+                    chosen = Some(c);
+                    break 'search;
+                }
+            }
+        }
+        let c = chosen.unwrap_or(0.0);
+        placed.push((c, y));
+        off[i] = c;
+    }
+    off
+}
+
+/// Beeswarm plot — like `jitter`, but every raw value is nudged to a collision-
+/// free x within its series slot, so the point cloud's silhouette encodes the
+/// distribution (the "swarm" geom popular in ggbeeswarm). Shared value (y) axis,
+/// one slot per series. opts: `radius` (point size, default 3).
+#[allow(clippy::too_many_arguments)]
+fn render_beeswarm(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let (mut ymin, mut ymax) = (f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for v in series_nums(s) {
+            ymin = ymin.min(v);
+            ymax = ymax.max(v);
+        }
+    }
+    if !ymin.is_finite() || !ymax.is_finite() {
+        return;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let pad = (ymax - ymin) * 0.05;
+    let (ymin, ymax) = (ymin - pad, ymax + pad);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let yp = |v: f64| (b as f64 - (v - ymin) / (ymax - ymin) * ph) as f32;
+    for i in 0..=5 {
+        let v = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(v);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &fmt_num(v));
+    }
+
+    let nser = series.len().max(1);
+    let slot = pw / nser as f64;
+    let half = slot * 0.45;
+    let radius = opts.get("radius").and_then(Value::as_f64).unwrap_or(3.0).clamp(1.0, 12.0);
+    for (si, s) in series.iter().enumerate() {
+        let color = series_color(s, si);
+        let cx = l as f64 + (si as f64 + 0.5) * slot;
+        let data = series_nums(s);
+        let ys: Vec<f64> = data.iter().map(|&v| yp(v) as f64).collect();
+        let offs = beeswarm_offsets(&ys, radius, half);
+        for (j, &y) in ys.iter().enumerate() {
+            draw_filled_circle_mut(img, ((cx + offs[j]) as i32, y as i32), radius as i32, color);
+        }
+        let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
+        draw_text_mut(img, black, (cx - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(12.0), fnt, &name);
     }
 }
 
