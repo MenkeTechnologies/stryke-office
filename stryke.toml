@@ -303,6 +303,7 @@ exports = [
     "office__img_scale",
     "office__img_fit",
     "office__img_crop",
+    "office__img_crop_aspect",
     "office__img_rotate",
     "office__img_flip",
     "office__img_convert",
