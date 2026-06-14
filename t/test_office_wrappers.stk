@@ -1288,6 +1288,8 @@ val $crp = Office::sheet_corr($crx)
 assert_eq $crp->{matrix}[0][0], 1, "sheet_corr: pearson diagonal"
 val $crs = Office::sheet_corr($crx, method => "spearman")
 assert_eq $crs->{matrix}[0][1], 1, "sheet_corr: spearman monotonic = 1"
+val $crk = Office::sheet_corr($crx, method => "kendall")
+assert_eq $crk->{matrix}[0][1], 1, "sheet_corr: kendall concordant = 1"
 unlink $crx
 
 # ── chart density (ggplot2 geom_density): KDE curve to SVG ───────────

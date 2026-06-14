@@ -154,8 +154,8 @@ fn Office::sheet_argmax ($path, $column, %opts) {
 }
 
 ## Correlation matrix between numeric columns (pandas df.corr()). opts: method =>
-## "pearson" (default) | "spearman" (rank correlation), sheet, header. Returns
-## { sheet, columns, matrix }.
+## "pearson" (default) | "spearman" (rank) | "kendall" (tau-b), sheet, header.
+## Returns { sheet, columns, matrix }.
 fn Office::sheet_corr ($path, %opts) {
     Office::_decode("sheet_corr",
         office__sheet_corr(to_json({ path => $path, method => $opts{method}, sheet => $opts{sheet}, header => $opts{header} })))

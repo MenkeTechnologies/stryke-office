@@ -566,6 +566,16 @@ fn sheet_corr_spearman_monotonic() {
         "pearson < 1 for x^3: {pe}"
     );
 
+    // Kendall's tau-b is also 1 for a strictly increasing (concordant) relation
+    let kd = call(
+        office__sheet_corr,
+        &format!(r#"{{"path":"{path}","method":"kendall"}}"#),
+    );
+    assert!(
+        (kd["matrix"][0][1].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "kendall concordant = 1: {kd}"
+    );
+
     std::fs::remove_file(&path).ok();
 }
 

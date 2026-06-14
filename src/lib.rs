@@ -2213,16 +2213,67 @@ fn average_ranks(v: &[f64]) -> Vec<f64> {
     ranks
 }
 
+/// Number of tied pairs in `v`: sum over equal-value groups of t·(t−1)/2.
+/// Used for Kendall's tau-b tie correction.
+fn tie_pairs(v: &[f64]) -> i64 {
+    let mut s = v.to_vec();
+    s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut total = 0i64;
+    let mut i = 0;
+    while i < s.len() {
+        let mut j = i;
+        while j + 1 < s.len() && s[j + 1] == s[i] {
+            j += 1;
+        }
+        let t = (j - i + 1) as i64;
+        total += t * (t - 1) / 2;
+        i = j + 1;
+    }
+    total
+}
+
+/// Kendall's tau-b rank correlation over paired observations (handles ties).
+/// Returns None for fewer than two points or a degenerate (all-tied) variable.
+fn kendall_tau(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    let n = xs.len();
+    if n < 2 {
+        return None;
+    }
+    let (mut c, mut d) = (0i64, 0i64);
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let sx = (xs[i] - xs[j]).partial_cmp(&0.0).map_or(0, |o| o as i64);
+            let sy = (ys[i] - ys[j]).partial_cmp(&0.0).map_or(0, |o| o as i64);
+            let p = sx * sy;
+            if p > 0 {
+                c += 1;
+            } else if p < 0 {
+                d += 1;
+            }
+        }
+    }
+    let n0 = (n * (n - 1) / 2) as i64;
+    let (n1, n2) = (tie_pairs(xs), tie_pairs(ys));
+    let denom = ((n0 - n1) as f64) * ((n0 - n2) as f64);
+    if denom <= 0.0 {
+        return None;
+    }
+    Some((c - d) as f64 / denom.sqrt())
+}
+
 fn op_sheet_corr(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let method = opts
         .get("method")
         .and_then(Value::as_str)
         .unwrap_or("pearson");
-    if !matches!(method, "pearson" | "spearman") {
-        return Err(anyhow!("unknown method: {method} (pearson|spearman)"));
+    if !matches!(method, "pearson" | "spearman" | "kendall") {
+        return Err(anyhow!(
+            "unknown method: {method} (pearson|spearman|kendall)"
+        ));
     }
     let spearman = method == "spearman";
+    let kendall = method == "kendall";
     let read = op_sheet_read(json!({ "path": path }))?;
     let sheets = read
         .get("sheets")
@@ -2291,12 +2342,17 @@ fn op_sheet_corr(opts: Value) -> Result<Value> {
                     ys.push(*b);
                 }
             }
-            // Spearman = Pearson on the values' average ranks.
-            if spearman {
-                xs = average_ranks(&xs);
-                ys = average_ranks(&ys);
-            }
-            rowv.push(pearson(&xs, &ys).map_or(Value::Null, |r| json!(r)));
+            let rv = if kendall {
+                kendall_tau(&xs, &ys)
+            } else {
+                // Spearman = Pearson on the values' average ranks.
+                if spearman {
+                    xs = average_ranks(&xs);
+                    ys = average_ranks(&ys);
+                }
+                pearson(&xs, &ys)
+            };
+            rowv.push(rv.map_or(Value::Null, |r| json!(r)));
         }
         matrix.push(Value::Array(rowv));
     }
