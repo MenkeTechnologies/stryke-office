@@ -288,6 +288,30 @@ fn sheet_to_slides_per_row() {
 }
 
 #[test]
+fn sheet_info_dimensions() {
+    let path = tmp("wbinfo.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[
+                {{"name":"A","rows":[["x"],[1],[2]]}},
+                {{"name":"B","rows":[["y","z"],[1,2]]}}
+            ]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let r = call(office__sheet_info, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "two sheets: {r}");
+    assert_eq!(r["sheets"][0]["name"], "A");
+    assert_eq!(r["sheets"][0]["rows"], 3, "A rows: {r}");
+    assert_eq!(r["sheets"][0]["cols"], 1, "A cols: {r}");
+    assert_eq!(r["sheets"][1]["name"], "B");
+    assert_eq!(r["sheets"][1]["cols"], 2, "B cols: {r}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_diff_cells() {
     let a = tmp("diffa.xlsx");
     let b = tmp("diffb.xlsx");
