@@ -2899,6 +2899,42 @@ fn sheet_freeze_panes() {
 }
 
 #[test]
+fn sheet_autofilter_applied() {
+    use std::io::Read as _;
+    let path = tmp("autofilter.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b"],[1,2],[3,4]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("autofilter_out.xlsx");
+    let r = call(
+        office__sheet_autofilter,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "autofilter: {r}");
+    // default range covers all rows/cols: [0,0,2,1]
+    assert_eq!(r["range"][2].as_u64().unwrap(), 2, "last row index: {r}");
+    assert_eq!(r["range"][3].as_u64().unwrap(), 1, "last col index: {r}");
+
+    let bytes = std::fs::read(&out).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut ws = String::new();
+    zip.by_name("xl/worksheets/sheet1.xml")
+        .unwrap()
+        .read_to_string(&mut ws)
+        .unwrap();
+    assert!(
+        ws.contains("autoFilter"),
+        "autoFilter element present: {ws}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_records_round_trip() {
     let path = tmp("rec.xlsx");
     let w = call(
