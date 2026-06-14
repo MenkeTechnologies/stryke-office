@@ -5736,6 +5736,91 @@ fn op_sheet_calc(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Filter rows by multiple conditions (generalizes the single-predicate
+/// `sheet_filter`). opts: path, output, conditions => array of
+/// `{ column, op?, value, ignore_case? }` (op defaults to "eq"; see
+/// `sheet_filter` for the op list), match => "all" (default, AND) | "any" (OR),
+/// sheet, header (default true), format. Returns `{ ok, path, kept }`.
+fn op_sheet_where(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let any = opts.get("match").and_then(Value::as_str) == Some("any");
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+
+    let conds = opts
+        .get("conditions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing conditions (array of {{column, op?, value}})"))?;
+    if conds.is_empty() {
+        return Err(anyhow!("conditions must list at least one predicate"));
+    }
+    // (column index, op, value, ignore_case) per condition.
+    let preds: Vec<(usize, String, Value, bool)> = conds
+        .iter()
+        .map(|c| {
+            let col = resolve_col(c.get("column"), header_row)?;
+            let op = c
+                .get("op")
+                .and_then(Value::as_str)
+                .unwrap_or("eq")
+                .to_string();
+            let value = c.get("value").cloned().unwrap_or(Value::Null);
+            let ic = c.get("ignore_case").and_then(flag_of).unwrap_or(false);
+            Ok((col, op, value, ic))
+        })
+        .collect::<Result<_>>()?;
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut new_rows: Vec<Value> = Vec::new();
+    if data_start == 1 {
+        new_rows.push(rows[0].clone());
+    }
+    let mut kept = 0u64;
+    for row in &rows[data_start..] {
+        let test = |&(col, ref op, ref value, ic): &(usize, String, Value, bool)| {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(col))
+                .unwrap_or(&Value::Null);
+            cell_matches(cell, op, value, ic)
+        };
+        let pass = if any {
+            preds.iter().any(test)
+        } else {
+            preds.iter().all(test)
+        };
+        if pass {
+            new_rows.push(row.clone());
+            kept += 1;
+        }
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "kept": kept }))
+}
+
 /// Explode a multi-sheet workbook into one file per sheet. opts: path,
 /// dir => output directory, format => output extension (default: the source's),
 /// prefix => optional filename prefix. Files are `{dir}/{prefix}{sheet}.{ext}`
@@ -7817,6 +7902,7 @@ export!(office__sheet_fill, op_sheet_fill);
 export!(office__sheet_drop_empty, op_sheet_drop_empty);
 export!(office__sheet_add_header, op_sheet_add_header);
 export!(office__sheet_calc, op_sheet_calc);
+export!(office__sheet_where, op_sheet_where);
 export!(office__sheet_split, op_sheet_split);
 export!(office__sheet_chunk, op_sheet_chunk);
 export!(office__sheet_head, op_sheet_head);
