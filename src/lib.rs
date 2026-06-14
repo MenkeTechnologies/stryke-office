@@ -9112,6 +9112,7 @@ export!(office__doc_outline, op_doc_outline);
 export!(office__doc_links, op_doc_links);
 export!(office__doc_stats, op_doc_stats);
 export!(office__doc_merge, op_doc_merge);
+export!(office__doc_diff, op_doc_diff);
 export!(office__doc_append, op_doc_append);
 export!(office__doc_split, op_doc_split);
 export!(office__md_to_doc, op_md_to_doc);

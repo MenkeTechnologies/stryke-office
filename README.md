@@ -244,6 +244,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_stats($path)` | `{words, characters, characters_no_spaces, lines, paragraphs, pages?}` | Word-style counts across docx/odt/html/md/rtf/txt/pdf |
 | `Office::doc_wordfreq($path, %opts)` | `{total, unique, words:[{word,count}]}` | word-frequency ranking; `top`/`min_length`/`stopwords` opts |
 | `Office::doc_readability($path)` | `{words, sentences, syllables, flesch_reading_ease, flesch_kincaid_grade}` | Flesch Reading Ease + Flesch–Kincaid Grade Level (heuristic syllable count) |
+| `Office::doc_diff($a, $b)` | `{same, added, removed, added_paragraphs, removed_paragraphs}` | order-aware LCS paragraph diff between two documents |
 | `Office::doc_merge($inputs, $output, %opts)` | `{sources, blocks}` | concatenate documents into one; target ext converts too; `page_breaks` toggle |
 | `Office::doc_append($path, $blocks, %opts)` | `{blocks, added}` | append blocks to an existing document (in place by default); `page_break` toggle |
 | `Office::doc_split($path, $dir, %opts)` | `{count, files}` | split a document into files at headings; `level`/`format`/`prefix` opts |

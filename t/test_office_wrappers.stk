@@ -568,6 +568,19 @@ assert_eq $rdr->{syllables}, 6, "doc_readability: syllable count"
 assert_ok ($rdr->{flesch_reading_ease} > 100), "doc_readability: high reading ease for simple text"
 unlink $rdt
 
+# ── doc_diff: paragraph-level LCS diff between two docs ──────────────
+val $dfa = "$dir/$tag-diffa.docx"
+val $dfb = "$dir/$tag-diffb.docx"
+Office::doc_write($dfa, [{ kind => "para", text => "alpha" }, { kind => "para", text => "beta" }, { kind => "para", text => "gamma" }])
+Office::doc_write($dfb, [{ kind => "para", text => "alpha" }, { kind => "para", text => "beta-edited" }, { kind => "para", text => "gamma" }, { kind => "para", text => "delta" }])
+val $dfr = Office::doc_diff($dfa, $dfb)
+assert_eq $dfr->{same}, 2, "doc_diff: two common paragraphs"
+assert_eq $dfr->{removed}, 1, "doc_diff: one removed"
+assert_eq $dfr->{added}, 2, "doc_diff: two added"
+assert_eq $dfr->{removed_paragraphs}[0], "beta", "doc_diff: removed text"
+unlink $dfa
+unlink $dfb
+
 # ── lenient boolean flags: a false-default flag passed as 1 must take effect ──
 # (regression for stryke 1/0 booleans vs JSON true/false)
 val $flx = "$dir/$tag-flag.xlsx"
