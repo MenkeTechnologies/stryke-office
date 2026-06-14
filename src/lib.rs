@@ -3224,6 +3224,90 @@ fn op_sheet_aggregate(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "groups": group_count }))
 }
 
+/// Group rows by one column and concatenate another column's values per group
+/// (SQL `GROUP_CONCAT`). opts: path, output, group_by => grouping column,
+/// value => column whose values are joined (both name or 0-based index,
+/// required), sep => separator (default ", "), distinct => drop duplicate values
+/// within a group (default false), sheet, header (default true), format. Output
+/// is a 2-column sheet `[group, "{value}_list"]` sorted by group key; blank
+/// values are skipped. Returns `{ ok, path, groups }`.
+fn op_sheet_group_concat(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let sep = opts.get("sep").and_then(Value::as_str).unwrap_or(", ");
+    let distinct = opts
+        .get("distinct")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let gcol = resolve_col(opts.get("group_by"), header_row)?;
+    let vcol = resolve_col(opts.get("value"), header_row)?;
+    let gname = header_row
+        .and_then(|hr| hr.get(gcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", gcol + 1));
+    let vname = header_row
+        .and_then(|hr| hr.get(vcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", vcol + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut groups: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for row in &rows[data_start..] {
+        let cells = row.as_array();
+        let key = cells
+            .and_then(|a| a.get(gcol))
+            .map(cell_to_string)
+            .unwrap_or_default();
+        let val = cells
+            .and_then(|a| a.get(vcol))
+            .map(cell_to_string)
+            .unwrap_or_default();
+        if val.trim().is_empty() {
+            continue;
+        }
+        let e = groups.entry(key).or_default();
+        if !distinct || !e.contains(&val) {
+            e.push(val);
+        }
+    }
+
+    let group_count = groups.len();
+    let mut out_rows: Vec<Value> = vec![json!([gname, format!("{vname}_list")])];
+    for (key, vals) in groups {
+        out_rows.push(json!([key, vals.join(sep)]));
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Grouped", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "groups": group_count }))
+}
+
 /// Frequency analysis (value-counts) of a single column, returned in memory and
 /// sorted by count descending (pandas `value_counts`). Unlike `sheet_aggregate`
 /// (which writes a file sorted by key), this is a pure read for analysis. opts:
@@ -6506,6 +6590,7 @@ export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
+export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_freq, op_sheet_freq);
 export!(office__sheet_split_column, op_sheet_split_column);
 export!(office__sheet_concat_columns, op_sheet_concat_columns);
