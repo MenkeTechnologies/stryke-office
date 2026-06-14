@@ -123,6 +123,11 @@ val $clo = "$dir/$tag-clamp-out.xlsx"
 Office::sheet_clamp($csx, "amt", $clo, max => 15)
 val $clr = Office::sheet_get_cell($clo, "A3")
 assert_eq $clr->{value}, 15, "sheet_clamp: value capped to max"
+# rename the column header
+val $rco = "$dir/$tag-rencol-out.xlsx"
+Office::sheet_rename_column($csx, "amt", "total", $rco)
+val $rcr = Office::sheet_get_cell($rco, "A1")
+assert_eq $rcr->{value}, "total", "sheet_rename_column: header renamed"
 unlink $csx
 unlink $cso
 unlink $pco
