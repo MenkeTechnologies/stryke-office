@@ -198,6 +198,7 @@ exports = [
     "office__chart_grid",
     "office__barcode_qr",
     "office__barcode_1d",
+    "office__barcode_save",
 ]
 
 [scripts]

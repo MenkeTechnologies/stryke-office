@@ -1412,3 +1412,14 @@ fn Office::barcode_1d ($symbology, $data, %opts) {
     $r{data} = $data
     Office::_decode("barcode_1d", office__barcode_1d(to_json(\%r)))
 }
+
+## Generate a barcode straight to an image file (format by extension). $data is
+## the payload. opts: kind => "qr" (default) | "1d", plus generator options
+## (ec/scale/quiet for qr; symbology/scale/height for 1d; fg/bg). Returns
+## { ok, path, kind, width, height }.
+fn Office::barcode_save ($data, $output, %opts) {
+    var %r = %opts
+    $r{data} = $data
+    $r{output} = $output
+    Office::_decode("barcode_save", office__barcode_save(to_json(\%r)))
+}

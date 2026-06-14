@@ -3759,6 +3759,7 @@ export!(office__img_favicon, op_img_favicon);
 include!("barcode.rs");
 export!(office__barcode_qr, op_barcode_qr);
 export!(office__barcode_1d, op_barcode_1d);
+export!(office__barcode_save, op_barcode_save);
 
 // standalone chart rendering (-> image handle, save to any format)
 include!("chart_render.rs");
