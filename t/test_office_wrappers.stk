@@ -1314,6 +1314,15 @@ assert_eq $ttr->{mean_b}, 12, "sheet_ttest: mean_b 12"
 assert_ok ($ttr->{p} < 0.001), "sheet_ttest: significant p"
 unlink $ttx
 
+# ── sheet_anova: one-way ANOVA across group columns ─────────────────
+val $anx = "$dir/$tag-anova.xlsx"
+Office::sheet_write($anx, [{ name => "A", rows => [["g1", "g2", "g3"], [1, 11, 21], [2, 12, 22], [3, 13, 23], [4, 14, 24]] }])
+val $anr = Office::sheet_anova($anx)
+assert_eq $anr->{groups}, 3, "sheet_anova: three groups"
+assert_eq $anr->{df_between}, 2, "sheet_anova: df between"
+assert_ok ($anr->{p} < 0.001), "sheet_anova: significant p"
+unlink $anx
+
 # ── chart density (ggplot2 geom_density): KDE curve to SVG ───────────
 val $densvg = Office::chart_svg("density", [{ name => "a", data => [1, 2, 2, 3, 3, 3, 4, 4, 5] }])
 assert_ok ($densvg =~ /^<svg/), "chart density: svg document"

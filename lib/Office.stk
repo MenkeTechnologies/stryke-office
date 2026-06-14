@@ -177,6 +177,14 @@ fn Office::sheet_ttest ($path, $a, $b, %opts) {
         office__sheet_ttest(to_json({ path => $path, a => $a, b => $b, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## One-way ANOVA across group columns. opts: columns (arrayref of group columns;
+## default all numeric), decimals, sheet, header. Returns { ok, f, df_between,
+## df_within, p, groups, n } with the upper-tail F p-value.
+fn Office::sheet_anova ($path, %opts) {
+    Office::_decode("sheet_anova",
+        office__sheet_anova(to_json({ path => $path, columns => $opts{columns}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Render a spreadsheet as a GitHub-flavored Markdown table. opts: output (write
 ## to a .md file; omit to return the text), sheet, header. Returns { ok, rows,
 ## cols, markdown, path? }.
