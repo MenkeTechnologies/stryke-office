@@ -77,6 +77,7 @@ exports = [
     "office__sheet_flag",
     "office__sheet_onehot",
     "office__sheet_aggregate",
+    "office__sheet_resample",
     "office__sheet_group_concat",
     "office__sheet_lookup",
     "office__sheet_countif",

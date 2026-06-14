@@ -799,6 +799,17 @@ assert_eq $gpb->[0]{rows}[1][2], 25, "sheet_group_pct: west 10/40 = 25%"
 assert_eq $gpb->[0]{rows}[2][2], 100, "sheet_group_pct: east 5/5 = 100%"
 unlink $gpx
 unlink $gpo
+# sheet_resample: monthly rollup of an ISO date column
+val $rsx = "$dir/$tag-resample.xlsx"
+Office::sheet_write($rsx, [{ name => "D", rows => [["date", "amt"], ["2026-01-05", 10], ["2026-01-20", 20], ["2026-02-02", 5]] }])
+val $rso = "$dir/$tag-resample-out.xlsx"
+val $rsr = Office::sheet_resample($rsx, "date", $rso, freq => "month", value => "amt")
+assert_eq $rsr->{buckets}, 2, "sheet_resample: two month buckets"
+val $rsb = Office::sheet_read($rso)
+assert_eq $rsb->[0]{rows}[1][0], "2026-01", "sheet_resample: first bucket key"
+assert_eq $rsb->[0]{rows}[1][1], 30, "sheet_resample: Jan sum 30"
+unlink $rsx
+unlink $rso
 # sheet_running: group-wise running total
 val $rnx2 = "$dir/$tag-running.xlsx"
 Office::sheet_write($rnx2, [{ name => "D", rows => [["region", "amt"], ["west", 10], ["east", 5], ["west", 30]] }])

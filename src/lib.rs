@@ -6504,6 +6504,113 @@ fn op_sheet_aggregate(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "groups": group_count }))
 }
 
+/// Roll up a date column into time buckets and aggregate a value (time-series
+/// resample over ISO-8601 dates, e.g. `2026-06-14`). Bucketing is by leading
+/// substring — year → `YYYY`, month → `YYYY-MM`, day → `YYYY-MM-DD` — so no date
+/// library is needed (the date column must be ISO-ordered text). opts: path,
+/// output, date => date column name/index (required), value => numeric column
+/// (required unless agg=count), freq => day|month|year (default month), agg =>
+/// count|sum|mean|min|max (default sum), sheet, header, format. Output is a
+/// two-column sheet `[bucket, agg]` sorted ascending. Returns
+/// `{ ok, path, buckets }`.
+fn op_sheet_resample(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let agg = opts.get("agg").and_then(Value::as_str).unwrap_or("sum");
+    if !matches!(agg, "count" | "sum" | "mean" | "min" | "max") {
+        return Err(anyhow!("unknown agg: {agg}"));
+    }
+    let prefix_len = match opts.get("freq").and_then(Value::as_str).unwrap_or("month") {
+        "year" => 4,
+        "day" => 10,
+        "month" => 7,
+        other => return Err(anyhow!("unknown freq: {other} (day|month|year)")),
+    };
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let dcol = resolve_col(opts.get("date"), header_row)?;
+    let vcol = match opts.get("value") {
+        Some(_) => Some(resolve_col(opts.get("value"), header_row)?),
+        None if agg == "count" => None,
+        None => return Err(anyhow!("agg '{agg}' requires a value column")),
+    };
+
+    let cell_at = |row: &Value, c: usize| -> Value {
+        row.as_array()
+            .and_then(|a| a.get(c))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let mut groups: std::collections::BTreeMap<String, (u64, f64, f64, f64, u64)> =
+        std::collections::BTreeMap::new();
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    for row in &rows[data_start..] {
+        let date = cell_to_string(&cell_at(row, dcol));
+        if date.trim().is_empty() {
+            continue;
+        }
+        // Bucket = the leading YYYY / YYYY-MM / YYYY-MM-DD slice (char-safe).
+        let bucket: String = date.chars().take(prefix_len).collect();
+        let e = groups
+            .entry(bucket)
+            .or_insert((0, 0.0, f64::INFINITY, f64::NEG_INFINITY, 0));
+        e.0 += 1;
+        if let Some(vc) = vcol {
+            if let Some(x) = sheet_cell_num(&cell_at(row, vc)) {
+                e.1 += x;
+                e.2 = e.2.min(x);
+                e.3 = e.3.max(x);
+                e.4 += 1;
+            }
+        }
+    }
+
+    let date_name = header_row
+        .and_then(|hr| hr.get(dcol))
+        .map(cell_to_string)
+        .unwrap_or_else(|| "date".to_string());
+    let n = groups.len();
+    let mut out_rows: Vec<Value> = vec![json!([date_name, agg])];
+    for (key, (count, sum, min, max, numc)) in groups {
+        let v = match agg {
+            "count" => json!(count),
+            "sum" => json!(sum),
+            "mean" if numc > 0 => json!(sum / numc as f64),
+            "min" if numc > 0 => json!(min),
+            "max" if numc > 0 => json!(max),
+            _ => Value::Null,
+        };
+        out_rows.push(json!([key, v]));
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Resample", "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "buckets": n }))
+}
+
 /// Group rows by one column and concatenate another column's values per group
 /// (SQL `GROUP_CONCAT`). opts: path, output, group_by => grouping column,
 /// value => column whose values are joined (both name or 0-based index,
@@ -12784,6 +12891,7 @@ export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_flag, op_sheet_flag);
 export!(office__sheet_onehot, op_sheet_onehot);
 export!(office__sheet_aggregate, op_sheet_aggregate);
+export!(office__sheet_resample, op_sheet_resample);
 export!(office__sheet_group_concat, op_sheet_group_concat);
 export!(office__sheet_lookup, op_sheet_lookup);
 export!(office__sheet_countif, op_sheet_countif);
