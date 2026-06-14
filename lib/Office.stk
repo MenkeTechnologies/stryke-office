@@ -562,6 +562,14 @@ fn Office::sheet_to_ndjson ($path, $output, %opts) {
         office__sheet_to_ndjson(to_json({ path => $path, output => $output, sheet => $opts{sheet} })))
 }
 
+## Export a sheet as XML — one element per row, one child per column (header
+## tags, sanitized). opts: root (default "rows"), row (default "row"), sheet,
+## header. Returns { ok, path, count }.
+fn Office::sheet_to_xml ($path, $output, %opts) {
+    Office::_decode("sheet_to_xml",
+        office__sheet_to_xml(to_json({ path => $path, output => $output, root => $opts{root}, row => $opts{row}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Import JSON Lines (NDJSON) into a spreadsheet (inverse of sheet_to_ndjson).
 ## opts: input (.jsonl file) or ndjson (text), fields, sheet_name, format.
 ## Returns { ok, path, rows, fields }.

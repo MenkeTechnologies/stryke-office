@@ -6414,6 +6414,38 @@ fn sheet_to_ndjson_lines() {
 }
 
 #[test]
+fn sheet_to_xml_export() {
+    let path = tmp("toxml.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["name","age"],["A & B",30],["Carol",25]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("toxml.xml");
+    let r = call(
+        office__sheet_to_xml,
+        &format!(r#"{{"path":"{path}","output":"{out}","root":"people","row":"person"}}"#),
+    );
+    assert_eq!(r["count"].as_u64().unwrap(), 2, "two rows: {r}");
+    let xml = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        xml.contains("<people>") && xml.contains("</people>"),
+        "root tag: {xml}"
+    );
+    assert!(xml.contains("<person>"), "row tag: {xml}");
+    assert!(
+        xml.contains("<name>A &amp; B</name>"),
+        "value escaped: {xml}"
+    );
+    assert!(xml.contains("<age>30</age>"), "numeric value: {xml}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn ndjson_to_sheet_from_text() {
     // inline ndjson string (blank line skipped)
     let out = tmp("nd_text.xlsx");

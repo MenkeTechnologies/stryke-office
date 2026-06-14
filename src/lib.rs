@@ -6905,6 +6905,81 @@ fn op_sheet_to_ndjson(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "count": records.len() }))
 }
 
+/// Sanitize a header name into a valid XML element name: keep ASCII
+/// letters/digits/`_`/`-`, replace the rest with `_`, and prefix `_` if it would
+/// start with a digit or be empty.
+fn xml_tag_name(s: &str) -> String {
+    let mut out: String = s
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if out.is_empty() || out.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        out.insert(0, '_');
+    }
+    out
+}
+
+/// Export a sheet's rows as an XML document — one element per row, one child
+/// element per column (header-keyed). opts: path, output (required), root =>
+/// document root tag (default "rows"), row => per-row tag (default "row"),
+/// sheet, header (default true; column names become child tags, sanitized to
+/// valid XML names). Values are XML-escaped. Returns `{ ok, path, count }`.
+fn op_sheet_to_xml(opts: Value) -> Result<Value> {
+    let output = req_str(&opts, "output")?.to_string();
+    let root = opts.get("root").and_then(Value::as_str).unwrap_or("rows");
+    let row_tag = opts.get("row").and_then(Value::as_str).unwrap_or("row");
+    let recs = op_sheet_records(opts.clone())?;
+    let records = recs
+        .get("records")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    xml.push('<');
+    xml.push_str(&xml_tag_name(root));
+    xml.push_str(">\n");
+    for rec in &records {
+        xml.push_str("  <");
+        xml.push_str(&xml_tag_name(row_tag));
+        xml.push_str(">\n");
+        if let Some(obj) = rec.as_object() {
+            for (k, v) in obj {
+                let tag = xml_tag_name(k);
+                // Render whole-number floats as integers for clean output.
+                let text = match v.as_f64() {
+                    Some(f) if v.is_number() && f.fract() == 0.0 && f.is_finite() => {
+                        format!("{}", f as i64)
+                    }
+                    _ => cell_to_string(v),
+                };
+                xml.push_str("    <");
+                xml.push_str(&tag);
+                xml.push('>');
+                xml.push_str(&xml_escape(&text));
+                xml.push_str("</");
+                xml.push_str(&tag);
+                xml.push_str(">\n");
+            }
+        }
+        xml.push_str("  </");
+        xml.push_str(&xml_tag_name(row_tag));
+        xml.push_str(">\n");
+    }
+    xml.push_str("</");
+    xml.push_str(&xml_tag_name(root));
+    xml.push_str(">\n");
+
+    std::fs::write(&output, xml)?;
+    Ok(json!({ "ok": true, "path": output, "count": records.len() }))
+}
+
 /// Import JSON Lines (NDJSON) into a spreadsheet — the inverse of
 /// `sheet_to_ndjson`. opts: input => a `.jsonl`/`.ndjson` file, or ndjson => the
 /// text directly; output (required) => sheet path; fields => explicit column
@@ -15058,6 +15133,7 @@ export!(office__sheet_to_map, op_sheet_to_map);
 export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
 export!(office__sheet_to_ndjson, op_sheet_to_ndjson);
+export!(office__sheet_to_xml, op_sheet_to_xml);
 export!(office__ndjson_to_sheet, op_ndjson_to_sheet);
 export!(office__csv_to_sheet, op_csv_to_sheet);
 export!(office__json_to_sheet, op_json_to_sheet);
