@@ -1326,4 +1326,10 @@ val $beesvg = Office::chart_svg("beeswarm", [{ name => "g", data => [4, 4, 4, 4,
 assert_ok ($beesvg =~ /^<svg/), "chart beeswarm: svg document"
 assert_ok ($beesvg =~ /circle/), "chart beeswarm: point swarm"
 
+# ── chart contour (ggplot2 geom_density_2d): 2-D KDE iso-lines to SVG ─
+val $cntsvg = Office::chart_svg("contour", [{ name => "pts", data => [[1, 1], [1.2, 0.9], [0.9, 1.1], [1, 1.2], [5, 5], [5.1, 4.9], [4.8, 5.2], [5, 5.1], [2, 2], [3, 3]] }])
+assert_ok ($cntsvg =~ /^<svg/), "chart contour: svg document"
+assert_ok ($cntsvg =~ /path/), "chart contour: iso-density lines"
+assert_ok ($cntsvg =~ /circle/), "chart contour: underlying points"
+
 test_run

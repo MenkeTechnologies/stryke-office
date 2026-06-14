@@ -686,7 +686,9 @@ from `range`'s discrete floating bars), `jitter`/`strip` (ggplot2 `geom_jitter`
 (`seed`/`jitter_width`), `strip` keeps points centered), `rug` (ggplot2
 `geom_rug` — marginal tick per raw value along the value axis, one lane per
 series), `beeswarm` (collision-avoiding point swarm whose silhouette encodes the
-distribution — ggbeeswarm `geom_beeswarm`; opt `radius`).
+distribution — ggbeeswarm `geom_beeswarm`; opt `radius`), `contour`/`density2d`
+(ggplot2 `geom_density_2d` — marching-squares iso-density contour lines from a
+2-D Gaussian KDE of scatter `[[x,y],…]`; opts `grid`/`levels`).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,

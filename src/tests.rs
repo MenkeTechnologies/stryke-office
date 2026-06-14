@@ -11071,6 +11071,48 @@ fn chart_beeswarm_raster_and_svg() {
 }
 
 #[test]
+fn marching_squares_encloses_peak() {
+    // 3x3 grid, single peak at the center -> level 0.5 yields a closed 4-seg loop
+    #[rustfmt::skip]
+    let grid = vec![
+        0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0,
+    ];
+    let mut segs = 0;
+    marching_squares(&grid, 3, 3, 0.5, |_, _, _, _| segs += 1);
+    assert_eq!(segs, 4, "contour around a single peak is a 4-segment loop");
+}
+
+#[test]
+fn chart_contour_raster_and_svg() {
+    // two clusters of points -> 2-D density contours
+    let series = r#"[{"name":"pts","data":[[1,1],[1.2,0.9],[0.9,1.1],[1,1.2],[5,5],[5.1,4.9],[4.8,5.2],[5,5.1],[2,2],[3,3]]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"contour","width":460,"height":380,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("contour raster: {c}"));
+    assert_eq!(c["type"], "contour", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"contour","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "contour svg malformed"
+    );
+    // contour line paths present plus faint underlying points
+    assert!(svg.contains("<path"), "contour svg iso-lines");
+    assert!(svg.contains("<circle"), "contour svg underlying points");
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

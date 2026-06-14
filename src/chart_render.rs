@@ -308,6 +308,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_beeswarm(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
         }
+        "contour" | "density2d" => {
+            require_series(&opts)?;
+            render_contour(&mut img, &fnt, series, &opts, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -1463,6 +1467,190 @@ fn render_beeswarm(
         }
         let name = s.get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("{}", si + 1));
         draw_text_mut(img, black, (cx - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(12.0), fnt, &name);
+    }
+}
+
+/// Evaluate a 2-D Gaussian KDE of scatter `points` on a `gx`×`gy` grid spanning
+/// `[xmin,xmax]×[ymin,ymax]`. Per-axis bandwidth follows Silverman's rule. The
+/// returned row-major grid has row 0 at the top (`ymax`) so it maps directly to
+/// screen rows. Values are unnormalized densities (sufficient for relative
+/// contour levels). Shared by both backends.
+#[allow(clippy::too_many_arguments)]
+fn kde2d_grid(
+    points: &[(f64, f64)],
+    xmin: f64,
+    xmax: f64,
+    ymin: f64,
+    ymax: f64,
+    gx: usize,
+    gy: usize,
+) -> Vec<f64> {
+    let n = points.len();
+    if n == 0 {
+        return vec![0.0; gx * gy];
+    }
+    let (mx, my) = (
+        points.iter().map(|p| p.0).sum::<f64>() / n as f64,
+        points.iter().map(|p| p.1).sum::<f64>() / n as f64,
+    );
+    let sx = (points.iter().map(|p| (p.0 - mx).powi(2)).sum::<f64>() / n as f64).sqrt();
+    let sy = (points.iter().map(|p| (p.1 - my).powi(2)).sum::<f64>() / n as f64).sqrt();
+    let mut hx = 1.06 * sx * (n as f64).powf(-0.2);
+    let mut hy = 1.06 * sy * (n as f64).powf(-0.2);
+    if !hx.is_finite() || hx <= 0.0 {
+        hx = (xmax - xmin).abs() / gx as f64 + 1e-6;
+    }
+    if !hy.is_finite() || hy <= 0.0 {
+        hy = (ymax - ymin).abs() / gy as f64 + 1e-6;
+    }
+    let mut grid = vec![0.0f64; gx * gy];
+    for iy in 0..gy {
+        let gyv = ymax - iy as f64 / (gy - 1).max(1) as f64 * (ymax - ymin);
+        for ix in 0..gx {
+            let gxv = xmin + ix as f64 / (gx - 1).max(1) as f64 * (xmax - xmin);
+            let mut d = 0.0;
+            for &(px, py) in points {
+                let zx = (gxv - px) / hx;
+                let zy = (gyv - py) / hy;
+                d += (-0.5 * (zx * zx + zy * zy)).exp();
+            }
+            grid[iy * gx + ix] = d;
+        }
+    }
+    grid
+}
+
+/// Marching-squares contour extraction: for `level`, emit each iso-line segment
+/// in (col,row) grid coordinates via `seg`. Saddle cells (5/10) emit both
+/// diagonals. Linear edge interpolation. Shared by both backends.
+fn marching_squares(grid: &[f64], gx: usize, gy: usize, level: f64, mut seg: impl FnMut(f64, f64, f64, f64)) {
+    let at = |ix: usize, iy: usize| grid[iy * gx + ix];
+    for iy in 0..gy.saturating_sub(1) {
+        for ix in 0..gx.saturating_sub(1) {
+            let (tl, tr, br, bl) = (at(ix, iy), at(ix + 1, iy), at(ix + 1, iy + 1), at(ix, iy + 1));
+            let mut idx = 0u8;
+            if tl > level {
+                idx |= 8;
+            }
+            if tr > level {
+                idx |= 4;
+            }
+            if br > level {
+                idx |= 2;
+            }
+            if bl > level {
+                idx |= 1;
+            }
+            if idx == 0 || idx == 15 {
+                continue;
+            }
+            let interp = |va: f64, vb: f64| if (vb - va).abs() < 1e-12 { 0.5 } else { ((level - va) / (vb - va)).clamp(0.0, 1.0) };
+            let (cx, cy) = (ix as f64, iy as f64);
+            let top = (cx + interp(tl, tr), cy);
+            let right = (cx + 1.0, cy + interp(tr, br));
+            let bottom = (cx + interp(bl, br), cy + 1.0);
+            let left = (cx, cy + interp(tl, bl));
+            let mut line = |a: (f64, f64), c: (f64, f64)| seg(a.0, a.1, c.0, c.1);
+            match idx {
+                1 | 14 => line(left, bottom),
+                2 | 13 => line(bottom, right),
+                3 | 12 => line(left, right),
+                4 | 11 => line(top, right),
+                6 | 9 => line(top, bottom),
+                7 | 8 => line(top, left),
+                5 => {
+                    line(top, left);
+                    line(bottom, right);
+                }
+                10 => {
+                    line(top, right);
+                    line(left, bottom);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// 2-D density contour plot (ggplot2 `geom_density_2d`) — iso-density contour
+/// lines from a 2-D Gaussian KDE of each series' scatter `data => [[x,y],…]`,
+/// over the faint underlying points. opts: `grid` => KDE resolution per axis
+/// (default 48), `levels` => number of contour bands (default 6).
+#[allow(clippy::too_many_arguments)]
+fn render_contour(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    opts: &Value,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid_color: Rgba<u8>,
+) {
+    let (mut xmin, mut xmax, mut ymin, mut ymax) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for s in series {
+        for (x, y) in series_points(s) {
+            xmin = xmin.min(x);
+            xmax = xmax.max(x);
+            ymin = ymin.min(y);
+            ymax = ymax.max(y);
+        }
+    }
+    if !xmin.is_finite() || !ymin.is_finite() {
+        return;
+    }
+    if (xmax - xmin).abs() < f64::EPSILON {
+        xmax = xmin + 1.0;
+    }
+    if (ymax - ymin).abs() < f64::EPSILON {
+        ymax = ymin + 1.0;
+    }
+    let (px0, py0) = ((xmax - xmin) * 0.05, (ymax - ymin) * 0.05);
+    let (xmin, xmax, ymin, ymax) = (xmin - px0, xmax + px0, ymin - py0, ymax + py0);
+
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    draw_line_segment_mut(img, (l as f32, b as f32), (r as f32, b as f32), black);
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    let xp = |x: f64| (l as f64 + (x - xmin) / (xmax - xmin) * pw) as f32;
+    let yp = |y: f64| (b as f64 - (y - ymin) / (ymax - ymin) * ph) as f32;
+    for i in 0..=5 {
+        let yv = ymin + (ymax - ymin) * i as f64 / 5.0;
+        let y = yp(yv);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid_color);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(12.0), fnt, &fmt_num(yv));
+    }
+    draw_text_mut(img, black, l, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmin));
+    draw_text_mut(img, black, ((l as f64 + pw) - 36.0) as i32, b + 6, PxScale::from(12.0), fnt, &fmt_num(xmax));
+
+    let g = opts.get("grid").and_then(Value::as_u64).unwrap_or(48).clamp(8, 120) as usize;
+    let nlev = opts.get("levels").and_then(Value::as_u64).unwrap_or(6).clamp(1, 20) as usize;
+    // grid index (col,row) -> pixel
+    let gpx = |col: f64| (l as f64 + col / (g - 1) as f64 * pw) as f32;
+    let gpy = |row: f64| (t as f64 + row / (g - 1) as f64 * ph) as f32;
+    for (si, s) in series.iter().enumerate() {
+        let pts = series_points(s);
+        if pts.len() < 3 {
+            continue;
+        }
+        let color = series_color(s, si);
+        // faint underlying points
+        let mut faint = color;
+        faint.0[3] = 70;
+        for (x, y) in &pts {
+            draw_filled_circle_mut(img, (xp(*x) as i32, yp(*y) as i32), 2, faint);
+        }
+        let dens = kde2d_grid(&pts, xmin, xmax, ymin, ymax, g, g);
+        let maxd = dens.iter().cloned().fold(f64::EPSILON, f64::max);
+        for li in 1..=nlev {
+            let level = maxd * li as f64 / (nlev + 1) as f64;
+            marching_squares(&dens, g, g, level, |c0, r0, c1, r1| {
+                draw_line_segment_mut(img, (gpx(c0), gpy(r0)), (gpx(c1), gpy(r1)), color);
+            });
+        }
     }
 }
 
