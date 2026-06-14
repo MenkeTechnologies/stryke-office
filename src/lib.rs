@@ -2368,6 +2368,104 @@ fn op_sheet_aggregate(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "groups": group_count }))
 }
 
+/// Frequency analysis (value-counts) of a single column, returned in memory and
+/// sorted by count descending (pandas `value_counts`). Unlike `sheet_aggregate`
+/// (which writes a file sorted by key), this is a pure read for analysis. opts:
+/// path, column => name or 0-based index (required), sheet, header (default
+/// true), ignore_case => fold case when grouping (default false), top => keep
+/// only the N most frequent. Blank cells are skipped. Returns `{ column, total,
+/// distinct, values: [{ value, count, pct }] }` (pct = percent of total, 0..100).
+fn op_sheet_freq(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(Value::as_bool).unwrap_or(true);
+    let ignore_case = opts
+        .get("ignore_case")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let col_name = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    // Preserve the first-seen display form while grouping on a (possibly folded)
+    // key, and keep first-seen order so equal counts tie-break deterministically.
+    let mut counts: std::collections::HashMap<String, (String, u64)> =
+        std::collections::HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+    let mut total = 0u64;
+    for row in &rows[data_start..] {
+        let cell = row
+            .as_array()
+            .and_then(|a| a.get(col))
+            .unwrap_or(&Value::Null);
+        if sheet_cell_blank(cell) {
+            continue;
+        }
+        let display = cell_to_string(cell);
+        let key = if ignore_case {
+            display.to_lowercase()
+        } else {
+            display.clone()
+        };
+        let e = counts.entry(key.clone()).or_insert_with(|| {
+            order.push(key.clone());
+            (display, 0)
+        });
+        e.1 += 1;
+        total += 1;
+    }
+
+    let mut entries: Vec<(String, u64)> = order
+        .into_iter()
+        .map(|k| counts.remove(&k).unwrap())
+        .collect();
+    // Count descending; ties keep first-seen order (stable sort).
+    entries.sort_by_key(|e| std::cmp::Reverse(e.1));
+    if let Some(top) = opts.get("top").and_then(Value::as_u64) {
+        entries.truncate(top as usize);
+    }
+
+    let values: Vec<Value> = entries
+        .iter()
+        .map(|(display, count)| {
+            let pct = if total > 0 {
+                *count as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            };
+            json!({ "value": display, "count": count, "pct": pct })
+        })
+        .collect();
+    Ok(json!({
+        "column": col_name,
+        "total": total,
+        "distinct": values.len(),
+        "values": values,
+    }))
+}
+
 /// Build a pivot table: group rows by one column and columns by another, with a
 /// value aggregated into each cell (Excel PivotTable). opts: path, output,
 /// rows => row-group column, cols => column-group column, value => aggregated
@@ -4811,6 +4909,7 @@ export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);
 export!(office__sheet_filter, op_sheet_filter);
 export!(office__sheet_aggregate, op_sheet_aggregate);
+export!(office__sheet_freq, op_sheet_freq);
 export!(office__sheet_pivot, op_sheet_pivot);
 export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);

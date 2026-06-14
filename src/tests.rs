@@ -1398,6 +1398,55 @@ fn sheet_aggregate_group_by() {
 }
 
 #[test]
+fn sheet_freq_value_counts() {
+    let path = tmp("freq.xlsx");
+    // west x3, east x2, north x1; one blank (skipped)
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["region"],
+                ["west"],
+                ["east"],
+                ["west"],
+                ["north"],
+                ["east"],
+                ["west"],
+                [""]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let r = call(
+        office__sheet_freq,
+        &format!(r#"{{"path":"{path}","column":"region"}}"#),
+    );
+    assert_eq!(r["column"], "region", "column name: {r}");
+    assert_eq!(r["total"], 6, "blank skipped, 6 counted: {r}");
+    assert_eq!(r["distinct"], 3, "three distinct: {r}");
+    let v = r["values"].as_array().unwrap();
+    // sorted by count desc: west(3), east(2), north(1)
+    assert_eq!(v[0]["value"], "west", "most frequent first: {r}");
+    assert_eq!(v[0]["count"], 3, "west count: {r}");
+    assert_eq!(v[1]["value"], "east", "second: {r}");
+    assert_eq!(v[2]["value"], "north", "least: {r}");
+    assert!(
+        (v[0]["pct"].as_f64().unwrap() - 50.0).abs() < 1e-9,
+        "west 50%: {r}"
+    );
+
+    // top=1 keeps only the most frequent
+    let t = call(
+        office__sheet_freq,
+        &format!(r#"{{"path":"{path}","column":"region","top":1}}"#),
+    );
+    assert_eq!(t["values"].as_array().unwrap().len(), 1, "top limited: {t}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_filter_rows() {
     let path = tmp("filt.xlsx");
     let w = call(
