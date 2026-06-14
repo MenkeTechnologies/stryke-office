@@ -1355,4 +1355,10 @@ assert_ok ($splomsvg =~ /^<svg/), "chart pairs: svg document"
 assert_ok ($splomsvg =~ />mpg</), "chart pairs: diagonal variable label"
 assert_ok ($splomsvg =~ /circle/), "chart pairs: scatter panels"
 
+# ── chart dendrogram (base R hclust): clustering tree to SVG ────────
+val $dndsvg = Office::chart_svg("dendrogram", [{ name => "a", data => [0, 0] }, { name => "b", data => [0.4, 0.2] }, { name => "c", data => [9, 9] }, { name => "d", data => [9.3, 8.8] }])
+assert_ok ($dndsvg =~ /^<svg/), "chart dendrogram: svg document"
+assert_ok ($dndsvg =~ /polyline/), "chart dendrogram: merge brackets"
+assert_ok ($dndsvg =~ />c</), "chart dendrogram: leaf label"
+
 test_run

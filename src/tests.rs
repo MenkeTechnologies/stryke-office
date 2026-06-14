@@ -11262,6 +11262,53 @@ fn chart_pairs_splom_raster_and_svg() {
 }
 
 #[test]
+fn hclust_merges_tight_clusters_first() {
+    // two tight pairs near 0 and near 100; the cross merge must be the last (root)
+    let feats = vec![vec![0.0], vec![0.5], vec![100.0], vec![100.5]];
+    let (nodes, root) = hclust(&feats);
+    // n=4 leaves -> 3 internal merges, ids 4,5,6; root is the highest
+    assert_eq!(nodes.len(), 7, "4 leaves + 3 merges");
+    assert_eq!(root, 6, "last merge is the root");
+    // root height (cross-cluster ~100) far exceeds the earlier within-pair merges
+    let root_h = nodes[root].2;
+    let inner_max = nodes[4..6].iter().map(|&(_, _, h)| h).fold(0.0, f64::max);
+    assert!(
+        root_h > inner_max * 10.0,
+        "root merge dwarfs the tight merges: {root_h} vs {inner_max}"
+    );
+}
+
+#[test]
+fn chart_dendrogram_raster_and_svg() {
+    let series = r#"[{"name":"a","data":[0,0]},{"name":"b","data":[0.4,0.2]},{"name":"c","data":[9,9]},{"name":"d","data":[9.3,8.8]}]"#;
+    let c = call(
+        office__chart_render,
+        &format!(r#"{{"type":"dendrogram","width":460,"height":360,"series":{series}}}"#),
+    );
+    let h = c["handle"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("dendrogram raster: {c}"));
+    assert_eq!(c["type"], "dendrogram", "type echoed: {c}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+
+    let v = call(
+        office__chart_svg,
+        &format!(r#"{{"type":"hclust","series":{series}}}"#),
+    );
+    let svg = v["svg"].as_str().unwrap_or("");
+    assert!(
+        svg.starts_with("<svg") && svg.ends_with("</svg>"),
+        "dendrogram svg malformed"
+    );
+    // 3 merge brackets (n-1 polylines) + 4 leaf labels
+    assert_eq!(svg.matches("<polyline").count(), 3, "n-1 merge brackets");
+    assert!(
+        svg.contains(">a<") && svg.contains(">b<") && svg.contains(">c<") && svg.contains(">d<"),
+        "leaf labels"
+    );
+}
+
+#[test]
 fn chart_types_render_raster_and_svg() {
     // treemap / polar / pareto / stacked_area use a flat series
     let series = r#"[{"name":"s","data":[40,25,15,12,8]}]"#;

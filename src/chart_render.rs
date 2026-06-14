@@ -328,6 +328,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
             require_series(&opts)?;
             render_pairs(&mut img, &fnt, series, l, t, r, b, black, grid)
         }
+        "dendrogram" | "hclust" | "cluster" => {
+            require_series(&opts)?;
+            render_dendrogram(&mut img, &fnt, series, l, t, r, b, black, grid)
+        }
         _ => special = false,
     }
 
@@ -550,7 +554,10 @@ fn op_chart_render(opts: Value) -> Result<Value> {
 
     // Shared legend (series names, or pie/funnel categories).
     if opts.get("legend").and_then(flag_of) != Some(false)
-        && !matches!(kind.as_str(), "pairs" | "splom" | "scattermatrix")
+        && !matches!(
+            kind.as_str(),
+            "pairs" | "splom" | "scattermatrix" | "dendrogram" | "hclust" | "cluster"
+        )
     {
         let entries = legend_entries(&kind, series, &cats);
         draw_legend(&mut img, &fnt, &entries, w as i32, t, black);
@@ -2021,6 +2028,124 @@ fn render_pairs(
                 draw_filled_circle_mut(img, (px(cols[j][k]) as i32, py(cols[i][k]) as i32), 2, base);
             }
         }
+    }
+}
+
+/// Agglomerative hierarchical clustering (UPGMA, average linkage) over feature
+/// vectors `feats` using Euclidean distance. Returns `(nodes, root)` where each
+/// node is `(left, right, height)`: leaves (ids `0..n`) have `left=right=-1`,
+/// internal nodes reference child ids and carry the merge distance as height.
+/// Shared by both backends' dendrogram renderers.
+fn hclust(feats: &[Vec<f64>]) -> (Vec<(i64, i64, f64)>, usize) {
+    let n = feats.len();
+    let dist = |a: &[f64], b: &[f64]| {
+        a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum::<f64>().sqrt()
+    };
+    let mut nodes: Vec<(i64, i64, f64)> = (0..n).map(|_| (-1, -1, 0.0)).collect();
+    let mut active: Vec<(usize, Vec<usize>)> = (0..n).map(|i| (i, vec![i])).collect();
+    while active.len() > 1 {
+        let mut best = (f64::INFINITY, 0usize, 1usize);
+        for a in 0..active.len() {
+            for b in (a + 1)..active.len() {
+                let (ma, mb) = (&active[a].1, &active[b].1);
+                let mut sum = 0.0;
+                for &i in ma {
+                    for &j in mb {
+                        sum += dist(&feats[i], &feats[j]);
+                    }
+                }
+                let d = sum / (ma.len() * mb.len()) as f64;
+                if d < best.0 {
+                    best = (d, a, b);
+                }
+            }
+        }
+        let (h, a, b) = best;
+        let cb = active.remove(b); // remove higher index first
+        let ca = active.remove(a);
+        let id = nodes.len();
+        nodes.push((ca.0 as i64, cb.0 as i64, h));
+        let mut mem = ca.1;
+        mem.extend(cb.1);
+        active.push((id, mem));
+    }
+    (nodes, active[0].0)
+}
+
+/// Dendrogram (base R `hclust` / `plot.hclust`) — agglomerative clustering tree
+/// of observations, each series a feature vector (`data => [f1,f2,…]`, equal
+/// length) labeled by its name. Average-linkage Euclidean merges; the y axis is
+/// merge height. Leaf order follows the tree so branches don't cross.
+#[allow(clippy::too_many_arguments)]
+fn render_dendrogram(
+    img: &mut RgbaImage,
+    fnt: &FontRef,
+    series: &[Value],
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    black: Rgba<u8>,
+    grid: Rgba<u8>,
+) {
+    let feats: Vec<Vec<f64>> = series.iter().map(series_nums).collect();
+    let n = feats.len();
+    if n < 2 || feats.iter().any(Vec::is_empty) {
+        return;
+    }
+    let (nodes, root) = hclust(&feats);
+    // left-to-right leaf order via DFS (push right then left so left pops first)
+    let mut order = Vec::with_capacity(n);
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        let (lft, rgt, _) = nodes[id];
+        if lft < 0 {
+            order.push(id);
+        } else {
+            stack.push(rgt as usize);
+            stack.push(lft as usize);
+        }
+    }
+    let mut rank = vec![0usize; nodes.len()];
+    for (k, &leaf) in order.iter().enumerate() {
+        rank[leaf] = k;
+    }
+    let pw = (r - l).max(1) as f64;
+    let ph = (b - t).max(1) as f64;
+    let xpix = |k: usize| l as f64 + (k as f64 + 0.5) / n as f64 * pw;
+    // node x positions, bottom-up (children always have smaller id)
+    let mut nx = vec![0.0f64; nodes.len()];
+    for id in 0..nodes.len() {
+        let (lft, rgt, _) = nodes[id];
+        nx[id] = if lft < 0 {
+            xpix(rank[id])
+        } else {
+            (nx[lft as usize] + nx[rgt as usize]) / 2.0
+        };
+    }
+    let maxh = nodes[root].2.max(1e-9);
+    let yh = |h: f64| (b as f64 - h / maxh * ph * 0.92) as f32;
+
+    draw_line_segment_mut(img, (l as f32, t as f32), (l as f32, b as f32), black);
+    for i in 0..=5 {
+        let h = maxh * i as f64 / 5.0;
+        let y = yh(h);
+        draw_line_segment_mut(img, (l as f32, y), (r as f32, y), grid);
+        draw_text_mut(img, black, 4, y as i32 - 6, PxScale::from(11.0), fnt, &fmt_num(h));
+    }
+    let color = series_color(series.first().unwrap_or(&Value::Null), 0);
+    for id in n..nodes.len() {
+        let (lft, rgt, h) = nodes[id];
+        let (lu, ru) = (lft as usize, rgt as usize);
+        let (xl, xr) = (nx[lu] as f32, nx[ru] as f32);
+        let yn = yh(h);
+        draw_line_segment_mut(img, (xl, yn), (xr, yn), color); // bracket top
+        draw_line_segment_mut(img, (xl, yh(nodes[lu].2)), (xl, yn), color);
+        draw_line_segment_mut(img, (xr, yh(nodes[ru].2)), (xr, yn), color);
+    }
+    for (k, &leaf) in order.iter().enumerate() {
+        let name = series[leaf].get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("V{}", leaf + 1));
+        draw_text_mut(img, black, (xpix(k) - name.len() as f64 * 3.0) as i32, b + 6, PxScale::from(11.0), fnt, &name);
     }
 }
 

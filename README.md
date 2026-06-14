@@ -696,7 +696,10 @@ ridges stacked on their own baselines; opts `points`/`overlap`), `smooth`/`loess
 `bin2d` (ggplot2 `geom_bin2d` — rectangular 2-D count heatmap of pooled scatter
 points; opts `bins`/`xbins`/`ybins`; the square-cell counterpart to `hexbin`),
 `pairs`/`splom`/`scattermatrix` (base R `pairs()` — m×m scatterplot matrix where
-each series is one variable column `data => [v1,v2,…]`, names on the diagonal).
+each series is one variable column `data => [v1,v2,…]`, names on the diagonal),
+`dendrogram`/`hclust`/`cluster` (base R `hclust` — agglomerative average-linkage
+Euclidean clustering tree of observations, each series a feature vector; y axis
+is merge height).
 opts: `title`, `width` (800), `height` (600), `categories`, per-series
 `color`, `legend => 0` to suppress, `labels => 1` for data labels, `x_label`,
 `y_label`, `markers => 1` (line family), `reference_lines => [{y, color}]`,

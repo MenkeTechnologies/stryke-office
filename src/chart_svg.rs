@@ -88,6 +88,7 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
         "smooth" | "loess" => svg_smooth(&mut s, series, opts, l, t, r, b),
         "bin2d" | "bin_2d" => svg_bin2d(&mut s, series, opts, l, t, r, b),
         "pairs" | "splom" | "scattermatrix" => svg_pairs(&mut s, series, l, t, r, b),
+        "dendrogram" | "hclust" | "cluster" => svg_dendrogram(&mut s, series, l, t, r, b),
         _ => special = false,
     }
 
@@ -301,7 +302,10 @@ fn chart_to_svg(opts: &Value) -> Result<String> {
 
     // shared legend
     if opts.get("legend").and_then(flag_of) != Some(false)
-        && !matches!(kind, "pairs" | "splom" | "scattermatrix")
+        && !matches!(
+            kind,
+            "pairs" | "splom" | "scattermatrix" | "dendrogram" | "hclust" | "cluster"
+        )
     {
         svg_legend(&mut s, kind, series, &cats, w, t);
     }
@@ -1918,6 +1922,65 @@ fn svg_pairs(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
                 let _ = write!(s, r##"<circle cx="{:.1}" cy="{:.1}" r="2" fill="{col}"/>"##, px(cols[j][k]), py(cols[i][k]));
             }
         }
+    }
+}
+
+/// Dendrogram (vector; base R `hclust`). Average-linkage Euclidean clustering
+/// tree of observations (each series a feature vector), y = merge height.
+fn svg_dendrogram(s: &mut String, series: &[Value], l: f64, t: f64, r: f64, b: f64) {
+    let feats: Vec<Vec<f64>> = series.iter().map(series_nums).collect();
+    let n = feats.len();
+    if n < 2 || feats.iter().any(Vec::is_empty) {
+        return;
+    }
+    let (nodes, root) = hclust(&feats);
+    let mut order = Vec::with_capacity(n);
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        let (lft, rgt, _) = nodes[id];
+        if lft < 0 {
+            order.push(id);
+        } else {
+            stack.push(rgt as usize);
+            stack.push(lft as usize);
+        }
+    }
+    let mut rank = vec![0usize; nodes.len()];
+    for (k, &leaf) in order.iter().enumerate() {
+        rank[leaf] = k;
+    }
+    let (pw, ph) = (r - l, b - t);
+    let xpix = |k: usize| l + (k as f64 + 0.5) / n as f64 * pw;
+    let mut nx = vec![0.0f64; nodes.len()];
+    for id in 0..nodes.len() {
+        let (lft, rgt, _) = nodes[id];
+        nx[id] = if lft < 0 {
+            xpix(rank[id])
+        } else {
+            (nx[lft as usize] + nx[rgt as usize]) / 2.0
+        };
+    }
+    let maxh = nodes[root].2.max(1e-9);
+    let yh = |h: f64| b - h / maxh * ph * 0.92;
+
+    let _ = write!(s, r##"<line x1="{l}" y1="{t}" x2="{l}" y2="{b}" stroke="#1e1e1e"/>"##);
+    for i in 0..=5 {
+        let h = maxh * i as f64 / 5.0;
+        let y = yh(h);
+        let _ = write!(s, r##"<line x1="{l}" y1="{y:.1}" x2="{r}" y2="{y:.1}" stroke="#d2d2d2"/>"##);
+        let _ = write!(s, r##"<text x="4" y="{:.1}" font-size="10" fill="#1e1e1e">{}</text>"##, y + 4.0, xml_escape(&fmt_num(h)));
+    }
+    let col = svg_palette(0);
+    for id in n..nodes.len() {
+        let (lft, rgt, h) = nodes[id];
+        let (lu, ru) = (lft as usize, rgt as usize);
+        let (xl, xr) = (nx[lu], nx[ru]);
+        let yn = yh(h);
+        let _ = write!(s, r##"<polyline points="{:.1},{:.1} {:.1},{yn:.1} {:.1},{yn:.1} {:.1},{:.1}" fill="none" stroke="{col}" stroke-width="1.5"/>"##, xl, yh(nodes[lu].2), xl, xr, xr, yh(nodes[ru].2));
+    }
+    for (k, &leaf) in order.iter().enumerate() {
+        let name = series[leaf].get("name").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("V{}", leaf + 1));
+        let _ = write!(s, r##"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-size="10" fill="#1e1e1e">{}</text>"##, xpix(k), b + 14.0, xml_escape(&name));
     }
 }
 
