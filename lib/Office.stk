@@ -169,6 +169,14 @@ fn Office::sheet_regress ($path, $x, $y, %opts) {
         office__sheet_regress(to_json({ path => $path, x => $x, y => $y, output => $opts{output}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Welch's two-sample t-test between columns $a and $b (independent samples).
+## opts: decimals, sheet, header. Returns { ok, t, df, p, mean_a, mean_b, n_a,
+## n_b } with two-sided Student-t p-value.
+fn Office::sheet_ttest ($path, $a, $b, %opts) {
+    Office::_decode("sheet_ttest",
+        office__sheet_ttest(to_json({ path => $path, a => $a, b => $b, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Render a spreadsheet as a GitHub-flavored Markdown table. opts: output (write
 ## to a .md file; omit to return the text), sheet, header. Returns { ok, rows,
 ## cols, markdown, path? }.
