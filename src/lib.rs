@@ -2921,6 +2921,141 @@ fn op_sheet_normalize(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Bucket a numeric column into bins and append the bin assignment as a new
+/// column (the pandas `pd.cut` analogue; the labeling counterpart to the
+/// counts-only `sheet_histogram`). opts: path, output, column => name/index
+/// (required), `edges` => ascending boundary array (N+1 edges → N bins) OR
+/// `bins` => equal-width bin count over [min, max] (default 10), `labels` =>
+/// optional array of length nbins to write instead of the 0-based bin index,
+/// into => new column header (default "{column}_bin"), sheet, header, format.
+/// Non-numeric cells and values outside the edge range get a blank. The maximum
+/// edge is inclusive. Returns `{ ok, path, column, into, bins }`.
+fn op_sheet_bin(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_bin"));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    // Build bin edges: explicit `edges`, else equal-width over the data range.
+    let edges: Vec<f64> = match opts.get("edges").and_then(Value::as_array) {
+        Some(a) => {
+            let e: Vec<f64> = a.iter().filter_map(Value::as_f64).collect();
+            if e.len() < 2 {
+                return Err(anyhow!("edges must list at least two boundaries"));
+            }
+            if e.windows(2).any(|w| w[1] <= w[0]) {
+                return Err(anyhow!("edges must be strictly ascending"));
+            }
+            e
+        }
+        None => {
+            let nbins = opts
+                .get("bins")
+                .and_then(Value::as_u64)
+                .filter(|&n| n > 0)
+                .unwrap_or(10) as usize;
+            let vals: Vec<f64> = rows[data_start..]
+                .iter()
+                .filter_map(|r| {
+                    r.as_array()
+                        .and_then(|a| a.get(col))
+                        .and_then(sheet_cell_num)
+                })
+                .collect();
+            if vals.is_empty() {
+                return Err(anyhow!("no numeric values to bin"));
+            }
+            let lo = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+            let hi = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let width = (hi - lo) / nbins as f64;
+            (0..=nbins)
+                .map(|i| {
+                    if i == nbins {
+                        hi
+                    } else {
+                        lo + width * i as f64
+                    }
+                })
+                .collect()
+        }
+    };
+    let nbins = edges.len() - 1;
+    let labels: Option<Vec<Value>> = opts.get("labels").and_then(Value::as_array).cloned();
+    if let Some(l) = &labels {
+        if l.len() != nbins {
+            return Err(anyhow!("labels length {} != bin count {nbins}", l.len()));
+        }
+    }
+
+    // Map a value to its 0-based bin index (max edge inclusive); None if outside.
+    let bin_of = |x: f64| -> Option<usize> {
+        if x < edges[0] || x > edges[nbins] {
+            return None;
+        }
+        if x == edges[nbins] {
+            return Some(nbins - 1);
+        }
+        edges.windows(2).position(|w| x >= w[0] && x < w[1])
+    };
+
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = match cells.get(col).and_then(sheet_cell_num).and_then(bin_of) {
+                    Some(b) => match &labels {
+                        Some(l) => l[b].clone(),
+                        None => json!(b),
+                    },
+                    None => json!(""),
+                };
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": base, "into": into, "bins": nbins }))
+}
+
 /// Append a moving-average (rolling mean) column over a fixed window. opts: path,
 /// output, column => name or 0-based index (required), window => number of rows
 /// (required, ≥1), into => new column header (default "{column}_ma{window}"),
@@ -8534,6 +8669,7 @@ export!(office__sheet_freeze, op_sheet_freeze);
 export!(office__sheet_autofilter, op_sheet_autofilter);
 export!(office__sheet_round, op_sheet_round);
 export!(office__sheet_histogram, op_sheet_histogram);
+export!(office__sheet_bin, op_sheet_bin);
 export!(office__sheet_outliers, op_sheet_outliers);
 export!(office__sheet_cov, op_sheet_cov);
 export!(office__sheet_split, op_sheet_split);
