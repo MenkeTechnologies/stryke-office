@@ -191,6 +191,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_lookup($path, $lookup, $key, $result, %opts)` | `{found, value, row}` | VLOOKUP — find a key in one column, return the cell from another; `ignore_case` opt |
 | `Office::sheet_countif($path, $column, %opts)` | `{count}` | count rows where a column matches a predicate (COUNTIF); `op`/`value`/`ignore_case` opts |
 | `Office::sheet_sumif($path, $column, %opts)` | `{sum, count}` | sum a column over rows matching a predicate (SUMIF); `op`/`value`/`sum` opts |
+| `Office::sheet_sumifs($path, $conditions, %opts)` | `{sum, count}` | multi-criteria conditional sum/count (SUMIFS/COUNTIFS); `sum` column, `match` all/any |
 | `Office::sheet_split_column($path, $column, $output, %opts)` | `{ok, path, columns}` | split a column into several by a delimiter (Text to Columns); `delimiter`/`into`/`max`/`keep` opts |
 | `Office::sheet_concat_columns($path, $columns, $output, %opts)` | `{ok, path, into}` | join several columns into one with a separator (Excel `TEXTJOIN`); `separator`/`into`/`skip_blanks`/`keep` opts |
 | `Office::sheet_filter($path, $by, $output, %opts)` | `{kept, removed, column}` | keep rows matching `op` (eq/ne/contains/gt/lt/ge/le) on a column |
