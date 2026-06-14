@@ -44,6 +44,7 @@ exports = [
     "office__sheet_shift",
     "office__sheet_clamp",
     "office__sheet_rename_column",
+    "office__sheet_rename_columns",
     "office__sheet_explode",
     "office__sheet_map",
     "office__sheet_partition",

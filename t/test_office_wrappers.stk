@@ -183,6 +183,11 @@ val $rco = "$dir/$tag-rencol-out.xlsx"
 Office::sheet_rename_column($csx, "amt", "total", $rco)
 val $rcr = Office::sheet_get_cell($rco, "A1")
 assert_eq $rcr->{value}, "total", "sheet_rename_column: header renamed"
+# bulk rename headers via a map
+val $rcmo = "$dir/$tag-rencols-out.xlsx"
+val $rcmr = Office::sheet_rename_columns($csx, $rcmo, { amt => "total", id => "key" })
+assert_ok ($rcmr->{renamed} >= 1), "sheet_rename_columns: renamed count"
+unlink $rcmo
 unlink $csx
 unlink $cso
 unlink $pco
