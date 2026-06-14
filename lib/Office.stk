@@ -166,6 +166,14 @@ fn Office::sheet_to_ndjson ($path, $output, %opts) {
         office__sheet_to_ndjson(to_json({ path => $path, output => $output, sheet => $opts{sheet} })))
 }
 
+## Import JSON Lines (NDJSON) into a spreadsheet (inverse of sheet_to_ndjson).
+## opts: input (.jsonl file) or ndjson (text), fields, sheet_name, format.
+## Returns { ok, path, rows, fields }.
+fn Office::ndjson_to_sheet ($output, %opts) {
+    Office::_decode("ndjson_to_sheet",
+        office__ndjson_to_sheet(to_json({ output => $output, input => $opts{input}, ndjson => $opts{ndjson}, fields => $opts{fields}, sheet_name => $opts{sheet_name}, format => $opts{format} })))
+}
+
 ## Import a JSON file (array of objects) into a spreadsheet. opts: fields =>
 ## explicit column order, sheet_name, format => override. Returns
 ## { ok, path, rows, fields }.

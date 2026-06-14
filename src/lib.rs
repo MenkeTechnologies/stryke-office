@@ -1947,6 +1947,42 @@ fn op_sheet_to_ndjson(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "count": records.len() }))
 }
 
+/// Import JSON Lines (NDJSON) into a spreadsheet — the inverse of
+/// `sheet_to_ndjson`. opts: input => a `.jsonl`/`.ndjson` file, or ndjson => the
+/// text directly; output (required) => sheet path; fields => explicit column
+/// order (default: keys in first-seen order); sheet_name (default "Sheet1");
+/// format => override. Blank lines are skipped; each non-blank line must be a
+/// JSON object. Returns `{ ok, path, rows, fields }`.
+fn op_ndjson_to_sheet(opts: Value) -> Result<Value> {
+    let text = match opts.get("ndjson").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            let input = req_str(&opts, "input")?;
+            String::from_utf8_lossy(&std::fs::read(input)?).into_owned()
+        }
+    };
+    let mut records: Vec<Value> = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let v: Value = serde_json::from_str(line.trim())
+            .map_err(|e| anyhow!("line {}: invalid JSON: {e}", i + 1))?;
+        if !v.is_object() {
+            return Err(anyhow!("line {}: expected a JSON object", i + 1));
+        }
+        records.push(v);
+    }
+
+    let mut wopts = json!({ "path": req_str(&opts, "output")?, "records": records });
+    for k in ["fields", "sheet_name", "format"] {
+        if let Some(val) = opts.get(k) {
+            wopts[k] = val.clone();
+        }
+    }
+    op_records_write(wopts)
+}
+
 /// Import a JSON file (array of objects) into a spreadsheet. opts: input (.json),
 /// output (sheet path), fields => explicit column order, sheet_name, format.
 /// Returns `{ ok, path, rows, fields }` (from records_write).
@@ -5377,6 +5413,7 @@ export!(office__sheet_records, op_sheet_records);
 export!(office__records_write, op_records_write);
 export!(office__sheet_to_json, op_sheet_to_json);
 export!(office__sheet_to_ndjson, op_sheet_to_ndjson);
+export!(office__ndjson_to_sheet, op_ndjson_to_sheet);
 export!(office__json_to_sheet, op_json_to_sheet);
 export!(office__sheet_sort, op_sheet_sort);
 export!(office__sheet_rank, op_sheet_rank);

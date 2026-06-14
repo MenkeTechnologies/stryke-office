@@ -92,8 +92,15 @@ Office::sheet_write($nx, [{ name => "D", rows => [["name", "qty"], ["a", 1], ["b
 val $no = "$dir/$tag-nd.jsonl"
 val $nr = Office::sheet_to_ndjson($nx, $no)
 assert_eq $nr->{count}, 2, "sheet_to_ndjson: record count"
+# import the JSON Lines back into a sheet (inverse)
+val $nb = "$dir/$tag-nd-back.xlsx"
+val $nir = Office::ndjson_to_sheet($nb, input => $no)
+assert_eq $nir->{rows}, 2, "ndjson_to_sheet: rows imported"
+val $nbr = Office::sheet_read($nb)
+assert_eq $nbr->[0]{rows}[1][0], "a", "ndjson_to_sheet: value round-trips"
 unlink $nx
 unlink $no
+unlink $nb
 
 # ── sheet_transform: per-column op ──────────────────────────────────
 val $tx = "$dir/$tag-xform.xlsx"
