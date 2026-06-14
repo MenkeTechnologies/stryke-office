@@ -533,6 +533,43 @@ fn sheet_corr_pearson_matrix() {
 }
 
 #[test]
+fn sheet_corr_spearman_monotonic() {
+    // y = x^3 is monotonic but non-linear: Spearman = 1 while Pearson < 1.
+    let path = tmp("corr_sp.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"C","rows":[
+                ["x","y"],
+                [1,1],
+                [2,8],
+                [3,27],
+                [4,64],
+                [5,125]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let sp = call(
+        office__sheet_corr,
+        &format!(r#"{{"path":"{path}","method":"spearman"}}"#),
+    );
+    assert!(
+        (sp["matrix"][0][1].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "spearman monotonic = 1: {sp}"
+    );
+
+    let pe = call(office__sheet_corr, &format!(r#"{{"path":"{path}"}}"#));
+    assert!(
+        pe["matrix"][0][1].as_f64().unwrap() < 0.98,
+        "pearson < 1 for x^3: {pe}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_cov_matrix() {
     let path = tmp("cov.xlsx");
     // x = [1,2,3], y = 2x. Sample var(x) = 1; cov(x,y) = 2; var(y) = 4.

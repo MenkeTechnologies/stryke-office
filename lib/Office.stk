@@ -153,11 +153,12 @@ fn Office::sheet_argmax ($path, $column, %opts) {
         office__sheet_argmax(to_json({ path => $path, column => $column, min => $opts{min}, label => $opts{label}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
-## Pearson correlation matrix between numeric columns (pandas df.corr()).
-## opts: sheet, header. Returns { sheet, columns, matrix }.
+## Correlation matrix between numeric columns (pandas df.corr()). opts: method =>
+## "pearson" (default) | "spearman" (rank correlation), sheet, header. Returns
+## { sheet, columns, matrix }.
 fn Office::sheet_corr ($path, %opts) {
     Office::_decode("sheet_corr",
-        office__sheet_corr(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+        office__sheet_corr(to_json({ path => $path, method => $opts{method}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
 ## Render a spreadsheet as a GitHub-flavored Markdown table. opts: output (write
