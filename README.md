@@ -322,6 +322,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_readability($path)` | `{words, sentences, syllables, flesch_reading_ease, flesch_kincaid_grade}` | Flesch Reading Ease + Flesch–Kincaid Grade Level (heuristic syllable count) |
 | `Office::doc_sentences($path, %opts)` | `{count, sentences}` | split a document's text into sentences (NLP prep); `max` opt |
 | `Office::doc_summary($path, %opts)` | `{ok, summary, count, total_sentences}` | extractive summary — top sentences by content-word frequency, in order; `sentences` count opt |
+| `Office::doc_extract($path, %opts)` | `{ok, count, matches}` | extract all regex matches from a doc's text; `pattern` or `preset` (email/url/phone/number), `unique`/`sort` |
 | `Office::doc_diff($a, $b)` | `{same, added, removed, added_paragraphs, removed_paragraphs}` | order-aware LCS paragraph diff between two documents |
 | `Office::doc_comments($path)` | `{comments:[{id,author,date,initials,text}], count}` | extract review comments from a docx (`word/comments.xml`) |
 | `Office::doc_footnotes($path, %opts)` | `{notes:[{id,text}], count}` | extract footnotes (or `endnotes`) from a docx (`word/footnotes.xml`) |

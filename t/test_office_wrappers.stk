@@ -1433,6 +1433,12 @@ val $smr = Office::doc_summary($smt, sentences => 1)
 assert_eq $smr->{count}, 1, "doc_summary: one sentence kept"
 assert_ok ($smr->{summary}[0] =~ /budget/), "doc_summary: picks topical sentence"
 unlink $smt
+# doc_extract: pull emails from text
+val $dext = "$dir/$tag-extract.txt"
+spew $dext, "Reach a\@x.com or b\@y.org and a\@x.com again"
+val $dexr = Office::doc_extract($dext, preset => "email")
+assert_eq $dexr->{count}, 2, "doc_extract: two distinct emails"
+unlink $dext
 
 # ── doc_diff: paragraph-level LCS diff between two docs ──────────────
 val $dfa = "$dir/$tag-diffa.docx"
