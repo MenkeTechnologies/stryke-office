@@ -1151,6 +1151,14 @@ fn Office::sheet_strip ($path, %opts) {
         office__sheet_strip(to_json({ path => $path, collapse => $opts{collapse}, output => $opts{output}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a URL/ID-safe slug column from a text $column (lowercase, non-alnum ->
+## separator). opts: separator (default "-"), into (default {column}_slug),
+## sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_slugify ($path, $column, $output, %opts) {
+    Office::_decode("sheet_slugify",
+        office__sheet_slugify(to_json({ path => $path, column => $column, output => $output, separator => $opts{separator}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Pad a column's values to a fixed $width with a fill string (e.g. zero-pad IDs).
 ## opts: fill (default "0"), side (left|right, default left), into (new column;
 ## default in place), sheet, header, format. Returns { ok, path, padded }.

@@ -13719,6 +13719,93 @@ fn op_sheet_cast(opts: Value) -> Result<Value> {
 /// collapse internal runs of whitespace to a single space (default false), sheet,
 /// header (default true; the header row is trimmed too), format. Numeric cells
 /// are left untouched. Returns `{ ok, path, trimmed }` (count of cells changed).
+/// Slugify a string: lowercase, non-alphanumeric runs → a single separator,
+/// trimmed. Used by `sheet_slugify` (and handy for filenames/anchors/IDs).
+fn slugify(s: &str, sep: char) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut last_sep = true; // suppress leading separators
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.extend(c.to_lowercase());
+            last_sep = false;
+        } else if !last_sep {
+            out.push(sep);
+            last_sep = true;
+        }
+    }
+    while out.ends_with(sep) {
+        out.pop();
+    }
+    out
+}
+
+/// Append a URL/ID-safe slug column derived from a text column — lowercased,
+/// non-alphanumeric runs collapsed to a separator (e.g. "Q3 Report (2026)!" →
+/// "q3-report-2026"). opts: path, output, column => name/index (required),
+/// separator => single char (default "-"), into => new column (default
+/// `{column}_slug`), sheet, header (default true), format. Returns
+/// `{ ok, path, column }`.
+fn op_sheet_slugify(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let sep = opts
+        .get("separator")
+        .and_then(Value::as_str)
+        .and_then(|s| s.chars().next())
+        .unwrap_or('-');
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_slug"));
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let s = cells.get(col).map(cell_to_string).unwrap_or_default();
+                cells.push(json!(slugify(&s, sep)));
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_strip(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = opts
@@ -16513,6 +16600,7 @@ export!(office__sheet_train_test_split, op_sheet_train_test_split);
 export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
+export!(office__sheet_slugify, op_sheet_slugify);
 export!(office__sheet_pad, op_sheet_pad);
 export!(office__sheet_substr, op_sheet_substr);
 export!(office__sheet_extract, op_sheet_extract);
