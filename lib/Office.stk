@@ -2155,6 +2155,12 @@ fn Office::pdf_extract ($path, $pages, $output) {
         office__pdf_extract(to_json({ path => $path, pages => $pages, output => $output })))
 }
 
+## Reverse a PDF's page order (last page first). Returns { ok, path, pages }.
+fn Office::pdf_reverse ($path, $output) {
+    Office::_decode("pdf_reverse",
+        office__pdf_reverse(to_json({ path => $path, output => $output })))
+}
+
 ## Remove pages whose extracted text is empty (clean blank/scanned spacers).
 ## Never empties the document. Returns { ok, path, removed, pages }.
 fn Office::pdf_remove_blank ($path, $output) {

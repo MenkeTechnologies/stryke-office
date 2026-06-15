@@ -16453,6 +16453,7 @@ export!(office__pdf_decrypt, op_pdf_decrypt);
 export!(office__pdf_compress, op_pdf_compress);
 export!(office__pdf_delete, op_pdf_delete);
 export!(office__pdf_extract, op_pdf_extract);
+export!(office__pdf_reverse, op_pdf_reverse);
 export!(office__pdf_remove_blank, op_pdf_remove_blank);
 export!(office__pdf_reorder, op_pdf_reorder);
 export!(office__pdf_search, op_pdf_search);

@@ -709,6 +709,23 @@ fn op_pdf_extract(opts: Value) -> Result<Value> {
     op_pdf_reorder(json!({ "path": path, "output": out, "order": order }))
 }
 
+/// Reverse the page order of a PDF (last page first). A convenience over
+/// `pdf_reorder` that builds the descending order automatically. opts: path =>
+/// input, output => path. Returns `{ ok, path, pages }`.
+fn op_pdf_reverse(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let out = req_str(&opts, "output")?.to_string();
+    let total = Document::load(path)
+        .map_err(|e| anyhow!("load {path}: {e}"))?
+        .get_pages()
+        .len() as u32;
+    if total == 0 {
+        return Err(anyhow!("no pages"));
+    }
+    let order: Vec<u32> = (1..=total).rev().collect();
+    op_pdf_reorder(json!({ "path": path, "output": out, "order": order }))
+}
+
 /// Remove pages whose extracted text is empty (clean scanned spacers / blank
 /// leaves). opts: path => input, output => path. NOTE: a page is "blank" only by
 /// its *text* layer — an image-only page has no text and will be dropped, so use

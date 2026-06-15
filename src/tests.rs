@@ -10472,7 +10472,21 @@ fn pdf_extract_page_spec() {
     );
     assert_eq!(r3["pages"], 1, "array form single page: {r3}");
 
-    for f in [&src, &out, &out2, &out3] {
+    // pdf_reverse: Alpha,Bravo,Charlie,Delta -> Delta,Charlie,Bravo,Alpha
+    let rev = tmp("ext_rev.pdf");
+    let rv = call(
+        office__pdf_reverse,
+        &format!(r#"{{"path":"{src}","output":"{rev}"}}"#),
+    );
+    assert_eq!(rv["pages"], 4, "all four pages: {rv}");
+    let rdv = call(office__pdf_read, &format!(r#"{{"path":"{rev}"}}"#));
+    let tv = rdv["text"].as_str().unwrap_or("");
+    assert!(
+        tv.find("Delta") < tv.find("Alpha"),
+        "reversed: Delta before Alpha: {tv:?}"
+    );
+
+    for f in [&src, &out, &out2, &out3, &rev] {
         std::fs::remove_file(f).ok();
     }
 }

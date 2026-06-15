@@ -1258,8 +1258,15 @@ assert_eq $exr->{pages}, 2, "pdf_extract: two pages from spec"
 val $ext = Office::pdf_read($exo)
 assert_ok ($ext->{text} =~ /Alpha/), "pdf_extract: kept Alpha"
 assert_ok (!($ext->{text} =~ /Bravo/)), "pdf_extract: dropped Bravo"
-unlink $exp
 unlink $exo
+# pdf_reverse: reverse page order
+val $rvo = "$dir/$tag-reverse-out.pdf"
+val $rvr = Office::pdf_reverse($exp, $rvo)
+assert_eq $rvr->{pages}, 3, "pdf_reverse: three pages"
+val $rvt = Office::pdf_read($rvo)
+assert_ok ($rvt->{text} =~ /Charlie.*Alpha/s), "pdf_reverse: Charlie before Alpha"
+unlink $exp
+unlink $rvo
 
 # ── pdf_split_bookmarks ─────────────────────────────────────────────
 val $bmp = "$dir/$tag-bm.pdf"
