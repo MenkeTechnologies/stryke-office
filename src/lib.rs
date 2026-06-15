@@ -1932,6 +1932,63 @@ fn op_sheet_irr(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "irr": irr, "n": cf.len() }))
 }
 
+/// Compound annual growth rate of a value column — `(last/first)^(1/periods) − 1`
+/// where `periods` is the number of intervals between the first and last value.
+/// opts: path, column => name/index (required), sheet, header (default true),
+/// decimals => round. Requires ≥2 numeric values and a positive start value.
+/// Returns `{ ok, cagr, start, end, periods }`.
+fn op_sheet_cagr(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if vals.len() < 2 {
+        return Err(anyhow!("need at least two numeric values"));
+    }
+    let start = vals[0];
+    let end = vals[vals.len() - 1];
+    if start <= 0.0 {
+        return Err(anyhow!("start value must be positive"));
+    }
+    let periods = (vals.len() - 1) as f64;
+    let cagr = (end / start).powf(1.0 / periods) - 1.0;
+    let cagr = match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (cagr * f).round() / f
+        }
+        None => cagr,
+    };
+    Ok(json!({ "ok": true, "cagr": cagr, "start": start, "end": end, "periods": periods }))
+}
+
 /// Generate a loan amortization schedule from a fixed `rate`, term `nper`, and
 /// present value `pv` — writes a sheet with columns `[period, payment, principal,
 /// interest, balance]` (one row per period, plus header). opts: rate => periodic
@@ -15259,6 +15316,7 @@ export!(office__sheet_moments, op_sheet_moments);
 export!(office__sheet_npv, op_sheet_npv);
 export!(office__sheet_sumproduct, op_sheet_sumproduct);
 export!(office__sheet_irr, op_sheet_irr);
+export!(office__sheet_cagr, op_sheet_cagr);
 export!(office__sheet_amortize, op_sheet_amortize);
 export!(office__sheet_autocorr, op_sheet_autocorr);
 export!(office__sheet_agg, op_sheet_agg);
