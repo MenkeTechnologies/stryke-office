@@ -8713,6 +8713,26 @@ fn html_to_doc_structured() {
 }
 
 #[test]
+fn html_to_text_strips() {
+    let html = tmp("strip.html");
+    std::fs::write(
+        &html,
+        "<html><head><style>p{color:red}</style></head><body><h1>Title</h1><p>Hello &amp; welcome</p><script>ignore()</script><p>Line&nbsp;two</p></body></html>",
+    )
+    .unwrap();
+    let r = call(office__html_to_text, &format!(r#"{{"input":"{html}"}}"#));
+    let t = r["text"].as_str().unwrap();
+    assert!(t.contains("Title"), "heading text: {t:?}");
+    assert!(t.contains("Hello & welcome"), "entity decoded: {t:?}");
+    assert!(t.contains("Line two"), "nbsp -> space: {t:?}");
+    assert!(!t.contains("ignore"), "script dropped: {t:?}");
+    assert!(!t.contains("color:red"), "style dropped: {t:?}");
+    assert!(!t.contains('<'), "no tags remain: {t:?}");
+
+    std::fs::remove_file(&html).ok();
+}
+
+#[test]
 fn md_to_doc_structured() {
     let md = tmp("in.md");
     std::fs::write(

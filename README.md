@@ -332,6 +332,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::doc_split($path, $dir, %opts)` | `{count, files}` | split a document into files at headings; `level`/`format`/`prefix` opts |
 | `Office::md_to_doc($input, $output, %opts)` | `{blocks}` | convert Markdown (headings/lists/tables) to docx/odt/pdf/html by output ext |
 | `Office::html_to_doc($input, $output, %opts)` | `{blocks}` | convert HTML (h1-6/p/lists/tables) to docx/odt/pdf/md by output ext |
+| `Office::html_to_text($input, %opts)` | `{ok, text, chars, path?}` | strip HTML to plain text (drops script/style, decodes entities, block tags→newlines) |
 | `Office::doc_to_md($path, $output)` | `{blocks}` | convert a docx/odt to structured Markdown (headings + tables); inverse of md_to_doc |
 | `Office::doc_to_html($path, $output)` | `{blocks}` | convert a docx/odt to structured HTML; inverse of html_to_doc |
 | `Office::doc_to_text($path, $output)` | `{chars}` | extract any readable document's plain text to a file (incl. pdf) |

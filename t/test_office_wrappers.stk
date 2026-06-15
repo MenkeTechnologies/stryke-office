@@ -268,8 +268,15 @@ val $hso = "$dir/$tag-hsheet.xlsx"
 Office::html_to_sheet($hsh, $hso)
 val $hsr = Office::sheet_get_cell($hso, "A1")
 assert_eq $hsr->{value}, "Item", "html_to_sheet: table parsed back"
-unlink $hsh
 unlink $hso
+# html_to_text: strip tags + decode entities
+val $htx = "$dir/$tag-strip.html"
+spew $htx, "<p>Hello &amp; bye</p><script>x()</script>"
+val $httr = Office::html_to_text($htx)
+assert_ok ($httr->{text} =~ /Hello & bye/), "html_to_text: entity decoded"
+assert_ok (!($httr->{text} =~ /x\(\)/)), "html_to_text: script dropped"
+unlink $hsh
+unlink $htx
 
 # ── analytics: describe + freq (before mutating $xl) ────────────────
 val $desc = Office::sheet_describe($xl)

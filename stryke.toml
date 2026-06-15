@@ -301,6 +301,7 @@ exports = [
     "office__doc_to_sheet",
     "office__md_to_slides",
     "office__html_to_doc",
+    "office__html_to_text",
     "office__html_to_sheet",
     "office__doc_wordfreq",
     "office__doc_readability",

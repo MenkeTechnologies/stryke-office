@@ -641,6 +641,78 @@ fn parse_html_blocks(xml: &[u8]) -> Vec<Value> {
 /// Convert an HTML file into a document, preserving headings, paragraphs,
 /// lists, and tables. opts: input (.html), output (target; format from ext —
 /// docx/odt/pdf/md/…), format => override. Returns `{ ok, path, blocks }`.
+/// Decode the common HTML entities (named + numeric decimal/hex) in a string.
+fn html_decode_entities(s: &str) -> String {
+    let re = regex::Regex::new(r"&(#x?[0-9A-Fa-f]+|[A-Za-z]+);").unwrap();
+    re.replace_all(s, |c: &regex::Captures| {
+        let e = &c[1];
+        match e {
+            "amp" => "&".to_string(),
+            "lt" => "<".to_string(),
+            "gt" => ">".to_string(),
+            "quot" => "\"".to_string(),
+            "apos" => "'".to_string(),
+            "nbsp" => " ".to_string(),
+            _ => {
+                let code = if let Some(hex) = e.strip_prefix("#x").or_else(|| e.strip_prefix("#X")) {
+                    u32::from_str_radix(hex, 16).ok()
+                } else if let Some(dec) = e.strip_prefix('#') {
+                    dec.parse().ok()
+                } else {
+                    None
+                };
+                code.and_then(char::from_u32).map(String::from).unwrap_or_else(|| c[0].to_string())
+            }
+        }
+    })
+    .into_owned()
+}
+
+/// Strip HTML to plain text — drops `<script>`/`<style>`, turns block/break tags
+/// into newlines, removes remaining tags, and decodes entities. The direct
+/// counterpart to chaining `html_to_doc` + `doc_to_text`. opts: input => .html
+/// file, output => write the text there (optional). Returns
+/// `{ ok, text, chars, path? }`.
+fn op_html_to_text(opts: Value) -> Result<Value> {
+    let input = req_str(&opts, "input")?;
+    let raw = String::from_utf8_lossy(&std::fs::read(input)?).into_owned();
+    // Drop script/style contents entirely (regex crate has no backreferences).
+    let drop_script = regex::Regex::new(r"(?is)<script\b[^>]*>.*?</\s*script\s*>").unwrap();
+    let drop_style = regex::Regex::new(r"(?is)<style\b[^>]*>.*?</\s*style\s*>").unwrap();
+    let s = drop_script.replace_all(&raw, " ").into_owned();
+    let s = drop_style.replace_all(&s, " ").into_owned();
+    // Block/break boundaries become newlines.
+    let brk = regex::Regex::new(r"(?i)</?(p|div|br|li|tr|h[1-6]|ul|ol|table|blockquote|section|article|header|footer)\b[^>]*>").unwrap();
+    let s = brk.replace_all(&s, "\n").into_owned();
+    // Remove any remaining tags.
+    let tag = regex::Regex::new(r"<[^>]+>").unwrap();
+    let s = tag.replace_all(&s, "").into_owned();
+    let s = html_decode_entities(&s);
+    // Normalize whitespace: trim each line, collapse blank-line runs.
+    let mut out_lines: Vec<String> = Vec::new();
+    let mut blank = false;
+    for line in s.lines() {
+        let t: String = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            if !blank && !out_lines.is_empty() {
+                out_lines.push(String::new());
+            }
+            blank = true;
+        } else {
+            out_lines.push(t);
+            blank = false;
+        }
+    }
+    let text = out_lines.join("\n").trim().to_string();
+
+    let mut result = json!({ "ok": true, "text": text, "chars": text.chars().count() });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, format!("{text}\n"))?;
+        result["path"] = json!(output);
+    }
+    Ok(result)
+}
+
 fn op_html_to_doc(opts: Value) -> Result<Value> {
     let input = req_str(&opts, "input")?;
     let output = req_str(&opts, "output")?.to_string();
