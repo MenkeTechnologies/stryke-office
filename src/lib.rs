@@ -5007,6 +5007,72 @@ fn op_sheet_group_pct(opts: Value) -> Result<Value> {
 /// for each group accumulates down the rows in their existing order; blank /
 /// non-numeric value cells carry the group's running total forward unchanged.
 /// Returns `{ ok, path, column }`.
+/// Append a running per-value occurrence count for a column (pandas
+/// `groupby.cumcount`) — the Nth time each value has been seen so far, top to
+/// bottom. Distinct from `sheet_running` (numeric running aggregate) and `freq`
+/// (final totals). opts: path, output, column => name/index (required), into =>
+/// new column (default `{column}_cumcount`), start => first count (0 default or
+/// 1), sheet, header (default true), format. Returns `{ ok, path, column }`.
+fn op_sheet_cumcount(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_cumcount"));
+    let start = opts.get("start").and_then(Value::as_i64).unwrap_or(0);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut seen: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let key = cell_to_string(cells.get(col).unwrap_or(&Value::Null));
+            let c = seen.entry(key).or_insert(0);
+            cells.push(json!(*c + start));
+            *c += 1;
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_running(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -15865,6 +15931,7 @@ export!(office__sheet_cumulative, op_sheet_cumulative);
 export!(office__sheet_pct, op_sheet_pct);
 export!(office__sheet_group_pct, op_sheet_group_pct);
 export!(office__sheet_running, op_sheet_running);
+export!(office__sheet_cumcount, op_sheet_cumcount);
 export!(office__sheet_normalize, op_sheet_normalize);
 export!(office__sheet_standardize, op_sheet_standardize);
 export!(office__sheet_movavg, op_sheet_movavg);
