@@ -358,6 +358,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::md_to_slides($output, %opts)` | `{ok, path, slides}` | parse a Markdown outline into a deck (headings→slides, bullets→body); `markdown`/`path` opts |
 | `Office::slides_split($path, $dir, %opts)` | `{count, files}` | split a deck into one file per slide; `prefix`/`format` opts |
 | `Office::slides_reorder($path, $order, %opts)` | `{ok, path, slides}` | reorder/subset slides by a 1-based order list (deck analogue of `pdf_reorder`) |
+| `Office::slides_reverse($path, %opts)` | `{ok, path, slides}` | reverse a deck's slide order (last slide first) |
 | `Office::slides_delete($path, $slides, %opts)` | `{ok, path, removed, slides}` | delete slides by 1-based number/array (deck analogue of `pdf_delete`); refuses to empty the deck |
 | `Office::slides_insert($path, %opts)` | `{ok, path, position, slides}` | insert a new slide at a 1-based position (default append); `title`/`body`/`position` opts |
 | `Office::slides_set_title($path, $slide, $title, %opts)` | `{ok, path, slide}` | set/replace a slide's title (body preserved) |

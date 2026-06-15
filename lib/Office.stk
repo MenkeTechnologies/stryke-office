@@ -1821,6 +1821,13 @@ fn Office::slides_reorder ($path, $order, %opts) {
         office__slides_reorder(to_json({ path => $path, order => $order, output => $opts{output}, format => $opts{format} })))
 }
 
+## Reverse a deck's slide order (last slide first). opts: output (default in
+## place), format. Returns { ok, path, slides }.
+fn Office::slides_reverse ($path, %opts) {
+    Office::_decode("slides_reverse",
+        office__slides_reverse(to_json({ path => $path, output => $opts{output}, format => $opts{format} })))
+}
+
 ## Delete slides by 1-based number (number or array) — deck analogue of
 ## pdf_delete. opts: output (default in place), format. Returns
 ## { ok, path, removed, slides }.
