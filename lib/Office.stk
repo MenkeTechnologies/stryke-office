@@ -517,6 +517,14 @@ fn Office::sheet_pct_change ($path, $column, $output, %opts) {
         office__sheet_pct_change(to_json({ path => $path, column => $column, output => $output, fraction => $opts{fraction}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append period-over-period returns of a price $column. opts: method
+## (simple|log, default simple — a fraction not a percent), into, decimals,
+## sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_returns ($path, $column, $output, %opts) {
+    Office::_decode("sheet_returns",
+        office__sheet_returns(to_json({ path => $path, column => $column, output => $output, method => $opts{method}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a shifted (lag/lead) copy of a column (pandas Series.shift). opts:
 ## periods (default 1; negative = lead), fill (vacated cells; default blank),
 ## into, sheet, header, format. Returns { ok, path, column }.

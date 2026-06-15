@@ -6513,6 +6513,97 @@ fn op_sheet_delta(opts: Value) -> Result<Value> {
 /// instead of a percentage (default false → multiply by 100), decimals => round,
 /// sheet, header, format. The first row and any row whose previous value is
 /// blank or zero get a blank. Returns `{ ok, path, column }`.
+/// Append period-over-period returns of a price column. opts: path, output,
+/// column => name/index (required), method => `simple` (default, `xₜ/xₜ₋₁ − 1`,
+/// a fraction) | `log` (natural-log return `ln(xₜ/xₜ₋₁)`), into => new column
+/// (default `{column}_return`), decimals => round, sheet, header (default true),
+/// format. The first row and any row with a non-positive/blank neighbor get a
+/// blank. Distinct from `sheet_pct_change` (which reports a percentage). Returns
+/// `{ ok, path, column }`.
+fn op_sheet_returns(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let method = opts
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("simple");
+    if !matches!(method, "simple" | "log") {
+        return Err(anyhow!("unknown method: {method} (simple|log)"));
+    }
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_return"));
+    let round = |x: f64| match decimals {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (x * f).round() / f
+        }
+        None => x,
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut prev: Option<f64> = None;
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        let mut hr = rows[0].as_array().cloned().unwrap_or_default();
+        hr.push(json!(into));
+        new_rows.push(Value::Array(hr));
+    }
+    for row in &rows[data_start..] {
+        let mut cells = row.as_array().cloned().unwrap_or_default();
+        let cur = cells.get(col).and_then(sheet_cell_num);
+        let cell = match (prev, cur) {
+            (Some(p), Some(c)) if p > 0.0 && c > 0.0 => {
+                let r = if method == "log" {
+                    (c / p).ln()
+                } else {
+                    c / p - 1.0
+                };
+                json!(round(r))
+            }
+            _ => json!(""),
+        };
+        if cur.is_some() {
+            prev = cur;
+        }
+        cells.push(cell);
+        new_rows.push(Value::Array(cells));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_pct_change(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -16303,6 +16394,7 @@ export!(office__sheet_rolling, op_sheet_rolling);
 export!(office__sheet_bollinger, op_sheet_bollinger);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_pct_change, op_sheet_pct_change);
+export!(office__sheet_returns, op_sheet_returns);
 export!(office__sheet_shift, op_sheet_shift);
 export!(office__sheet_clamp, op_sheet_clamp);
 export!(office__sheet_winsorize, op_sheet_winsorize);

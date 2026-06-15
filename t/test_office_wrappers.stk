@@ -960,8 +960,14 @@ assert_eq $pcr->{column}, "v_pctchg", "sheet_pct_change: default column name"
 val $pcb = Office::sheet_read($pco)
 assert_eq $pcb->[0]{rows}[2][1], 50, "sheet_pct_change: +50%"
 assert_eq $pcb->[0]{rows}[3][1], -50, "sheet_pct_change: -50%"
-unlink $pcx
 unlink $pco
+# sheet_returns: simple fractional returns
+val $rto = "$dir/$tag-returns-out.xlsx"
+Office::sheet_returns($pcx, "v", $rto, decimals => 6)
+val $rtb = Office::sheet_read($rto)
+assert_eq $rtb->[0]{rows}[2][1], 0.5, "sheet_returns: +0.5 simple"
+unlink $pcx
+unlink $rto
 # sheet_cumcount: running per-value occurrence count
 val $ccx = "$dir/$tag-cumcount.xlsx"
 Office::sheet_write($ccx, [{ name => "D", rows => [["g"], ["a"], ["a"], ["b"], ["a"]] }])

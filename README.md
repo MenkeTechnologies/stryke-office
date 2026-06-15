@@ -313,6 +313,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_ewm($path, $column, $output, %opts)` | `{ok, path, column}` | append an exponentially-weighted moving average (pandas `ewm().mean()`); `alpha` or `span`, `into`/`decimals` opts |
 | `Office::sheet_delta($path, $column, $output, %opts)` | `{ok, path, column}` | append a row-over-row difference (current − previous) column; `into`/`decimals` opts |
 | `Office::sheet_pct_change($path, $column, $output, %opts)` | `{ok, path, column}` | append a row-over-row percentage-change column (pandas `pct_change`); `fraction`/`into`/`decimals` opts |
+| `Office::sheet_returns($path, $column, $output, %opts)` | `{ok, path, column}` | period-over-period returns of a price column; `method` simple (fraction) or log |
 | `Office::sheet_shift($path, $column, $output, %opts)` | `{ok, path, column}` | append a shifted (lag/lead) copy of a column (pandas `Series.shift`); `periods`/`fill`/`into` opts |
 | `Office::sheet_clamp($path, $column, $output, %opts)` | `{ok, path, clamped}` | clamp a numeric column to a range (cap outliers); `min`/`max`/`into` opts |
 | `Office::sheet_winsorize($path, $column, $output, %opts)` | `{ok, path, clipped, low, high}` | clip a numeric column to percentile bounds (robust outlier capping); `lower`/`upper`/`into`/`decimals` opts |
