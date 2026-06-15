@@ -4644,7 +4644,40 @@ fn sheet_join_inner_and_left() {
         "id3 city blank: {rdl}"
     );
 
-    for f in [&left, &right, &out, &outl] {
+    // semi join: left rows that have a match -> ids 1,2 (left columns only)
+    let outs = tmp("jsemi.xlsx");
+    let rs = call(
+        office__sheet_join,
+        &format!(
+            r#"{{"left":"{left}","right":"{right}","on":"id","how":"semi","output":"{outs}"}}"#
+        ),
+    );
+    assert_eq!(rs["rows"], 2, "semi keeps 2: {rs}");
+    let rds = call(office__sheet_read, &format!(r#"{{"path":"{outs}"}}"#));
+    let srows = rds["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        srows[0].as_array().unwrap().len(),
+        2,
+        "semi: left columns only: {rds}"
+    );
+
+    // anti join: left rows with no match -> id 3
+    let outa = tmp("janti.xlsx");
+    let ra = call(
+        office__sheet_join,
+        &format!(
+            r#"{{"left":"{left}","right":"{right}","on":"id","how":"anti","output":"{outa}"}}"#
+        ),
+    );
+    assert_eq!(ra["rows"], 1, "anti keeps 1: {ra}");
+    let rda = call(office__sheet_read, &format!(r#"{{"path":"{outa}"}}"#));
+    assert_eq!(
+        rda["sheets"][0]["rows"][1][0].as_f64().unwrap(),
+        3.0,
+        "anti -> id 3: {rda}"
+    );
+
+    for f in [&left, &right, &out, &outl, &outs, &outa] {
         std::fs::remove_file(f).ok();
     }
 }

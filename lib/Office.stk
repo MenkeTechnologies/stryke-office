@@ -843,10 +843,12 @@ fn Office::sheet_str_distance ($path, $a, $b, $output, %opts) {
 }
 
 ## Join two spreadsheets on a key column (SQL JOIN). opts: on => shared key
-## field name (or left_on + right_on), how => "inner" (default) | left | right | outer,
+## field name (or left_on + right_on), how => "inner" (default) | left | right |
+## outer | semi (left rows with a match) | anti (left rows with no match),
 ## left_sheet / right_sheet => name/index, format => override. Output columns are
 ## the left fields then the right fields (right key dropped; colliding right
-## names get a _right suffix). Returns { ok, path, rows, matched }.
+## names get a _right suffix); semi/anti output left columns only. Returns
+## { ok, path, rows, matched }.
 fn Office::sheet_join ($left, $right, $output, %opts) {
     Office::_decode("sheet_join",
         office__sheet_join(to_json({ left => $left, right => $right, output => $output, on => $opts{on}, left_on => $opts{left_on}, right_on => $opts{right_on}, how => $opts{how}, left_sheet => $opts{left_sheet}, right_sheet => $opts{right_sheet}, format => $opts{format} })))

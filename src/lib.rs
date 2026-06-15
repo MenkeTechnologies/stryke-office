@@ -10169,8 +10169,10 @@ fn op_sheet_join(opts: Value) -> Result<Value> {
     let right = req_str(&opts, "right")?;
     let output = req_str(&opts, "output")?.to_string();
     let how = opts.get("how").and_then(Value::as_str).unwrap_or("inner");
-    if !matches!(how, "inner" | "left" | "right" | "outer") {
-        return Err(anyhow!("unknown how: {how} (inner|left|right|outer)"));
+    if !matches!(how, "inner" | "left" | "right" | "outer" | "semi" | "anti") {
+        return Err(anyhow!(
+            "unknown how: {how} (inner|left|right|outer|semi|anti)"
+        ));
     }
     let on = opts.get("on").and_then(Value::as_str);
     let left_on = opts
@@ -10207,6 +10209,37 @@ fn op_sheet_join(opts: Value) -> Result<Value> {
         let k = cell_to_string(r.get(right_on).unwrap_or(&Value::Null));
         idx.entry(k).or_default().push(i);
     }
+    // Semi/anti joins are left-only filters (keep left rows that do / don't have
+    // a match), output the left columns unchanged.
+    if how == "semi" || how == "anti" {
+        let header: Vec<Value> = lfields.iter().map(|f| json!(f)).collect();
+        let mut out_rows = vec![Value::Array(header)];
+        let mut matched = 0u64;
+        for lrec in lrecs {
+            let k = cell_to_string(lrec.get(left_on).unwrap_or(&Value::Null));
+            let has = idx.contains_key(&k);
+            if has {
+                matched += 1;
+            }
+            let keep = if how == "semi" { has } else { !has };
+            if keep {
+                out_rows.push(Value::Array(
+                    lfields
+                        .iter()
+                        .map(|f| lrec.get(f).cloned().unwrap_or(Value::Null))
+                        .collect(),
+                ));
+            }
+        }
+        let n = out_rows.len() - 1;
+        let mut wopts = json!({ "path": output, "sheets": [{ "name": "Join", "rows": out_rows }] });
+        if let Some(f) = opts.get("format") {
+            wopts["format"] = f.clone();
+        }
+        op_sheet_write(wopts)?;
+        return Ok(json!({ "ok": true, "path": output, "rows": n, "matched": matched }));
+    }
+
     let mut matched_right: HashSet<usize> = HashSet::new();
     // Right output columns (drop the key; rename collisions).
     let lset: HashSet<&str> = lfields.iter().map(String::as_str).collect();
