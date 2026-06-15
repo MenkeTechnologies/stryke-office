@@ -1658,6 +1658,14 @@ fn Office::doc_summary ($path, %opts) {
         office__doc_summary(to_json({ path => $path, sentences => $opts{sentences} })))
 }
 
+## Extract all regex matches from a document's text. opts: pattern (custom
+## regex) OR preset (email|url|phone|number), unique (default 1), sort (default
+## 0). Returns { ok, count, matches }.
+fn Office::doc_extract ($path, %opts) {
+    Office::_decode("doc_extract",
+        office__doc_extract(to_json({ path => $path, pattern => $opts{pattern}, preset => $opts{preset}, unique => $opts{unique}, sort => $opts{sort} })))
+}
+
 ## Search a document's paragraphs (docx/odt/html/md/rtf/txt/pdf). opts: regex
 ## (treat query as a regex), ignore_case => 1. Returns { count, matches =>
 ## [{ paragraph, count, snippet }] } with 1-based paragraph indexes.

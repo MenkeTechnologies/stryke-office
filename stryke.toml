@@ -304,6 +304,7 @@ exports = [
     "office__doc_readability",
     "office__doc_sentences",
     "office__doc_summary",
+    "office__doc_extract",
     "office__doc_find",
     "office__slides_find",
     "office__img_open",

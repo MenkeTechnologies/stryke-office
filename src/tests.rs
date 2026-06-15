@@ -8879,6 +8879,42 @@ fn doc_summary_extractive() {
 }
 
 #[test]
+fn doc_extract_matches() {
+    let path = tmp("extract.txt");
+    std::fs::write(
+        &path,
+        "Reach a@x.com or b@y.org. Duplicate a@x.com again. Visit https://example.com too.",
+    )
+    .unwrap();
+
+    // email preset, unique by default -> 2 distinct
+    let e = call(
+        office__doc_extract,
+        &format!(r#"{{"path":"{path}","preset":"email"}}"#),
+    );
+    assert_eq!(e["count"].as_u64().unwrap(), 2, "two distinct emails: {e}");
+    let ms: Vec<&str> = e["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        ms.contains(&"a@x.com") && ms.contains(&"b@y.org"),
+        "emails: {e}"
+    );
+
+    // url preset
+    let u = call(
+        office__doc_extract,
+        &format!(r#"{{"path":"{path}","preset":"url"}}"#),
+    );
+    assert_eq!(u["matches"][0], "https://example.com", "url extracted: {u}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn doc_find_and_slides_find() {
     // doc_find over a docx with three paragraphs
     let dx = tmp("find.docx");

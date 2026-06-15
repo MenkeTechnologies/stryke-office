@@ -2287,6 +2287,41 @@ fn op_doc_summary(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "summary": summary, "count": summary.len(), "total_sentences": total }))
 }
 
+/// Extract every regex match from a document's text — for mining emails, URLs,
+/// phone numbers, IDs, etc. Distinct from `doc_find` (locate/count a query) and
+/// `doc_links` (embedded hyperlinks). opts: path, and either pattern => a custom
+/// regex, or preset => `email` | `url` | `phone` | `number`. unique => collapse
+/// duplicates (default true), sort => sort the results (default false). Returns
+/// `{ ok, count, matches }`.
+fn op_doc_extract(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let pat = match opts.get("pattern").and_then(Value::as_str) {
+        Some(p) => p.to_string(),
+        None => {
+            let preset = opts.get("preset").and_then(Value::as_str).unwrap_or("email");
+            match preset {
+                "url" => r"https?://[^\s)]+".to_string(),
+                "number" => r"-?\d+(?:\.\d+)?".to_string(),
+                // email/phone share the redaction patterns
+                other => redact_pattern(other)
+                    .ok_or_else(|| anyhow!("unknown preset: {other} (email|url|phone|number)"))?
+                    .to_string(),
+            }
+        }
+    };
+    let re = regex::Regex::new(&pat).map_err(|e| anyhow!("bad pattern: {e}"))?;
+    let text = doc_full_text(path)?;
+    let mut matches: Vec<String> = re.find_iter(&text).map(|m| m.as_str().to_string()).collect();
+    if opts.get("unique").and_then(flag_of).unwrap_or(true) {
+        let mut seen = std::collections::HashSet::new();
+        matches.retain(|m| seen.insert(m.clone()));
+    }
+    if opts.get("sort").and_then(flag_of).unwrap_or(false) {
+        matches.sort();
+    }
+    Ok(json!({ "ok": true, "count": matches.len(), "matches": matches }))
+}
+
 // ── hyperlinks ────────────────────────────────────────────────────────────────
 
 /// Extract hyperlinks from a docx. `<w:hyperlink r:id="…">` carries the display
