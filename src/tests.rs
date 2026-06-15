@@ -573,6 +573,37 @@ fn sheet_means_three_kinds() {
 }
 
 #[test]
+fn sheet_mad_robust_spread() {
+    let path = tmp("mad.xlsx");
+    // 1,2,3,4,5: median 3, abs devs [2,1,0,1,2], median dev = 1
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[3],[4],[5]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_mad,
+        &format!(r#"{{"path":"{path}","column":"v","decimals":6}}"#),
+    );
+    assert_eq!(s["median"].as_f64().unwrap(), 3.0, "median 3: {s}");
+    assert_eq!(s["mad"].as_f64().unwrap(), 1.0, "mad 1: {s}");
+
+    // scaled by 1.4826
+    let ss = call(
+        office__sheet_mad,
+        &format!(r#"{{"path":"{path}","column":"v","scaled":true,"decimals":4}}"#),
+    );
+    assert!(
+        (ss["mad"].as_f64().unwrap() - 1.4826).abs() < 1e-3,
+        "scaled mad: {ss}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_npv_discount() {
     let path = tmp("npv.xlsx");
     // cashflows 100, 200, 300 at 10% — Excel NPV (first discounted 1 period)

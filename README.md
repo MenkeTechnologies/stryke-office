@@ -153,6 +153,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_argmax($path, $column, %opts)` | `{column, row, value, label?}` | locate the row of a column's max/min (pandas `idxmax`/`idxmin`); `min`/`label` opts |
 | `Office::sheet_moments($path, $column, %opts)` | `{ok, n, mean, variance, std, skewness, kurtosis}` | distribution moments of a column (skewness g1, excess kurtosis g2); complements `sheet_describe` |
 | `Office::sheet_means($path, $column, %opts)` | `{ok, n, arithmetic, geometric, harmonic}` | arithmetic/geometric/harmonic means of a column (geometric needs all-positive, harmonic non-zero) |
+| `Office::sheet_mad($path, $column, %opts)` | `{ok, mad, median, n}` | median absolute deviation (robust spread); `scaled` ×1.4826 for normal consistency |
 | `Office::sheet_entropy($path, $column, %opts)` | `{ok, entropy, normalized, distinct, n}` | Shannon entropy (bits) of a column's value distribution — diversity/profiling measure |
 | `Office::sheet_gini($path, $column, %opts)` | `{ok, gini, n}` | Gini coefficient (inequality/concentration, 0..1) of a non-negative numeric column |
 | `Office::sheet_npv($path, $column, $rate, %opts)` | `{ok, npv, n, rate}` | net present value of a cashflow column at periodic `rate` (Excel `NPV`); `start` exponent opt |

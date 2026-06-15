@@ -1560,6 +1560,13 @@ val $mnr = Office::sheet_means($mnx, "v", decimals => 6)
 assert_eq $mnr->{geometric}, 2, "sheet_means: geometric (1*2*4)^(1/3) = 2"
 assert_ok ($mnr->{harmonic} > 1.71 && $mnr->{harmonic} < 1.72), "sheet_means: harmonic ~1.714"
 unlink $mnx
+# sheet_mad: robust spread
+val $madx = "$dir/$tag-mad.xlsx"
+Office::sheet_write($madx, [{ name => "D", rows => [["v"], [1], [2], [3], [4], [5]] }])
+val $madr = Office::sheet_mad($madx, "v", decimals => 6)
+assert_eq $madr->{median}, 3, "sheet_mad: median 3"
+assert_eq $madr->{mad}, 1, "sheet_mad: mad 1"
+unlink $madx
 
 # ── sheet_autocorr: ACF of an alternating series ────────────────────
 val $acx = "$dir/$tag-acf.xlsx"

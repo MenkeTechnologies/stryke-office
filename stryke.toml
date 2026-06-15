@@ -27,6 +27,7 @@ exports = [
     "office__sheet_quantile",
     "office__sheet_moments",
     "office__sheet_means",
+    "office__sheet_mad",
     "office__sheet_npv",
     "office__sheet_sumproduct",
     "office__sheet_irr",

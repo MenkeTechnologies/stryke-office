@@ -163,6 +163,14 @@ fn Office::sheet_means ($path, $column, %opts) {
         office__sheet_means(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Median absolute deviation of a numeric $column (robust spread). opts: scaled
+## (x1.4826 for normal consistency), decimals, sheet, header. Returns
+## { ok, mad, median, n }.
+fn Office::sheet_mad ($path, $column, %opts) {
+    Office::_decode("sheet_mad",
+        office__sheet_mad(to_json({ path => $path, column => $column, scaled => $opts{scaled}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Net present value of a cashflow $column at periodic discount $rate (Excel
 ## NPV). opts: start (first-period exponent, default 1; 0 = first cashflow now),
 ## decimals, sheet, header. Returns { ok, npv, n, rate }.
