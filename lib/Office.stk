@@ -2861,6 +2861,12 @@ fn Office::img_brightness ($handle) {
     Office::_decode("img_brightness", office__img_brightness(to_json({ handle => $handle })))
 }
 
+## WCAG contrast ratio between two colors $a and $b (hex string or [r,g,b]) for
+## accessible text/background pairs. Returns { ratio, aa, aa_large, aaa }.
+fn Office::color_contrast ($a, $b) {
+    Office::_decode("color_contrast", office__color_contrast(to_json({ a => $a, b => $b })))
+}
+
 ## Measure rendered text. opts: size (16), font. Returns { width, height }.
 fn Office::img_text_size ($text, %opts) {
     Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))

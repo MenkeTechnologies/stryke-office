@@ -11696,6 +11696,27 @@ fn image_brightness_dark_light() {
 }
 
 #[test]
+fn color_contrast_wcag() {
+    // black on white -> maximal 21:1, passes everything
+    let bw = call(office__color_contrast, r#"{"a":[0,0,0],"b":[255,255,255]}"#);
+    assert_eq!(
+        bw["ratio"].as_f64().unwrap(),
+        21.0,
+        "black/white = 21: {bw}"
+    );
+    assert_eq!(bw["aa"], true, "AA pass: {bw}");
+    assert_eq!(bw["aaa"], true, "AAA pass: {bw}");
+
+    // light gray on white -> low contrast, fails AA
+    let lg = call(
+        office__color_contrast,
+        r#"{"a":[200,200,200],"b":[255,255,255]}"#,
+    );
+    assert!(lg["ratio"].as_f64().unwrap() < 2.0, "low contrast: {lg}");
+    assert_eq!(lg["aa"], false, "fails AA: {lg}");
+}
+
+#[test]
 fn image_color_science_and_distortions() {
     let n = call(
         office__img_new,

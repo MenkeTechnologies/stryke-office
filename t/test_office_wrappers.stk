@@ -1287,6 +1287,9 @@ val $brt = Office::img_new(8, 8, color => [255, 255, 255, 255])
 val $brtr = Office::img_brightness($brt->{handle})
 assert_ok ($brtr->{brightness} > 254), "img_brightness: white luma ~255"
 Office::img_close($brt->{handle})
+# color_contrast: black on white is 21:1
+val $ccr = Office::color_contrast([0, 0, 0], [255, 255, 255])
+assert_eq $ccr->{ratio}, 21, "color_contrast: black/white = 21"
 # barcode_sheet: one QR per column value
 val $bcsx = "$dir/$tag-bcsheet.xlsx"
 Office::sheet_write($bcsx, [{ name => "D", rows => [["sku"], ["A100"], ["B200"]] }])

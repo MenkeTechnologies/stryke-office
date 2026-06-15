@@ -2153,6 +2153,38 @@ fn op_img_average_color(opts: Value) -> Result<Value> {
     Ok(json!({ "r": r, "g": g, "b": b, "a": a, "hex": format!("#{r:02x}{g:02x}{b:02x}") }))
 }
 
+/// WCAG 2.x relative luminance of an sRGB color (channels gamma-linearized).
+fn wcag_luminance(c: image::Rgba<u8>) -> f64 {
+    let lin = |v: u8| {
+        let s = v as f64 / 255.0;
+        if s <= 0.03928 {
+            s / 12.92
+        } else {
+            ((s + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(c.0[0]) + 0.7152 * lin(c.0[1]) + 0.0722 * lin(c.0[2])
+}
+
+/// WCAG contrast ratio between two colors — for accessible text/background pairs
+/// in documents and slides. opts: a, b => color specs (hex string like "#1e1e1e"
+/// or `[r,g,b]`). Returns `{ ratio, aa, aa_large, aaa }` where the booleans are
+/// the WCAG 2.x thresholds (normal AA ≥ 4.5, large-text AA ≥ 3, AAA ≥ 7).
+fn op_color_contrast(opts: Value) -> Result<Value> {
+    let a = parse_color(opts.get("a"));
+    let b = parse_color(opts.get("b"));
+    let (la, lb) = (wcag_luminance(a), wcag_luminance(b));
+    let (hi, lo) = (la.max(lb), la.min(lb));
+    let ratio = (hi + 0.05) / (lo + 0.05);
+    let rounded = (ratio * 100.0).round() / 100.0;
+    Ok(json!({
+        "ratio": rounded,
+        "aa": ratio >= 4.5,
+        "aa_large": ratio >= 3.0,
+        "aaa": ratio >= 7.0,
+    }))
+}
+
 /// Mean perceived brightness (luma) of an image — for auto light/dark detection,
 /// e.g. choosing black vs white overlay text. Uses Rec. 601 luma
 /// `0.299R + 0.587G + 0.114B` averaged over all pixels. opts: handle. Returns
