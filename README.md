@@ -849,6 +849,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_phash($h, %opts)` | dHash perceptual hash `{hash, bits}`; `other` handle → `{distance, similarity}` (near-duplicate detection) |
 | `img_crop_aspect($h, %opts)` | center-crop to a target aspect ratio (max area, no distortion); `aspect => [w,h]` or `ratio => w/h` |
 | `img_average_color($h)` | mean color over all pixels `{r, g, b, a, hex}` (LQIP placeholder / theme color) |
+| `img_brightness($h)` | mean perceived luma `{brightness, normalized, is_dark}` (auto light/dark, overlay-text color) |
 | `img_text_size($text, %opts)` | measure → `{width,height}` |
 | `img_caption($input, $output, $text, %opts)` | add a caption bar with centered text above/below an image; `position`/`height`/`size`/`color`/`background` opts |
 | `img_crop_circle($h)` / `img_round_corners($h, %opts)` | circular / rounded mask |

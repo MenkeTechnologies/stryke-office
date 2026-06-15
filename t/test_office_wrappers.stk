@@ -1282,6 +1282,11 @@ val $avc = Office::img_new(8, 8, color => [40, 80, 120, 255])
 val $avcr = Office::img_average_color($avc->{handle})
 assert_eq $avcr->{hex}, "#285078", "img_average_color: mean hex"
 Office::img_close($avc->{handle})
+# img_brightness: white is light
+val $brt = Office::img_new(8, 8, color => [255, 255, 255, 255])
+val $brtr = Office::img_brightness($brt->{handle})
+assert_ok ($brtr->{brightness} > 254), "img_brightness: white luma ~255"
+Office::img_close($brt->{handle})
 # barcode_sheet: one QR per column value
 val $bcsx = "$dir/$tag-bcsheet.xlsx"
 Office::sheet_write($bcsx, [{ name => "D", rows => [["sku"], ["A100"], ["B200"]] }])

@@ -11665,6 +11665,37 @@ fn image_average_color_mean() {
 }
 
 #[test]
+fn image_brightness_dark_light() {
+    // near-black -> dark
+    let dark = call(
+        office__img_new,
+        r#"{"width":10,"height":10,"color":[10,10,10,255]}"#,
+    );
+    let dh = dark["handle"].as_u64().unwrap();
+    let d = call(office__img_brightness, &format!(r#"{{"handle":{dh}}}"#));
+    assert!(
+        (d["brightness"].as_f64().unwrap() - 10.0).abs() < 1e-6,
+        "dark luma ~10: {d}"
+    );
+    assert_eq!(d["is_dark"], true, "near-black is dark: {d}");
+    call(office__img_close, &format!(r#"{{"handle":{dh}}}"#));
+
+    // white -> light
+    let light = call(
+        office__img_new,
+        r#"{"width":10,"height":10,"color":[255,255,255,255]}"#,
+    );
+    let lh = light["handle"].as_u64().unwrap();
+    let l = call(office__img_brightness, &format!(r#"{{"handle":{lh}}}"#));
+    assert!(
+        (l["brightness"].as_f64().unwrap() - 255.0).abs() < 1e-6,
+        "white luma 255: {l}"
+    );
+    assert_eq!(l["is_dark"], false, "white is not dark: {l}");
+    call(office__img_close, &format!(r#"{{"handle":{lh}}}"#));
+}
+
+#[test]
 fn image_color_science_and_distortions() {
     let n = call(
         office__img_new,

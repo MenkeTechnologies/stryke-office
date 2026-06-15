@@ -2153,6 +2153,27 @@ fn op_img_average_color(opts: Value) -> Result<Value> {
     Ok(json!({ "r": r, "g": g, "b": b, "a": a, "hex": format!("#{r:02x}{g:02x}{b:02x}") }))
 }
 
+/// Mean perceived brightness (luma) of an image — for auto light/dark detection,
+/// e.g. choosing black vs white overlay text. Uses Rec. 601 luma
+/// `0.299R + 0.587G + 0.114B` averaged over all pixels. opts: handle. Returns
+/// `{ brightness (0..255), normalized (0..1), is_dark }` (`is_dark` when
+/// brightness < 128).
+fn op_img_brightness(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let img = rgba_of(h)?;
+    let n = (img.width() as f64 * img.height() as f64).max(1.0);
+    let sum: f64 = img
+        .pixels()
+        .map(|p| 0.299 * p.0[0] as f64 + 0.587 * p.0[1] as f64 + 0.114 * p.0[2] as f64)
+        .sum();
+    let brightness = sum / n;
+    Ok(json!({
+        "brightness": brightness,
+        "normalized": brightness / 255.0,
+        "is_dark": brightness < 128.0,
+    }))
+}
+
 /// Measure rendered text. opts: size (16), font. Returns `{width, height}`.
 fn op_img_text_size(opts: Value) -> Result<Value> {
     use ab_glyph::{FontRef, PxScale};
