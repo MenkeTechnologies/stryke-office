@@ -8266,6 +8266,101 @@ fn op_sheet_date_diff(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Append the count of business days (Mon–Fri, excluding optional holidays)
+/// between two ISO-date columns, inclusive of both endpoints (Excel
+/// `NETWORKDAYS`). opts: path, output, start => column (required), end => column
+/// (required), holidays => array of ISO date strings to skip, into => new column
+/// (default `networkdays`), sheet, header (default true), format. If start > end
+/// the count is negative. Unparseable dates yield blank. Returns
+/// `{ ok, path, column }`.
+fn op_sheet_networkdays(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let scol = resolve_col(opts.get("start"), header_row)?;
+    let ecol = resolve_col(opts.get("end"), header_row)?;
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| "networkdays".to_string());
+    // Holiday set as epoch-day numbers.
+    let holidays: std::collections::HashSet<i64> = opts
+        .get("holidays")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .filter_map(iso_to_epoch_days)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Business days in [lo, hi] inclusive: exclude Sat/Sun and holidays.
+    let count_business = |lo: i64, hi: i64| -> i64 {
+        let mut c = 0i64;
+        for d in lo..=hi {
+            let dow = (d + 4).rem_euclid(7); // 0=Sun .. 6=Sat
+            if dow != 0 && dow != 6 && !holidays.contains(&d) {
+                c += 1;
+            }
+        }
+        c
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let sd = cells
+                .get(scol)
+                .map(cell_to_string)
+                .and_then(|s| iso_to_epoch_days(&s));
+            let ed = cells
+                .get(ecol)
+                .map(cell_to_string)
+                .and_then(|s| iso_to_epoch_days(&s));
+            let cell = match (sd, ed) {
+                (Some(s), Some(e)) if s <= e => json!(count_business(s, e)),
+                (Some(s), Some(e)) => json!(-count_business(e, s)),
+                _ => json!(""),
+            };
+            cells.push(cell);
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 /// Proleptic-Gregorian date (y, m, d) for a count of days since 1970-01-01 —
 /// the inverse of `days_from_civil` (Hinnant's `civil_from_days`).
 fn civil_from_days(z: i64) -> (i64, i64, i64) {
@@ -15568,6 +15663,7 @@ export!(office__sheet_resample, op_sheet_resample);
 export!(office__sheet_group_stats, op_sheet_group_stats);
 export!(office__sheet_date_part, op_sheet_date_part);
 export!(office__sheet_date_diff, op_sheet_date_diff);
+export!(office__sheet_networkdays, op_sheet_networkdays);
 export!(office__sheet_date_add, op_sheet_date_add);
 export!(office__sheet_weekday, op_sheet_weekday);
 export!(office__sheet_group_concat, op_sheet_group_concat);

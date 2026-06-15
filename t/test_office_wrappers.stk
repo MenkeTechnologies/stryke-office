@@ -978,6 +978,15 @@ assert_eq $ddb->[0]{rows}[1][2], 7, "sheet_date_diff: one week = 7 days"
 assert_eq $ddb->[0]{rows}[2][2], 0, "sheet_date_diff: same date = 0"
 unlink $ddx
 unlink $ddo
+# sheet_networkdays: business days between two dates
+val $ndx = "$dir/$tag-netdays.xlsx"
+Office::sheet_write($ndx, [{ name => "D", rows => [["s", "e"], ["2026-06-15", "2026-06-19"]] }])
+val $ndo = "$dir/$tag-netdays-out.xlsx"
+Office::sheet_networkdays($ndx, "s", "e", $ndo, into => "bd")
+val $ndb = Office::sheet_read($ndo)
+assert_eq $ndb->[0]{rows}[1][2], 5, "sheet_networkdays: Mon-Fri inclusive = 5"
+unlink $ndx
+unlink $ndo
 # sheet_date_add: shift a date column by days / months
 val $dax = "$dir/$tag-dateadd.xlsx"
 Office::sheet_write($dax, [{ name => "D", rows => [["d"], ["2026-01-31"]] }])

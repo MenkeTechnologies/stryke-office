@@ -97,6 +97,7 @@ exports = [
     "office__sheet_group_stats",
     "office__sheet_date_part",
     "office__sheet_date_diff",
+    "office__sheet_networkdays",
     "office__sheet_date_add",
     "office__sheet_weekday",
     "office__sheet_group_concat",
