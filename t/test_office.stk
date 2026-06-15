@@ -87,4 +87,22 @@ val $gr = Office::img_convert($im2->{handle}, "L")
 assert_eq $gr->{mode}, "L", "image: convert to grayscale"
 Office::img_close($im2->{handle})
 
+# ── pure helpers (no workbook — always run) ──────────────────────────
+val $c = Office::parse_a1("B2")
+assert_eq $c->{row},    1,   "parse_a1: 0-based row"
+assert_eq $c->{col},    1,   "parse_a1: 0-based col"
+assert_eq $c->{row_1},  2,   "parse_a1: 1-based row"
+assert_eq $c->{letter}, "B", "parse_a1: column letter"
+val $aa = Office::parse_a1("AA10")
+assert_eq $aa->{col}, 26, "parse_a1: AA is column 26 (0-based)"
+
+assert_eq Office::a1_of(9, 26),       "AA10", "a1_of: inverse of parse_a1"
+assert_eq Office::col_to_letter(26),  "AA",   "col_to_letter: 26 → AA"
+assert_eq Office::letter_to_col("AA"), 26,    "letter_to_col: AA → 26"
+
+val $rg = Office::parse_range("A1:C4")
+assert_eq $rg->{rows}, 4, "parse_range: 4 rows"
+assert_eq $rg->{cols}, 3, "parse_range: 3 cols"
+assert_eq $rg->{end}{col}, 2, "parse_range: end col 0-based"
+
 test_run
