@@ -108,6 +108,15 @@ assert_ok $mix->{row_absolute},       "parse_a1_abs: absolute row"
 assert_eq Office::parse_a1_abs("aa10")->{cell}, "AA10", "parse_a1_abs: relative ref normalizes casing"
 assert_dies fn { Office::parse_a1_abs("A1\$") }, "parse_a1_abs: rejects malformed reference"
 
+# a1_abs_of: build $-marked reference from parts (inverse of parse_a1_abs).
+assert_eq Office::a1_abs_of(1, 1, 1, 1), "\$B\$2", "a1_abs_of: both flags → fully absolute"
+assert_eq Office::a1_abs_of(0, 0, 1),    "\$A1",  "a1_abs_of: absolute column only"
+assert_eq Office::a1_abs_of(0, 0, undef, 1), "A\$1", "a1_abs_of: absolute row only"
+assert_eq Office::a1_abs_of(9, 26),      "AA10", "a1_abs_of: no flags → plain ref"
+# round-trips parse_a1_abs.
+val $rt = Office::parse_a1_abs("\$B\$2")
+assert_eq Office::a1_abs_of($rt->{row}, $rt->{col}, $rt->{col_absolute}, $rt->{row_absolute}), "\$B\$2", "a1_abs_of: round-trips parse_a1_abs"
+
 assert_eq Office::a1_of(9, 26),       "AA10", "a1_of: inverse of parse_a1"
 assert_eq Office::col_to_letter(26),  "AA",   "col_to_letter: 26 → AA"
 assert_eq Office::letter_to_col("AA"), 26,    "letter_to_col: AA → 26"

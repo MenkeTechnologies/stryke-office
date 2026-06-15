@@ -17097,6 +17097,44 @@ fn op_a1_of(opts: Value) -> Result<Value> {
     Ok(json!({"cell": format!("{}{}", col_letters(col), row + 1), "row": row, "col": col}))
 }
 
+/// Build an A1 reference with Excel `$` absolute markers from 0-based
+/// `{row, col}` plus optional `col_absolute`/`row_absolute` flags — the inverse
+/// of `parse_a1_abs`. `{row:1, col:1, col_absolute:true, row_absolute:true}`
+/// yields `$B$2`; with both flags false it is the plain `B2` (same as `a1_of`).
+/// Returns `{cell, row, col, col_absolute, row_absolute}`. Pure.
+fn op_a1_abs_of(opts: Value) -> Result<Value> {
+    let row = opts
+        .get("row")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("missing row (0-based)"))? as usize;
+    let col = opts
+        .get("col")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("missing col (0-based)"))? as usize;
+    let truthy = |k: &str| match opts.get(k) {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(n)) => n.as_i64().is_some_and(|x| x != 0),
+        Some(Value::String(s)) => s == "1" || s == "true",
+        _ => false,
+    };
+    let col_abs = truthy("col_absolute");
+    let row_abs = truthy("row_absolute");
+    let cell = format!(
+        "{}{}{}{}",
+        if col_abs { "$" } else { "" },
+        col_letters(col),
+        if row_abs { "$" } else { "" },
+        row + 1
+    );
+    Ok(json!({
+        "cell": cell,
+        "row": row,
+        "col": col,
+        "col_absolute": col_abs,
+        "row_absolute": row_abs,
+    }))
+}
+
 /// Parse an A1 reference that may carry Excel `$` absolute markers — `$A$1`,
 /// `A$1`, `$A1`, or plain `A1`. Reports the 0-based `row`/`col` plus whether the
 /// column and row are absolute, and a `cell` normalized to canonical casing with
@@ -17241,6 +17279,7 @@ fn op_expand_range(opts: Value) -> Result<Value> {
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
+export!(office__a1_abs_of, op_a1_abs_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);
 export!(office__parse_range, op_parse_range);
