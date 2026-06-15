@@ -383,6 +383,7 @@ exports = [
     "office__img_dominant_colors",
     "office__img_compare",
     "office__img_phash",
+    "office__img_average_color",
     "office__img_text_size",
     "office__img_caption",
     "office__img_crop_circle",

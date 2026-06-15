@@ -2129,6 +2129,30 @@ fn op_img_phash(opts: Value) -> Result<Value> {
     Ok(out)
 }
 
+/// Mean color of an image — the per-channel average over every pixel, useful for
+/// low-quality-image placeholders (LQIP) and theme accent colors. Distinct from
+/// `img_dominant_colors` (which clusters). opts: handle. Returns
+/// `{ r, g, b, a, hex }` (8-bit channels; `hex` is `#rrggbb`).
+fn op_img_average_color(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let img = rgba_of(h)?;
+    let (mut sr, mut sg, mut sb, mut sa) = (0u64, 0u64, 0u64, 0u64);
+    let n = (img.width() as u64 * img.height() as u64).max(1);
+    for p in img.pixels() {
+        sr += p.0[0] as u64;
+        sg += p.0[1] as u64;
+        sb += p.0[2] as u64;
+        sa += p.0[3] as u64;
+    }
+    let (r, g, b, a) = (
+        (sr / n) as u8,
+        (sg / n) as u8,
+        (sb / n) as u8,
+        (sa / n) as u8,
+    );
+    Ok(json!({ "r": r, "g": g, "b": b, "a": a, "hex": format!("#{r:02x}{g:02x}{b:02x}") }))
+}
+
 /// Measure rendered text. opts: size (16), font. Returns `{width, height}`.
 fn op_img_text_size(opts: Value) -> Result<Value> {
     use ab_glyph::{FontRef, PxScale};

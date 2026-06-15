@@ -1249,6 +1249,11 @@ val $casr = Office::img_crop_aspect($cas->{handle}, aspect => [16, 9])
 assert_eq $casr->{width}, 100, "img_crop_aspect: keeps width"
 assert_eq $casr->{height}, 56, "img_crop_aspect: 16:9 height"
 Office::img_close($cas->{handle})
+# img_average_color: mean of a solid fill
+val $avc = Office::img_new(8, 8, color => [40, 80, 120, 255])
+val $avcr = Office::img_average_color($avc->{handle})
+assert_eq $avcr->{hex}, "#285078", "img_average_color: mean hex"
+Office::img_close($avc->{handle})
 # barcode_sheet: one QR per column value
 val $bcsx = "$dir/$tag-bcsheet.xlsx"
 Office::sheet_write($bcsx, [{ name => "D", rows => [["sku"], ["A100"], ["B200"]] }])

@@ -2807,6 +2807,12 @@ fn Office::img_phash ($handle, %opts) {
     Office::_decode("img_phash", office__img_phash(to_json({ handle => $handle, other => $opts{other} })))
 }
 
+## Mean color of an image (per-channel average) — for LQIP placeholders / theme
+## colors. Returns { r, g, b, a, hex }.
+fn Office::img_average_color ($handle) {
+    Office::_decode("img_average_color", office__img_average_color(to_json({ handle => $handle })))
+}
+
 ## Measure rendered text. opts: size (16), font. Returns { width, height }.
 fn Office::img_text_size ($text, %opts) {
     Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))

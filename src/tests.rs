@@ -11459,6 +11459,22 @@ fn image_crop_aspect_centered() {
 }
 
 #[test]
+fn image_average_color_mean() {
+    // solid color -> average equals that color
+    let n = call(
+        office__img_new,
+        r#"{"width":20,"height":20,"color":[40,80,120,255]}"#,
+    );
+    let h = n["handle"].as_u64().unwrap();
+    let a = call(office__img_average_color, &format!(r#"{{"handle":{h}}}"#));
+    assert_eq!(a["r"].as_u64().unwrap(), 40, "mean R: {a}");
+    assert_eq!(a["g"].as_u64().unwrap(), 80, "mean G: {a}");
+    assert_eq!(a["b"].as_u64().unwrap(), 120, "mean B: {a}");
+    assert_eq!(a["hex"], "#285078", "hex of mean: {a}");
+    call(office__img_close, &format!(r#"{{"handle":{h}}}"#));
+}
+
+#[test]
 fn image_color_science_and_distortions() {
     let n = call(
         office__img_new,
