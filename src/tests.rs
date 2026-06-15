@@ -5209,6 +5209,57 @@ fn sheet_concat_columns_textjoin() {
 }
 
 #[test]
+fn sheet_str_distance_fuzzy() {
+    let path = tmp("strdist.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b"],["kitten","sitting"],["abc","abc"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    // Levenshtein: kitten->sitting = 3; abc==abc = 0
+    let out = tmp("strdist_out.xlsx");
+    let r = call(
+        office__sheet_str_distance,
+        &format!(r#"{{"path":"{path}","a":"a","b":"b","output":"{out}","into":"d"}}"#),
+    );
+    assert_eq!(r["column"], "d", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        rows[1][2].as_f64().unwrap(),
+        3.0,
+        "kitten/sitting = 3: {rd}"
+    );
+    assert_eq!(rows[2][2].as_f64().unwrap(), 0.0, "identical = 0: {rd}");
+
+    // ratio metric: identical -> 1.0; kitten/sitting -> 1 - 3/7 ≈ 0.5714
+    let outr = tmp("strdist_ratio.xlsx");
+    call(
+        office__sheet_str_distance,
+        &format!(
+            r#"{{"path":"{path}","a":"a","b":"b","output":"{outr}","metric":"ratio","decimals":4}}"#
+        ),
+    );
+    let rdr = call(office__sheet_read, &format!(r#"{{"path":"{outr}"}}"#));
+    assert_eq!(
+        rdr["sheets"][0]["rows"][2][2].as_f64().unwrap(),
+        1.0,
+        "identical ratio 1: {rdr}"
+    );
+    assert!(
+        (rdr["sheets"][0]["rows"][1][2].as_f64().unwrap() - 0.5714).abs() < 1e-3,
+        "ratio 1-3/7: {rdr}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outr).ok();
+}
+
+#[test]
 fn sheet_group_concat_joins_values() {
     let path = tmp("gconcat.xlsx");
     let w = call(

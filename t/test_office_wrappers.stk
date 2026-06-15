@@ -558,6 +558,16 @@ val $sfr = Office::sheet_sumifs($sfx, [{ column => "region", value => "west" }, 
 assert_eq $sfr->{count}, 2, "sheet_sumifs: two rows match both"
 assert_eq $sfr->{sum}, 15, "sheet_sumifs: west+A qty = 15"
 unlink $sfx
+# sheet_str_distance: Levenshtein between two columns
+val $sdx = "$dir/$tag-strdist.xlsx"
+Office::sheet_write($sdx, [{ name => "D", rows => [["a", "b"], ["kitten", "sitting"], ["abc", "abc"]] }])
+val $sdo = "$dir/$tag-strdist-out.xlsx"
+Office::sheet_str_distance($sdx, "a", "b", $sdo, into => "d")
+val $sdb = Office::sheet_read($sdo)
+assert_eq $sdb->[0]{rows}[1][2], 3, "sheet_str_distance: kitten/sitting = 3"
+assert_eq $sdb->[0]{rows}[2][2], 0, "sheet_str_distance: identical = 0"
+unlink $sdx
+unlink $sdo
 # flag: g == x marks 2 rows but keeps all
 val $flgo = "$dir/$tag-flag-out.xlsx"
 val $flgr = Office::sheet_flag($gcx, "g", $flgo, op => "eq", value => "x", into => "isx")

@@ -9293,6 +9293,118 @@ fn op_sheet_split_column(opts: Value) -> Result<Value> {
 /// append the merged column at the end (default false = replace them with the
 /// merged column at the leftmost source position), sheet, header, format. Returns
 /// `{ ok, path, into }`.
+/// Levenshtein edit distance between two strings (insert/delete/substitute),
+/// character-based. Two-row dynamic-programming, O(len_a · len_b).
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    if a.is_empty() {
+        return b.len();
+    }
+    if b.is_empty() {
+        return a.len();
+    }
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur = vec![0usize; b.len() + 1];
+    for i in 1..=a.len() {
+        cur[0] = i;
+        for j in 1..=b.len() {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev[b.len()]
+}
+
+/// Append a column of string-similarity between two text columns — for fuzzy
+/// matching / record linkage. opts: path, output, a => first column name/index
+/// (required), b => second column name/index (required), metric => `levenshtein`
+/// (default, integer edit distance) | `ratio` (0..1 similarity = 1 − dist/maxlen),
+/// into => new column (default `distance`), decimals => round the ratio, sheet,
+/// header (default true), format. Cells are compared by their string form.
+/// Returns `{ ok, path, column }`.
+fn op_sheet_str_distance(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let metric = opts
+        .get("metric")
+        .and_then(Value::as_str)
+        .unwrap_or("levenshtein");
+    if !matches!(metric, "levenshtein" | "ratio") {
+        return Err(anyhow!("unknown metric: {metric} (levenshtein|ratio)"));
+    }
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let acol = resolve_col(opts.get("a"), header_row)?;
+    let bcol = resolve_col(opts.get("b"), header_row)?;
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| "distance".to_string());
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+                return Value::Array(cells);
+            }
+            let sa = cells.get(acol).map(cell_to_string).unwrap_or_default();
+            let sb = cells.get(bcol).map(cell_to_string).unwrap_or_default();
+            let dist = levenshtein(&sa, &sb);
+            let cell = if metric == "ratio" {
+                let maxlen = sa.chars().count().max(sb.chars().count());
+                let r = if maxlen == 0 {
+                    1.0
+                } else {
+                    1.0 - dist as f64 / maxlen as f64
+                };
+                let r = match decimals {
+                    Some(d) => {
+                        let f = 10f64.powi(d as i32);
+                        (r * f).round() / f
+                    }
+                    None => r,
+                };
+                json!(r)
+            } else {
+                json!(dist)
+            };
+            cells.push(cell);
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_concat_columns(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -15467,6 +15579,7 @@ export!(office__sheet_freq, op_sheet_freq);
 export!(office__sheet_unique, op_sheet_unique);
 export!(office__sheet_split_column, op_sheet_split_column);
 export!(office__sheet_concat_columns, op_sheet_concat_columns);
+export!(office__sheet_str_distance, op_sheet_str_distance);
 export!(office__sheet_pivot, op_sheet_pivot);
 export!(office__sheet_unpivot, op_sheet_unpivot);
 export!(office__sheet_join, op_sheet_join);
