@@ -2855,6 +2855,12 @@ fn Office::img_average_color ($handle) {
     Office::_decode("img_average_color", office__img_average_color(to_json({ handle => $handle })))
 }
 
+## Mean perceived brightness (luma) of an image — auto light/dark detection.
+## Returns { brightness (0..255), normalized (0..1), is_dark }.
+fn Office::img_brightness ($handle) {
+    Office::_decode("img_brightness", office__img_brightness(to_json({ handle => $handle })))
+}
+
 ## Measure rendered text. opts: size (16), font. Returns { width, height }.
 fn Office::img_text_size ($text, %opts) {
     Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))
