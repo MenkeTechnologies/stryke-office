@@ -140,6 +140,14 @@ fn Office::sheet_moments ($path, $column, %opts) {
         office__sheet_moments(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Arithmetic, geometric, and harmonic means of a numeric $column. Geometric is
+## null unless all values are positive; harmonic is null if any value is zero.
+## opts: decimals, sheet, header. Returns { ok, n, arithmetic, geometric, harmonic }.
+fn Office::sheet_means ($path, $column, %opts) {
+    Office::_decode("sheet_means",
+        office__sheet_means(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Net present value of a cashflow $column at periodic discount $rate (Excel
 ## NPV). opts: start (first-period exponent, default 1; 0 = first cashflow now),
 ## decimals, sheet, header. Returns { ok, npv, n, rate }.
