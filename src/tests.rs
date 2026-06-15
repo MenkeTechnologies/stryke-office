@@ -3742,6 +3742,31 @@ fn sheet_strip_whitespace() {
 }
 
 #[test]
+fn sheet_slugify_column() {
+    let path = tmp("slug.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["title"],["Q3 Report (2026)!"],["  Hello World  "]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("slug_out.xlsx");
+    let r = call(
+        office__sheet_slugify,
+        &format!(r#"{{"path":"{path}","column":"title","output":"{out}","into":"slug"}}"#),
+    );
+    assert_eq!(r["column"], "slug", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1], "q3-report-2026", "slugified: {rd}");
+    assert_eq!(rows[2][1], "hello-world", "trimmed slug: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_pad_fixed_width() {
     let path = tmp("pad.xlsx");
     let w = call(

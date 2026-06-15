@@ -801,8 +801,15 @@ assert_ok ($spr->{trimmed} >= 2), "sheet_strip: trimmed count"
 val $spb = Office::sheet_read($spo)
 assert_eq $spb->[0]{rows}[0][0], "name", "sheet_strip: header trimmed"
 assert_eq $spb->[0]{rows}[1][0], "apple", "sheet_strip: cell trimmed"
-unlink $spx
 unlink $spo
+# sheet_slugify: URL-safe slug from a text column
+val $slo = "$dir/$tag-slug-out.xlsx"
+Office::sheet_write($spx, [{ name => "D", rows => [["t"], ["Q3 Report (2026)!"]] }])
+Office::sheet_slugify($spx, "t", $slo, into => "slug")
+val $slb = Office::sheet_read($slo)
+assert_eq $slb->[0]{rows}[1][1], "q3-report-2026", "sheet_slugify: slug generated"
+unlink $spx
+unlink $slo
 # sheet_pad: zero-pad IDs to a fixed width
 val $pdx = "$dir/$tag-pad.xlsx"
 Office::sheet_write($pdx, [{ name => "D", rows => [["id"], ["5"], ["42"]] }])
