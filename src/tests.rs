@@ -4863,6 +4863,62 @@ fn sheet_date_diff_days_between() {
 }
 
 #[test]
+fn sheet_networkdays_business_days() {
+    let path = tmp("netdays.xlsx");
+    // 2026-06-15 (Mon) .. 2026-06-19 (Fri) inclusive = 5 business days
+    // 2026-06-15 (Mon) .. 2026-06-22 (next Mon) = 6 (skips Sat 20, Sun 21)
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["s","e"],
+                ["2026-06-15","2026-06-19"],
+                ["2026-06-15","2026-06-22"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+
+    let out = tmp("netdays_out.xlsx");
+    let r = call(
+        office__sheet_networkdays,
+        &format!(r#"{{"path":"{path}","start":"s","end":"e","output":"{out}","into":"bd"}}"#),
+    );
+    assert_eq!(r["column"], "bd", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(
+        rows[1][2].as_f64().unwrap(),
+        5.0,
+        "Mon-Fri inclusive = 5: {rd}"
+    );
+    assert_eq!(
+        rows[2][2].as_f64().unwrap(),
+        6.0,
+        "spanning a weekend = 6: {rd}"
+    );
+
+    // with a holiday inside the first range -> 4
+    let outh = tmp("netdays_hol.xlsx");
+    call(
+        office__sheet_networkdays,
+        &format!(
+            r#"{{"path":"{path}","start":"s","end":"e","output":"{outh}","holidays":["2026-06-17"]}}"#
+        ),
+    );
+    let rdh = call(office__sheet_read, &format!(r#"{{"path":"{outh}"}}"#));
+    assert_eq!(
+        rdh["sheets"][0]["rows"][1][2].as_f64().unwrap(),
+        4.0,
+        "holiday excluded: {rdh}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outh).ok();
+}
+
+#[test]
 fn sheet_date_add_shift() {
     let path = tmp("dateadd.xlsx");
     let w = call(

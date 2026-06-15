@@ -709,6 +709,15 @@ fn Office::sheet_date_diff ($path, $start, $end, $output, %opts) {
         office__sheet_date_diff(to_json({ path => $path, start => $start, end => $end, output => $output, unit => $opts{unit}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append the count of business days (Mon-Fri, minus holidays) between two
+## ISO-date columns, inclusive (Excel NETWORKDAYS). opts: holidays (arrayref of
+## ISO dates), into (default networkdays), sheet, header, format. Returns
+## { ok, path, column }.
+fn Office::sheet_networkdays ($path, $start, $end, $output, %opts) {
+    Office::_decode("sheet_networkdays",
+        office__sheet_networkdays(to_json({ path => $path, start => $start, end => $end, output => $output, holidays => $opts{holidays}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append an ISO-date $column shifted by $amount (may be negative). opts: unit
 ## (days|weeks|months, default days), into (default {column}_shift), sheet,
 ## header, format. Month math clamps to month end. Returns { ok, path, column }.
