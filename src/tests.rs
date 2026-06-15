@@ -14933,3 +14933,31 @@ fn parse_range_gives_span_dimensions() {
     assert_eq!(v["cols"], 3);
     assert!(err_of(&call(office__parse_range, r#"{"range":"A1"}"#)).contains("range"));
 }
+
+#[test]
+fn range_of_is_the_inverse_of_parse_range() {
+    // 0-based corners → A1 range, round-trips through parse_range.
+    let v = call(
+        office__range_of,
+        r#"{"start_row":0,"start_col":0,"end_row":3,"end_col":2}"#,
+    );
+    assert_eq!(v["range"], "A1:C4");
+    assert_eq!(v["rows"], 4);
+    assert_eq!(v["cols"], 3);
+    let back = call(office__parse_range, r#"{"range":"A1:C4"}"#);
+    assert_eq!(back["end"]["row"], 3);
+    assert_eq!(back["end"]["col"], 2);
+    // Corners are normalized: swapped args produce the same top-left:bottom-right.
+    let swapped = call(
+        office__range_of,
+        r#"{"start_row":3,"start_col":2,"end_row":0,"end_col":0}"#,
+    );
+    assert_eq!(swapped["range"], "A1:C4");
+    // Past column Z to verify multi-letter column carry (col 27 → AB).
+    let wide = call(
+        office__range_of,
+        r#"{"start_row":0,"start_col":0,"end_row":0,"end_col":27}"#,
+    );
+    assert_eq!(wide["range"], "A1:AB1");
+    assert!(err_of(&call(office__range_of, r#"{"start_row":0}"#)).contains("missing"));
+}

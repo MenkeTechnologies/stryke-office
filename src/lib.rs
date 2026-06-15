@@ -17131,11 +17131,42 @@ fn op_parse_range(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Build an A1 range `A1:B10` from 0-based corner indices. opts: `start_row`,
+/// `start_col`, `end_row`, `end_col`. Corners are normalized so the result is
+/// always top-left`:`bottom-right regardless of argument order. Inverse of
+/// `parse_range`. Pure.
+fn op_range_of(opts: Value) -> Result<Value> {
+    let get = |k: &str| {
+        opts.get(k)
+            .and_then(Value::as_u64)
+            .map(|n| n as usize)
+            .ok_or_else(|| anyhow!("missing {k} (0-based)"))
+    };
+    let (sr, sc, er, ec) = (
+        get("start_row")?,
+        get("start_col")?,
+        get("end_row")?,
+        get("end_col")?,
+    );
+    let (r1, r2) = (sr.min(er), sr.max(er));
+    let (c1, c2) = (sc.min(ec), sc.max(ec));
+    let start = format!("{}{}", col_letters(c1), r1 + 1);
+    let end = format!("{}{}", col_letters(c2), r2 + 1);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (r2 - r1) + 1,
+        "cols": (c2 - c1) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__a1_of, op_a1_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);
 export!(office__parse_range, op_parse_range);
+export!(office__range_of, op_range_of);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");
