@@ -216,6 +216,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_cast($path, $output, %opts)` | `{ok, path, cast}` | type-coerce column(s) (`number`/`int`/`string`/`bool`); `number` parses currency/commas/percent/accounting negatives; `by` opt |
 | `Office::sheet_strip($path, %opts)` | `{ok, path, trimmed}` | trim whitespace from every string cell (whole-sheet); `collapse` squeezes internal runs |
 | `Office::sheet_slugify($path, $column, $output, %opts)` | `{ok, path, column}` | append a URL/ID-safe slug column from a text column; `separator`/`into` opts |
+| `Office::sheet_format_number($path, $column, $output, %opts)` | `{ok, path, column}` | append a formatted-number column (thousands sep, decimals, `prefix`/`suffix`); e.g. `$1,234.50` |
 | `Office::sheet_pad($path, $output, $column, $width, %opts)` | `{ok, path, padded}` | pad a column's values to a fixed width (e.g. zero-pad IDs); `fill`/`side`/`into` opts |
 | `Office::sheet_substr($path, $output, $column, %opts)` | `{ok, path, column}` | extract a fixed-position substring from a column (SQL `SUBSTRING`); `start`/`len`/`into` opts |
 | `Office::sheet_extract($path, $output, $column, $pattern, %opts)` | `{ok, path, column, matched}` | extract a regex match/capture group into a new column (pandas `str.extract`); `group`/`into` opts |

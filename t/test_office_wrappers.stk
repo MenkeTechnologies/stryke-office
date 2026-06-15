@@ -810,6 +810,15 @@ val $slb = Office::sheet_read($slo)
 assert_eq $slb->[0]{rows}[1][1], "q3-report-2026", "sheet_slugify: slug generated"
 unlink $spx
 unlink $slo
+# sheet_format_number: currency formatting
+val $fnx = "$dir/$tag-fmtnum.xlsx"
+Office::sheet_write($fnx, [{ name => "D", rows => [["amt"], [1234.5]] }])
+val $fno = "$dir/$tag-fmtnum-out.xlsx"
+Office::sheet_format_number($fnx, "amt", $fno, prefix => "\$", into => "disp")
+val $fnb = Office::sheet_read($fno)
+assert_eq $fnb->[0]{rows}[1][1], "\$1,234.50", "sheet_format_number: thousands + currency"
+unlink $fnx
+unlink $fno
 # sheet_pad: zero-pad IDs to a fixed width
 val $pdx = "$dir/$tag-pad.xlsx"
 Office::sheet_write($pdx, [{ name => "D", rows => [["id"], ["5"], ["42"]] }])

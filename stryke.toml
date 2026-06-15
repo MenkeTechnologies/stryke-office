@@ -167,6 +167,7 @@ exports = [
     "office__sheet_cast",
     "office__sheet_strip",
     "office__sheet_slugify",
+    "office__sheet_format_number",
     "office__sheet_pad",
     "office__sheet_substr",
     "office__sheet_extract",

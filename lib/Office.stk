@@ -1159,6 +1159,15 @@ fn Office::sheet_slugify ($path, $column, $output, %opts) {
         office__sheet_slugify(to_json({ path => $path, column => $column, output => $output, separator => $opts{separator}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a human-readable formatted-number column (thousands separators, fixed
+## decimals, currency prefix/unit suffix), e.g. 1234.5 -> "$1,234.50". opts:
+## decimals (2), thousands (1), separator (","), prefix, suffix, into
+## (default {column}_fmt), sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_format_number ($path, $column, $output, %opts) {
+    Office::_decode("sheet_format_number",
+        office__sheet_format_number(to_json({ path => $path, column => $column, output => $output, decimals => $opts{decimals}, thousands => $opts{thousands}, separator => $opts{separator}, prefix => $opts{prefix}, suffix => $opts{suffix}, into => $opts{into}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Pad a column's values to a fixed $width with a fill string (e.g. zero-pad IDs).
 ## opts: fill (default "0"), side (left|right, default left), into (new column;
 ## default in place), sheet, header, format. Returns { ok, path, padded }.
