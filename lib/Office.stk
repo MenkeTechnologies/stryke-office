@@ -3268,3 +3268,12 @@ fn Office::range_of ($start_row, $start_col, $end_row, $end_col) {
         end_row   => $end_row,   end_col   => $end_col,
     })))
 }
+
+## Expand an A1 range "A1:B2" into its individual cell references in row-major
+## order → ("A1", "B1", "A2", "B2"). %opts: limit (default 100000) caps the cell
+## count. Returns the list of cell strings.
+fn Office::expand_range ($range, %opts) {
+    var %req = (range => $range)
+    $req{limit} = $opts{limit} if defined $opts{limit}
+    @{ Office::_decode("expand_range", office__expand_range(to_json(\%req)))->{cells} }
+}

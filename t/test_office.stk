@@ -111,4 +111,11 @@ assert_eq Office::range_of(3, 2, 0, 0)->{range}, "A1:C4", "range_of: normalizes 
 assert_eq Office::range_of(0, 0, 0, 27)->{range}, "A1:AB1", "range_of: multi-letter column carry"
 assert_eq Office::range_of(0, 0, 3, 2)->{rows}, 4, "range_of: row span"
 
+# expand_range: A1 range → individual cell references, row-major.
+val @cells = Office::expand_range("A1:B2")
+assert_eq scalar(@cells), 4, "expand_range: 2x2 → 4 cells"
+assert_eq join(",", @cells), "A1,B1,A2,B2", "expand_range: row-major order"
+assert_eq join(",", Office::expand_range("C3:C3")), "C3", "expand_range: single cell"
+assert_dies fn { Office::expand_range("A1:Z100", limit => 10) }, "expand_range: limit guard rejects oversized range"
+
 test_run

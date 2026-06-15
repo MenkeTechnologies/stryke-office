@@ -17161,12 +17161,46 @@ fn op_range_of(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Expand an A1 range `A1:B2` into the flat list of its individual cell
+/// references in row-major order (`["A1","B1","A2","B2"]`). Corners are
+/// normalized, so `B2:A1` expands the same as `A1:B2`. A `limit` (default
+/// 100_000) caps the cell count so a giant range can't blow up memory. Pure.
+fn op_expand_range(opts: Value) -> Result<Value> {
+    let range = req_str(&opts, "range")?;
+    let (a, b) = range
+        .split_once(':')
+        .ok_or_else(|| anyhow!("not an A1 range (want A1:B10): {range}"))?;
+    let (sr, sc) = parse_a1(a).ok_or_else(|| anyhow!("invalid range start: {a}"))?;
+    let (er, ec) = parse_a1(b).ok_or_else(|| anyhow!("invalid range end: {b}"))?;
+    let (r1, r2) = (sr.min(er), sr.max(er));
+    let (c1, c2) = (sc.min(ec), sc.max(ec));
+    let count = (r2 - r1 + 1) * (c2 - c1 + 1);
+    let limit = opts
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(100_000);
+    if count > limit {
+        return Err(anyhow!(
+            "range {range} has {count} cells, over the limit of {limit}"
+        ));
+    }
+    let mut cells = Vec::with_capacity(count);
+    for r in r1..=r2 {
+        for c in c1..=c2 {
+            cells.push(format!("{}{}", col_letters(c), r + 1));
+        }
+    }
+    Ok(json!({"cells": cells, "count": count}))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__a1_of, op_a1_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);
 export!(office__parse_range, op_parse_range);
 export!(office__range_of, op_range_of);
+export!(office__expand_range, op_expand_range);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");
