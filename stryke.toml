@@ -38,6 +38,7 @@ exports = [
     "office__sheet_argmax",
     "office__sheet_corr",
     "office__sheet_regress",
+    "office__sheet_forecast",
     "office__sheet_ttest",
     "office__sheet_anova",
     "office__sheet_chisq",

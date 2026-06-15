@@ -1565,6 +1565,13 @@ val $rgb = Office::sheet_read($rgo)
 assert_eq $rgb->[0]{rows}[0][2], "predicted", "sheet_regress: predicted column"
 unlink $rgx
 unlink $rgo
+# sheet_forecast: linear extrapolation
+val $fcx = "$dir/$tag-forecast.xlsx"
+Office::sheet_write($fcx, [{ name => "D", rows => [["y"], [1], [3], [5], [7], [9]] }])
+val $fcr = Office::sheet_forecast($fcx, "y", periods => 2, decimals => 6)
+assert_eq $fcr->{slope}, 2, "sheet_forecast: slope 2"
+assert_eq $fcr->{forecast}[0], 11, "sheet_forecast: next point 11"
+unlink $fcx
 
 # ── sheet_ttest: Welch two-sample t-test ────────────────────────────
 val $ttx = "$dir/$tag-ttest.xlsx"

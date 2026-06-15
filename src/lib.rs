@@ -3191,6 +3191,106 @@ fn op_sheet_regress(opts: Value) -> Result<Value> {
     Ok(result)
 }
 
+/// Linear-trend forecast of a value column treated as an evenly-spaced series —
+/// fits `y = a + b·index` by least squares and extrapolates the next `periods`
+/// points. opts: path, column => name/index (required), periods => future points
+/// to project (default 1), output => when set, write a chartable sheet
+/// `[period, value, kind]` with historical rows (`actual`) followed by the
+/// forecast (`forecast`); decimals => round forecast values; sheet, header
+/// (default true), format. Returns `{ ok, slope, intercept, forecast, n, path? }`.
+fn op_sheet_forecast(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let periods = opts
+        .get("periods")
+        .and_then(Value::as_u64)
+        .unwrap_or(1)
+        .max(1) as usize;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let ys: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let n = ys.len();
+    if n < 2 {
+        return Err(anyhow!("need at least two numeric values to fit a trend"));
+    }
+    // Least-squares fit over x = 0..n-1.
+    let mx = (n as f64 - 1.0) / 2.0;
+    let my = ys.iter().sum::<f64>() / n as f64;
+    let mut sxx = 0.0;
+    let mut sxy = 0.0;
+    for (i, &y) in ys.iter().enumerate() {
+        let dx = i as f64 - mx;
+        sxx += dx * dx;
+        sxy += dx * (y - my);
+    }
+    if sxx.abs() < f64::EPSILON {
+        return Err(anyhow!("degenerate fit"));
+    }
+    let slope = sxy / sxx;
+    let intercept = my - slope * mx;
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    let forecast: Vec<f64> = (0..periods)
+        .map(|i| round(intercept + slope * (n + i) as f64))
+        .collect();
+
+    let mut result = json!({
+        "ok": true,
+        "slope": round(slope),
+        "intercept": round(intercept),
+        "forecast": forecast,
+        "n": n,
+    });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        let mut out_rows: Vec<Value> = vec![json!(["period", "value", "kind"])];
+        for (i, &y) in ys.iter().enumerate() {
+            out_rows.push(json!([i, y, "actual"]));
+        }
+        for (i, &f) in forecast.iter().enumerate() {
+            out_rows.push(json!([n + i, f, "forecast"]));
+        }
+        let mut wopts =
+            json!({ "path": output, "sheets": [{ "name": "Forecast", "rows": out_rows }] });
+        if let Some(f) = opts.get("format") {
+            wopts["format"] = f.clone();
+        }
+        op_sheet_write(wopts)?;
+        result["path"] = json!(output);
+    }
+    Ok(result)
+}
+
 /// Log Gamma function (Lanczos approximation, Numerical Recipes `gammln`).
 fn gammln(xx: f64) -> f64 {
     const COF: [f64; 6] = [
@@ -15742,6 +15842,7 @@ export!(office__sheet_sparkline, op_sheet_sparkline);
 export!(office__sheet_argmax, op_sheet_argmax);
 export!(office__sheet_corr, op_sheet_corr);
 export!(office__sheet_regress, op_sheet_regress);
+export!(office__sheet_forecast, op_sheet_forecast);
 export!(office__sheet_ttest, op_sheet_ttest);
 export!(office__sheet_anova, op_sheet_anova);
 export!(office__sheet_chisq, op_sheet_chisq);

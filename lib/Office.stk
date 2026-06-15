@@ -240,6 +240,15 @@ fn Office::sheet_corr ($path, %opts) {
         office__sheet_corr(to_json({ path => $path, method => $opts{method}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Linear-trend forecast of a value $column (evenly-spaced series): fit and
+## extrapolate $opts{periods} (default 1) future points. opts: output (write a
+## chartable [period, value, kind] sheet), decimals, sheet, header, format.
+## Returns { ok, slope, intercept, forecast, n, path? }.
+fn Office::sheet_forecast ($path, $column, %opts) {
+    Office::_decode("sheet_forecast",
+        office__sheet_forecast(to_json({ path => $path, column => $column, periods => $opts{periods}, output => $opts{output}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Simple OLS linear regression of $y on $x (lm(y ~ x)). opts: output (append
 ## predicted+residual columns and write there), decimals (round coefficients),
 ## sheet, header, format. Returns { ok, slope, intercept, r2, n, path? }.
