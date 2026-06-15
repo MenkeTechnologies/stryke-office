@@ -320,6 +320,53 @@ fn sheet_nunique_cardinality() {
 }
 
 #[test]
+fn sheet_entropy_diversity() {
+    // uniform 4-way distribution -> entropy 2.0 bits, normalized 1.0
+    let path = tmp("entropy.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["c"],["a"],["b"],["c"],["d"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_entropy,
+        &format!(r#"{{"path":"{path}","column":"c","decimals":6}}"#),
+    );
+    assert_eq!(s["distinct"].as_u64().unwrap(), 4, "four distinct: {s}");
+    assert!(
+        (s["entropy"].as_f64().unwrap() - 2.0).abs() < 1e-9,
+        "uniform 4 -> 2 bits: {s}"
+    );
+    assert!(
+        (s["normalized"].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "uniform -> normalized 1: {s}"
+    );
+
+    // constant column -> entropy 0
+    let path2 = tmp("entropy2.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path2}","sheets":[{{"name":"D","rows":[["c"],["x"],["x"],["x"]]}}]}}"#
+        ),
+    );
+    let s2 = call(
+        office__sheet_entropy,
+        &format!(r#"{{"path":"{path2}","column":"c"}}"#),
+    );
+    assert_eq!(
+        s2["entropy"].as_f64().unwrap(),
+        0.0,
+        "constant -> 0 entropy: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_count_completeness() {
     let path = tmp("count.xlsx");
     let w = call(

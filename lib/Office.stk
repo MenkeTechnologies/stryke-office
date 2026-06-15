@@ -117,6 +117,14 @@ fn Office::sheet_nunique ($path, %opts) {
         office__sheet_nunique(to_json({ path => $path, dropna => $opts{dropna}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Shannon entropy (bits) of a $column's value distribution — a diversity
+## measure. opts: decimals, sheet, header. Returns { ok, entropy, normalized,
+## distinct, n } (normalized = entropy/log2(distinct), 0..1).
+fn Office::sheet_entropy ($path, $column, %opts) {
+    Office::_decode("sheet_entropy",
+        office__sheet_entropy(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Count filled/blank cells per column (completeness; pandas count). opts: sheet,
 ## header. Returns { sheet, rows, columns => [{ name, count, blank }] }.
 fn Office::sheet_count ($path, %opts) {

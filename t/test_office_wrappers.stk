@@ -1500,6 +1500,14 @@ assert_eq $mmr->{variance}, 2.5, "sheet_moments: sample variance 2.5"
 assert_eq $mmr->{skewness}, 0, "sheet_moments: symmetric skew 0"
 unlink $mmx
 
+# ── sheet_entropy: Shannon entropy of a categorical column ──────────
+val $enx = "$dir/$tag-entropy.xlsx"
+Office::sheet_write($enx, [{ name => "D", rows => [["c"], ["a"], ["b"], ["c"], ["d"]] }])
+val $enr = Office::sheet_entropy($enx, "c", decimals => 6)
+assert_eq $enr->{distinct}, 4, "sheet_entropy: four distinct"
+assert_eq $enr->{entropy}, 2, "sheet_entropy: uniform 4 -> 2 bits"
+unlink $enx
+
 # ── sheet_means: arithmetic / geometric / harmonic ──────────────────
 val $mnx = "$dir/$tag-means.xlsx"
 Office::sheet_write($mnx, [{ name => "D", rows => [["v"], [1], [2], [4]] }])
