@@ -2341,6 +2341,71 @@ fn op_sheet_means(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Median absolute deviation of a numeric column — a robust (outlier-resistant)
+/// measure of spread: `median(|x − median(x)|)`. opts: path, column =>
+/// name/index (required), scaled => multiply by 1.4826 for normal-distribution
+/// consistency with the std dev (default false), sheet, header (default true),
+/// decimals => round. Returns `{ ok, mad, median, n }`.
+fn op_sheet_mad(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut xs: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if xs.is_empty() {
+        return Err(anyhow!("no numeric values"));
+    }
+    let median = |v: &mut [f64]| -> f64 {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let m = v.len();
+        if m % 2 == 1 {
+            v[m / 2]
+        } else {
+            (v[m / 2 - 1] + v[m / 2]) / 2.0
+        }
+    };
+    let med = median(&mut xs);
+    let mut devs: Vec<f64> = xs.iter().map(|x| (x - med).abs()).collect();
+    let mut mad = median(&mut devs);
+    if opts.get("scaled").and_then(flag_of).unwrap_or(false) {
+        mad *= 1.4826;
+    }
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    Ok(json!({ "ok": true, "mad": round(mad), "median": round(med), "n": xs.len() }))
+}
+
 /// Autocorrelation function (ACF) of a numeric column treated as an ordered
 /// series — the correlation of the series with lagged copies of itself. opts:
 /// path, column => name/index (required), lags => maximum lag (default 10),
@@ -15930,6 +15995,7 @@ export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
 export!(office__sheet_means, op_sheet_means);
+export!(office__sheet_mad, op_sheet_mad);
 export!(office__sheet_npv, op_sheet_npv);
 export!(office__sheet_sumproduct, op_sheet_sumproduct);
 export!(office__sheet_irr, op_sheet_irr);
