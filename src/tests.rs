@@ -14880,3 +14880,56 @@ fn barcode_invalid_inputs_error() {
         err_of(&u)
     );
 }
+
+// ── pure helpers (no workbook): A1 / column math ────────────────────────────
+
+#[test]
+fn parse_a1_yields_zero_based_row_col_and_letter() {
+    let v = call(office__parse_a1, r#"{"cell":"B2"}"#);
+    assert_eq!(v["row"], 1, "B2 row is 0-based 1");
+    assert_eq!(v["col"], 1, "B2 col is 0-based 1");
+    assert_eq!(v["row_1"], 2);
+    assert_eq!(v["col_1"], 2);
+    assert_eq!(v["letter"], "B");
+    // Multi-letter column.
+    let aa = call(office__parse_a1, r#"{"cell":"AA10"}"#);
+    assert_eq!(aa["col"], 26, "AA is the 27th column → 0-based 26");
+    assert_eq!(aa["row"], 9);
+    // Invalid.
+    assert!(err_of(&call(office__parse_a1, r#"{"cell":"2B"}"#)).contains("invalid"));
+}
+
+#[test]
+fn a1_of_is_the_inverse_of_parse_a1() {
+    let v = call(office__a1_of, r#"{"row":9,"col":26}"#);
+    assert_eq!(v["cell"], "AA10");
+    // Round-trip B2 → (1,1) → B2.
+    let p = call(office__parse_a1, r#"{"cell":"B2"}"#);
+    let back = call(
+        office__a1_of,
+        &format!(r#"{{"row":{},"col":{}}}"#, p["row"], p["col"]),
+    );
+    assert_eq!(back["cell"], "B2");
+}
+
+#[test]
+fn col_letter_conversions_round_trip() {
+    assert_eq!(call(office__col_to_letter, r#"{"col":0}"#)["letter"], "A");
+    assert_eq!(call(office__col_to_letter, r#"{"col":25}"#)["letter"], "Z");
+    assert_eq!(call(office__col_to_letter, r#"{"col":26}"#)["letter"], "AA");
+    assert_eq!(call(office__letter_to_col, r#"{"letter":"a"}"#)["col"], 0);
+    assert_eq!(call(office__letter_to_col, r#"{"letter":"AA"}"#)["col"], 26);
+    assert!(err_of(&call(office__letter_to_col, r#"{"letter":"A1"}"#)).contains("invalid"));
+}
+
+#[test]
+fn parse_range_gives_span_dimensions() {
+    let v = call(office__parse_range, r#"{"range":"A1:C4"}"#);
+    assert_eq!(v["start"]["row"], 0);
+    assert_eq!(v["start"]["col"], 0);
+    assert_eq!(v["end"]["row"], 3);
+    assert_eq!(v["end"]["col"], 2);
+    assert_eq!(v["rows"], 4);
+    assert_eq!(v["cols"], 3);
+    assert!(err_of(&call(office__parse_range, r#"{"range":"A1"}"#)).contains("range"));
+}

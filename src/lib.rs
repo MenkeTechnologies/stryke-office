@@ -17047,6 +17047,96 @@ export!(office__chart_svg, op_chart_svg);
 export!(office__chart_save, op_chart_save);
 export!(office__chart_grid, op_chart_grid);
 
+// ── pure helpers (no workbook): A1 / column-reference math ───────────────────
+
+/// Parse a column-letter run (`A`, `Z`, `AA`) to a 0-based column index, the
+/// inverse of `col_letters`. `None` on an empty or non-alphabetic run.
+fn col_from_letters(letters: &str) -> Option<usize> {
+    if letters.is_empty() {
+        return None;
+    }
+    let mut col = 0usize;
+    for c in letters.chars() {
+        if !c.is_ascii_alphabetic() {
+            return None;
+        }
+        col = col * 26 + (c.to_ascii_uppercase() as usize - 'A' as usize + 1);
+    }
+    if col == 0 {
+        None
+    } else {
+        Some(col - 1)
+    }
+}
+
+/// Parse an A1 cell reference into 0-based `{row, col}` (plus 1-based and the
+/// column `letter`). Reuses the same `parse_a1` the sheet ops use. Pure.
+fn op_parse_a1(opts: Value) -> Result<Value> {
+    let cell = req_str(&opts, "cell")?;
+    let (row, col) = parse_a1(cell).ok_or_else(|| anyhow!("invalid A1 reference: {cell}"))?;
+    Ok(json!({
+        "cell": cell.trim().to_ascii_uppercase(),
+        "row": row,
+        "col": col,
+        "row_1": row + 1,
+        "col_1": col + 1,
+        "letter": col_letters(col),
+    }))
+}
+
+/// Build an A1 cell reference from 0-based `{row, col}`. Inverse of `parse_a1`.
+fn op_a1_of(opts: Value) -> Result<Value> {
+    let row = opts
+        .get("row")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("missing row (0-based)"))? as usize;
+    let col = opts
+        .get("col")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("missing col (0-based)"))? as usize;
+    Ok(json!({"cell": format!("{}{}", col_letters(col), row + 1), "row": row, "col": col}))
+}
+
+/// 0-based column index → column letters (`0` → `A`, `26` → `AA`). Pure.
+fn op_col_to_letter(opts: Value) -> Result<Value> {
+    let col = opts
+        .get("col")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("missing col (0-based)"))? as usize;
+    Ok(json!({"col": col, "letter": col_letters(col)}))
+}
+
+/// Column letters → 0-based column index (`A` → `0`, `AA` → `26`). Pure.
+fn op_letter_to_col(opts: Value) -> Result<Value> {
+    let letter = req_str(&opts, "letter")?;
+    let col = col_from_letters(letter.trim())
+        .ok_or_else(|| anyhow!("invalid column letter: {letter}"))?;
+    Ok(json!({"letter": letter.trim().to_ascii_uppercase(), "col": col}))
+}
+
+/// Parse an A1 range `A1:B10` into `{start, end, rows, cols}` (0-based row/col).
+/// Pure.
+fn op_parse_range(opts: Value) -> Result<Value> {
+    let range = req_str(&opts, "range")?;
+    let (a, b) = range
+        .split_once(':')
+        .ok_or_else(|| anyhow!("not an A1 range (want A1:B10): {range}"))?;
+    let (sr, sc) = parse_a1(a).ok_or_else(|| anyhow!("invalid range start: {a}"))?;
+    let (er, ec) = parse_a1(b).ok_or_else(|| anyhow!("invalid range end: {b}"))?;
+    Ok(json!({
+        "start": {"cell": a.trim().to_ascii_uppercase(), "row": sr, "col": sc},
+        "end": {"cell": b.trim().to_ascii_uppercase(), "row": er, "col": ec},
+        "rows": (er as i64 - sr as i64).abs() + 1,
+        "cols": (ec as i64 - sc as i64).abs() + 1,
+    }))
+}
+
+export!(office__parse_a1, op_parse_a1);
+export!(office__a1_of, op_a1_of);
+export!(office__col_to_letter, op_col_to_letter);
+export!(office__letter_to_col, op_letter_to_col);
+export!(office__parse_range, op_parse_range);
+
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");
 

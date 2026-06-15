@@ -922,6 +922,18 @@ Office::pdf_build(path => "label.pdf", pages => [{ elements => [
 Generated natively with `qrcode` (matrix) + `barcoders` (1D) — no `zint`, no
 ImageMagick, no subprocess.
 
+### Cell-reference helpers (no workbook)
+
+Pure A1 / column math — no file is opened, so these run standalone:
+
+| Function | Returns |
+|----------|---------|
+| `Office::parse_a1("B2")` | `{ cell, row, col, row_1, col_1, letter }` — row/col 0-based |
+| `Office::a1_of($row, $col)` | A1 string from 0-based row/col — inverse of `parse_a1` |
+| `Office::col_to_letter($col)` | column letters from 0-based index (`0` → `A`, `26` → `AA`) |
+| `Office::letter_to_col("AA")` | 0-based index from column letters |
+| `Office::parse_range("A1:C4")` | `{ start, end, rows, cols }` — 0-based row/col |
+
 ## [0x05] No external binaries
 
 Every format is handled by a vendored Rust crate, statically linked into

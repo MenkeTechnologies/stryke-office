@@ -3230,3 +3230,31 @@ fn Office::barcode_sheet ($path, $column, $dir, %opts) {
     $r{dir} = $dir
     Office::_decode("barcode_sheet", office__barcode_sheet(to_json(\%r)))
 }
+
+# ── pure helpers (no workbook): A1 / column math ──────────────────────
+
+## Parse an A1 cell reference into a hashref { cell, row, col, row_1, col_1,
+## letter } (row/col are 0-based; row_1/col_1 are 1-based).
+fn Office::parse_a1 ($cell) {
+    Office::_decode("parse_a1", office__parse_a1(to_json({ cell => $cell })))
+}
+
+## Build an A1 cell reference from 0-based $row and $col. Inverse of parse_a1.
+fn Office::a1_of ($row, $col) {
+    Office::_decode("a1_of", office__a1_of(to_json({ row => $row, col => $col })))->{cell}
+}
+
+## 0-based column index → column letters (0 → "A", 26 → "AA").
+fn Office::col_to_letter ($col) {
+    Office::_decode("col_to_letter", office__col_to_letter(to_json({ col => $col })))->{letter}
+}
+
+## Column letters → 0-based column index ("A" → 0, "AA" → 26).
+fn Office::letter_to_col ($letter) {
+    Office::_decode("letter_to_col", office__letter_to_col(to_json({ letter => $letter })))->{col}
+}
+
+## Parse an A1 range "A1:C4" into { start, end, rows, cols } (0-based row/col).
+fn Office::parse_range ($range) {
+    Office::_decode("parse_range", office__parse_range(to_json({ range => $range })))
+}
