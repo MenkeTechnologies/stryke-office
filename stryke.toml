@@ -217,6 +217,7 @@ exports = [
     "office__pdf_compress",
     "office__pdf_delete",
     "office__pdf_extract",
+    "office__pdf_reverse",
     "office__pdf_remove_blank",
     "office__pdf_reorder",
     "office__pdf_search",
