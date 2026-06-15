@@ -147,9 +147,18 @@ val $tplo = "$dir/$tag-tpl-out.txt"
 val $tplr = Office::text_template($tplo, { name => "Jane", amount => 42 }, template => "Hi {{name}}, balance {{amount}}")
 assert_eq $tplr->{replaced}, 2, "text_template: two placeholders filled"
 assert_eq slurp($tplo), "Hi Jane, balance 42", "text_template: rendered output"
+unlink $tplo
+# text_tac: reverse line order
+val $tacx = "$dir/$tag-tac.txt"
+spew $tacx, "one\ntwo\nthree\n"
+val $taco = "$dir/$tag-tac-out.txt"
+val $tacr = Office::text_tac($tacx, output => $taco)
+assert_eq $tacr->{lines}, 3, "text_tac: three lines"
+assert_eq slurp($taco), "three\ntwo\none\n", "text_tac: reversed order"
 unlink $gpa
 unlink $gpb
-unlink $tplo
+unlink $tacx
+unlink $taco
 unlink $grx
 unlink $grt
 unlink $gso
