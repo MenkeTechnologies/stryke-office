@@ -14900,6 +14900,36 @@ fn parse_a1_yields_zero_based_row_col_and_letter() {
 }
 
 #[test]
+fn parse_a1_abs_reads_dollar_absolute_markers() {
+    // Fully absolute.
+    let v = call(office__parse_a1_abs, r#"{"cell":"$B$2"}"#);
+    assert_eq!(v["row"], 1);
+    assert_eq!(v["col"], 1);
+    assert_eq!(v["col_absolute"], true);
+    assert_eq!(v["row_absolute"], true);
+    assert_eq!(v["cell"], "$B$2", "normalized keeps both markers");
+    // Mixed: absolute column, relative row.
+    let cv = call(office__parse_a1_abs, r#"{"cell":"$A1"}"#);
+    assert_eq!(cv["col_absolute"], true);
+    assert_eq!(cv["row_absolute"], false);
+    assert_eq!(cv["cell"], "$A1");
+    // Mixed: relative column, absolute row.
+    let rv = call(office__parse_a1_abs, r#"{"cell":"A$1"}"#);
+    assert_eq!(rv["col_absolute"], false);
+    assert_eq!(rv["row_absolute"], true);
+    assert_eq!(rv["cell"], "A$1");
+    // Plain relative ref agrees with parse_a1 and normalizes casing.
+    let plain = call(office__parse_a1_abs, r#"{"cell":"aa10"}"#);
+    assert_eq!(plain["col"], 26);
+    assert_eq!(plain["row"], 9);
+    assert_eq!(plain["col_absolute"], false);
+    assert_eq!(plain["cell"], "AA10");
+    // Invalid references still reject.
+    assert!(err_of(&call(office__parse_a1_abs, r#"{"cell":"$$1"}"#)).contains("invalid"));
+    assert!(err_of(&call(office__parse_a1_abs, r#"{"cell":"A1$"}"#)).contains("invalid"));
+}
+
+#[test]
 fn a1_of_is_the_inverse_of_parse_a1() {
     let v = call(office__a1_of, r#"{"row":9,"col":26}"#);
     assert_eq!(v["cell"], "AA10");
