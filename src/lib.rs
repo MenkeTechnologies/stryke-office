@@ -6210,6 +6210,107 @@ fn op_sheet_ewm(opts: Value) -> Result<Value> {
 /// emitted only once `window` rows are available and all are numeric; partial or
 /// gappy windows get a blank. `std` is the population standard deviation over the
 /// window. Returns `{ ok, path, column }`.
+/// Append Bollinger Bands for a numeric column — rolling mean (mid) and
+/// mean ± `k`·rolling-std (upper/lower) over a trailing `window`. Adds three
+/// columns `{prefix}_mid`, `{prefix}_upper`, `{prefix}_lower`. opts: path,
+/// output, column => name/index (required), window => period (default 20), k =>
+/// std multiplier (default 2.0), prefix => column-name prefix (default `bb`),
+/// decimals => round, sheet, header (default true), format. Rows before the
+/// window fills (or with a non-numeric value in range) get blanks. Returns
+/// `{ ok, path, columns }` (the three band column names).
+fn op_sheet_bollinger(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let window = opts
+        .get("window")
+        .and_then(Value::as_u64)
+        .filter(|&w| w >= 2)
+        .unwrap_or(20) as usize;
+    let k = opts.get("k").and_then(Value::as_f64).unwrap_or(2.0);
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .unwrap_or("bb")
+        .to_string();
+    let decimals = opts.get("decimals").and_then(Value::as_i64);
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let names = [
+        format!("{prefix}_mid"),
+        format!("{prefix}_upper"),
+        format!("{prefix}_lower"),
+    ];
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let nums: Vec<Option<f64>> = rows[data_start..]
+        .iter()
+        .map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let round = |x: f64| match decimals {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (x * f).round() / f
+        }
+        None => x,
+    };
+
+    let mut new_rows: Vec<Value> = Vec::with_capacity(rows.len());
+    if data_start == 1 {
+        let mut hr = rows[0].as_array().cloned().unwrap_or_default();
+        hr.extend(names.iter().map(|n| json!(n)));
+        new_rows.push(Value::Array(hr));
+    }
+    for (i, row) in rows[data_start..].iter().enumerate() {
+        let mut cells = row.as_array().cloned().unwrap_or_default();
+        if i + 1 >= window {
+            let slice = &nums[i + 1 - window..=i];
+            if slice.iter().all(Option::is_some) {
+                let w: Vec<f64> = slice.iter().flatten().copied().collect();
+                let mean = w.iter().sum::<f64>() / window as f64;
+                let var = w.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / window as f64;
+                let sd = var.sqrt();
+                cells.push(json!(round(mean)));
+                cells.push(json!(round(mean + k * sd)));
+                cells.push(json!(round(mean - k * sd)));
+                new_rows.push(Value::Array(cells));
+                continue;
+            }
+        }
+        cells.push(json!(""));
+        cells.push(json!(""));
+        cells.push(json!(""));
+        new_rows.push(Value::Array(cells));
+    }
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "columns": names }))
+}
+
 fn op_sheet_rolling(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = req_str(&opts, "output")?.to_string();
@@ -16199,6 +16300,7 @@ export!(office__sheet_standardize, op_sheet_standardize);
 export!(office__sheet_movavg, op_sheet_movavg);
 export!(office__sheet_ewm, op_sheet_ewm);
 export!(office__sheet_rolling, op_sheet_rolling);
+export!(office__sheet_bollinger, op_sheet_bollinger);
 export!(office__sheet_delta, op_sheet_delta);
 export!(office__sheet_pct_change, op_sheet_pct_change);
 export!(office__sheet_shift, op_sheet_shift);

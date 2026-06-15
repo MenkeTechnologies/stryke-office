@@ -2218,6 +2218,41 @@ fn sheet_rolling_aggregates() {
 }
 
 #[test]
+fn sheet_bollinger_bands() {
+    let path = tmp("boll.xlsx");
+    // window 3: rows 3 and 4 fill; mid = rolling mean
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[2],[4],[6],[8]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("boll_out.xlsx");
+    let r = call(
+        office__sheet_bollinger,
+        &format!(
+            r#"{{"path":"{path}","column":"v","window":3,"k":1,"output":"{out}","decimals":4}}"#
+        ),
+    );
+    let names = r["columns"].as_array().unwrap();
+    assert_eq!(names[0], "bb_mid", "mid column name: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[0][1], "bb_mid", "header appended: {rd}");
+    assert!(
+        rows[2][1].as_f64().is_none(),
+        "row before window fills is blank: {rd}"
+    );
+    assert_eq!(rows[3][1].as_f64().unwrap(), 4.0, "mid of 2,4,6 = 4: {rd}");
+    assert_eq!(rows[4][1].as_f64().unwrap(), 6.0, "mid of 4,6,8 = 6: {rd}");
+    // upper band above mid, lower below
+    assert!(rows[3][2].as_f64().unwrap() > 4.0, "upper > mid: {rd}");
+    assert!(rows[3][3].as_f64().unwrap() < 4.0, "lower < mid: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_delta_row_over_row() {
     let path = tmp("delta.xlsx");
     let w = call(

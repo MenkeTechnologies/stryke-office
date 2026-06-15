@@ -742,6 +742,13 @@ assert_eq $rlr->{column}, "v_roll3", "sheet_rolling: default column name"
 val $rlb = Office::sheet_read($rlo)
 assert_eq $rlb->[0]{rows}[3][1], 60, "sheet_rolling: window sum 60"
 assert_eq $rlb->[0]{rows}[4][1], 90, "sheet_rolling: window sum 90"
+# sheet_bollinger: bands over the same data
+val $blo = "$dir/$tag-boll-out.xlsx"
+Office::sheet_bollinger($rlx, "v", $blo, window => 3, k => 1, decimals => 4)
+val $blb = Office::sheet_read($blo)
+assert_eq $blb->[0]{rows}[0][1], "bb_mid", "sheet_bollinger: mid column header"
+assert_eq $blb->[0]{rows}[3][1], 20, "sheet_bollinger: rolling mean of 10,20,30 = 20"
+unlink $blo
 unlink $rlx
 unlink $rlo
 # sheet_ewm: exponentially-weighted moving average (alpha 0.5)
