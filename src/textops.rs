@@ -1237,3 +1237,21 @@ fn op_text_template(opts: Value) -> Result<Value> {
     std::fs::write(&output, text)?;
     Ok(json!({ "ok": true, "path": output, "replaced": replaced }))
 }
+
+/// Reverse the line order of a file (Unix `tac`). opts: path => input file,
+/// output => destination (default in place). A trailing newline is normalized.
+/// Returns `{ ok, path, lines }`.
+fn op_text_tac(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts.get("output").and_then(Value::as_str).unwrap_or(path).to_string();
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let mut lines: Vec<&str> = text.lines().collect();
+    lines.reverse();
+    let joined = if lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", lines.join("\n"))
+    };
+    std::fs::write(&output, joined)?;
+    Ok(json!({ "ok": true, "path": output, "lines": lines.len() }))
+}

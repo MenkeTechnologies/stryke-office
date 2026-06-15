@@ -14519,6 +14519,23 @@ fn text_template_fill() {
 }
 
 #[test]
+fn text_tac_reverse_lines() {
+    let path = tmp("tac.txt");
+    std::fs::write(&path, "one\ntwo\nthree\n").unwrap();
+    let out = tmp("tac_out.txt");
+    let r = call(
+        office__text_tac,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["lines"].as_u64().unwrap(), 3, "three lines: {r}");
+    let t = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(t, "three\ntwo\none\n", "line order reversed: {t:?}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();

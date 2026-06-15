@@ -263,6 +263,7 @@ exports = [
     "office__text_hash",
     "office__text_redact",
     "office__text_template",
+    "office__text_tac",
     "office__text_wrap",
     "office__text_head",
     "office__doc_tables",
