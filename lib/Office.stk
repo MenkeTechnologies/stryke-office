@@ -102,6 +102,14 @@ fn Office::sheet_dtypes ($path, %opts) {
         office__sheet_dtypes(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## One-call per-column data profile (type, count, nulls, distinct, numeric
+## min/max/mean or categorical top). opts: sheet, header. Returns { sheet, rows,
+## columns => [{ name, type, count, nulls, distinct, ... }] }.
+fn Office::sheet_profile ($path, %opts) {
+    Office::_decode("sheet_profile",
+        office__sheet_profile(to_json({ path => $path, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Most-frequent value (mode) of each column. opts: sheet, header. Returns
 ## { sheet, rows, columns => [{ name, mode, count }] }.
 fn Office::sheet_mode ($path, %opts) {

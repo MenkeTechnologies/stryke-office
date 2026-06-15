@@ -169,6 +169,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_anova($path, %opts)` | `{ok, f, df_between, df_within, p, groups, n}` | one-way ANOVA across group columns (`columns` default all numeric); upper-tail F p-value |
 | `Office::sheet_chisq($path, %opts)` | `{ok, chi2, df, p, rows, cols}` | Pearson chi-square test of independence on a contingency table of counts; upper-tail chi-square p-value |
 | `Office::sheet_dtypes($path, %opts)` | `{sheet, rows, columns:[{name,type,counts}]}` | infer each column's data type (integer/float/bool/string/mixed/empty; pandas `df.dtypes`) |
+| `Office::sheet_profile($path, %opts)` | `{sheet, rows, columns:[{name,type,count,nulls,distinct,…}]}` | one-call per-column profile (numeric min/max/mean or categorical top); pandas-profiling lite |
 | `Office::sheet_mode($path, %opts)` | `{sheet, rows, columns:[{name,mode,count}]}` | most-frequent value (mode) of each column (text or numeric) |
 | `Office::sheet_nunique($path, %opts)` | `{sheet, rows, columns:[{name,nunique}]}` | count distinct values per column (cardinality; pandas `nunique`); `dropna` opt |
 | `Office::sheet_count($path, %opts)` | `{sheet, rows, columns:[{name,count,blank}]}` | count filled/blank cells per column (completeness; pandas `count`) |

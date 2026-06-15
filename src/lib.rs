@@ -1397,6 +1397,94 @@ fn op_sheet_describe(opts: Value) -> Result<Value> {
 /// `string` when all are text, `empty` when entirely blank, else `mixed`. opts:
 /// path, sheet, header. Returns `{ sheet, rows, columns: [{ name, type, counts:
 /// { integer, float, bool, string, blank } }] }`.
+/// One-call per-column data profile (a lightweight pandas-profiling). For each
+/// column reports type (`numeric`/`text`/`empty`), non-blank `count`, `nulls`,
+/// `distinct`, and either `{min, max, mean}` (numeric) or `{top, top_count}`
+/// (categorical). opts: path, sheet, header (default true). Returns
+/// `{ sheet, rows, columns: [...] }`.
+fn op_sheet_profile(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let name = sheet["name"].as_str().unwrap_or("").to_string();
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ncols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    let header_row = if header { rows.first() } else { None };
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+
+    let mut cols: Vec<Value> = Vec::with_capacity(ncols);
+    for c in 0..ncols {
+        let cname = header_row
+            .and_then(|hr| hr.as_array())
+            .and_then(|a| a.get(c))
+            .map(cell_to_string)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("Col{}", c + 1));
+        let mut count = 0u64;
+        let mut nulls = 0u64;
+        let mut nums: Vec<f64> = Vec::new();
+        let mut all_numeric = true;
+        let mut freq: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        for row in &rows[data_start..] {
+            let cell = row
+                .as_array()
+                .and_then(|a| a.get(c))
+                .unwrap_or(&Value::Null);
+            if sheet_cell_blank(cell) {
+                nulls += 1;
+                continue;
+            }
+            count += 1;
+            match sheet_cell_num(cell) {
+                Some(x) => nums.push(x),
+                None => all_numeric = false,
+            }
+            *freq.entry(cell_to_string(cell)).or_insert(0) += 1;
+        }
+        let distinct = freq.len();
+        let mut col = json!({
+            "name": cname,
+            "count": count,
+            "nulls": nulls,
+            "distinct": distinct,
+        });
+        if count == 0 {
+            col["type"] = json!("empty");
+        } else if all_numeric {
+            col["type"] = json!("numeric");
+            let n = nums.len() as f64;
+            col["min"] = json!(nums.iter().cloned().fold(f64::INFINITY, f64::min));
+            col["max"] = json!(nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max));
+            col["mean"] = json!(nums.iter().sum::<f64>() / n);
+        } else {
+            col["type"] = json!("text");
+            if let Some((v, c)) = freq.into_iter().max_by_key(|(_, c)| *c) {
+                col["top"] = json!(v);
+                col["top_count"] = json!(c);
+            }
+        }
+        cols.push(col);
+    }
+    let nrows = rows.len().saturating_sub(data_start);
+    Ok(json!({ "sheet": name, "rows": nrows, "columns": cols }))
+}
+
 fn op_sheet_dtypes(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let read = op_sheet_read(json!({ "path": path }))?;
@@ -15987,6 +16075,7 @@ export!(office__sheet_union, op_sheet_union);
 export!(office__sheet_stats, op_sheet_stats);
 export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_dtypes, op_sheet_dtypes);
+export!(office__sheet_profile, op_sheet_profile);
 export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_entropy, op_sheet_entropy);
