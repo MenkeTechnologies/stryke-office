@@ -2342,6 +2342,53 @@ fn sheet_pct_change_row_over_row() {
 }
 
 #[test]
+fn sheet_returns_simple_and_log() {
+    let path = tmp("returns.xlsx");
+    // 100,110,99: simple +0.1 then -0.1
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["p"],[100],[110],[99]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("returns_simple.xlsx");
+    let r = call(
+        office__sheet_returns,
+        &format!(r#"{{"path":"{path}","column":"p","output":"{out}","decimals":6}}"#),
+    );
+    assert_eq!(r["column"], "p_return", "default column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert!(
+        (rows[2][1].as_f64().unwrap() - 0.1).abs() < 1e-6,
+        "simple +0.1: {rd}"
+    );
+    assert!(
+        (rows[3][1].as_f64().unwrap() + 0.1).abs() < 1e-6,
+        "simple -0.1: {rd}"
+    );
+
+    // log returns
+    let outl = tmp("returns_log.xlsx");
+    call(
+        office__sheet_returns,
+        &format!(
+            r#"{{"path":"{path}","column":"p","output":"{outl}","method":"log","decimals":6}}"#
+        ),
+    );
+    let rdl = call(office__sheet_read, &format!(r#"{{"path":"{outl}"}}"#));
+    assert!(
+        (rdl["sheets"][0]["rows"][2][1].as_f64().unwrap() - 0.095310).abs() < 1e-4,
+        "log ln(1.1): {rdl}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&outl).ok();
+}
+
+#[test]
 fn sheet_shift_lag_and_lead() {
     let path = tmp("shift.xlsx");
     let w = call(

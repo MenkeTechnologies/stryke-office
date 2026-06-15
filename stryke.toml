@@ -73,6 +73,7 @@ exports = [
     "office__sheet_bollinger",
     "office__sheet_delta",
     "office__sheet_pct_change",
+    "office__sheet_returns",
     "office__sheet_shift",
     "office__sheet_clamp",
     "office__sheet_winsorize",
