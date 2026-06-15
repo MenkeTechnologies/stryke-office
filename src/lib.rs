@@ -17097,6 +17097,50 @@ fn op_a1_of(opts: Value) -> Result<Value> {
     Ok(json!({"cell": format!("{}{}", col_letters(col), row + 1), "row": row, "col": col}))
 }
 
+/// Parse an A1 reference that may carry Excel `$` absolute markers — `$A$1`,
+/// `A$1`, `$A1`, or plain `A1`. Reports the 0-based `row`/`col` plus whether the
+/// column and row are absolute, and a `cell` normalized to canonical casing with
+/// its `$` markers preserved (so it round-trips). Unlike `parse_a1`, which is
+/// relative-only, this is what formula references look like. Pure.
+fn op_parse_a1_abs(opts: Value) -> Result<Value> {
+    let cell = req_str(&opts, "cell")?;
+    let t = cell.trim();
+    // A leading `$` marks an absolute column.
+    let (col_abs, rest) = match t.strip_prefix('$') {
+        Some(r) => (true, r),
+        None => (false, t),
+    };
+    // The letters end at the first `$` (absolute-row marker) or digit.
+    let split = rest
+        .find(|c: char| c == '$' || c.is_ascii_digit())
+        .ok_or_else(|| anyhow!("invalid A1 reference: {cell}"))?;
+    let (letters, tail) = rest.split_at(split);
+    let (row_abs, digits) = match tail.strip_prefix('$') {
+        Some(d) => (true, d),
+        None => (false, tail),
+    };
+    // Reuse the relative parser on the `$`-stripped reference.
+    let (row, col) = parse_a1(&format!("{letters}{digits}"))
+        .ok_or_else(|| anyhow!("invalid A1 reference: {cell}"))?;
+    let normalized = format!(
+        "{}{}{}{}",
+        if col_abs { "$" } else { "" },
+        col_letters(col),
+        if row_abs { "$" } else { "" },
+        row + 1
+    );
+    Ok(json!({
+        "cell": normalized,
+        "row": row,
+        "col": col,
+        "row_1": row + 1,
+        "col_1": col + 1,
+        "letter": col_letters(col),
+        "col_absolute": col_abs,
+        "row_absolute": row_abs,
+    }))
+}
+
 /// 0-based column index → column letters (`0` → `A`, `26` → `AA`). Pure.
 fn op_col_to_letter(opts: Value) -> Result<Value> {
     let col = opts
@@ -17195,6 +17239,7 @@ fn op_expand_range(opts: Value) -> Result<Value> {
 }
 
 export!(office__parse_a1, op_parse_a1);
+export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);

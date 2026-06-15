@@ -929,6 +929,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 | Function | Returns |
 |----------|---------|
 | `Office::parse_a1("B2")` | `{ cell, row, col, row_1, col_1, letter }` — row/col 0-based |
+| `Office::parse_a1_abs("$B$2")` | `{ cell, row, col, …, col_absolute, row_absolute }` — Excel `$` absolute refs (`$A$1`, `A$1`, `$A1`) |
 | `Office::a1_of($row, $col)` | A1 string from 0-based row/col — inverse of `parse_a1` |
 | `Office::col_to_letter($col)` | column letters from 0-based index (`0` → `A`, `26` → `AA`) |
 | `Office::letter_to_col("AA")` | 0-based index from column letters |

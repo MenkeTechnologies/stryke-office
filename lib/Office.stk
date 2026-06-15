@@ -3239,6 +3239,13 @@ fn Office::parse_a1 ($cell) {
     Office::_decode("parse_a1", office__parse_a1(to_json({ cell => $cell })))
 }
 
+## Parse an A1 reference with Excel $ absolute markers ($A$1, A$1, $A1, A1) into
+## a hashref { cell, row, col, row_1, col_1, letter, col_absolute, row_absolute }.
+## cell is normalized with its $ markers preserved. Unlike parse_a1 (relative-only).
+fn Office::parse_a1_abs ($cell) {
+    Office::_decode("parse_a1_abs", office__parse_a1_abs(to_json({ cell => $cell })))
+}
+
 ## Build an A1 cell reference from 0-based $row and $col. Inverse of parse_a1.
 fn Office::a1_of ($row, $col) {
     Office::_decode("a1_of", office__a1_of(to_json({ row => $row, col => $col })))->{cell}
