@@ -1589,6 +1589,81 @@ fn op_sheet_mode(opts: Value) -> Result<Value> {
 /// `sheet_freq` (the full breakdown). opts: path, sheet, header, dropna => skip
 /// blank cells (default true). Returns `{ sheet, rows, columns: [{ name,
 /// nunique }] }`.
+/// Shannon entropy (in bits) of a column's value distribution — a diversity /
+/// information measure for data profiling, distinct from `nunique` (raw count)
+/// and `freq` (per-value counts). opts: path, column => name/index (required),
+/// sheet, header (default true), decimals => round. Blank cells are skipped.
+/// `normalized` is `entropy / log2(distinct)` (0 = constant, 1 = uniform).
+/// Returns `{ ok, entropy, normalized, distinct, n }`.
+fn op_sheet_entropy(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut n = 0u64;
+    for row in &rows[data_start..] {
+        let cell = row
+            .as_array()
+            .and_then(|a| a.get(col))
+            .unwrap_or(&Value::Null);
+        if sheet_cell_blank(cell) {
+            continue;
+        }
+        *counts.entry(cell_to_string(cell)).or_insert(0) += 1;
+        n += 1;
+    }
+    if n == 0 {
+        return Err(anyhow!("no non-blank values"));
+    }
+    let entropy: f64 = counts
+        .values()
+        .map(|&c| {
+            let p = c as f64 / n as f64;
+            -p * p.log2()
+        })
+        .sum();
+    let distinct = counts.len();
+    let normalized = if distinct > 1 {
+        entropy / (distinct as f64).log2()
+    } else {
+        0.0
+    };
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    Ok(json!({
+        "ok": true,
+        "entropy": round(entropy),
+        "normalized": round(normalized),
+        "distinct": distinct,
+        "n": n,
+    }))
+}
+
 fn op_sheet_nunique(opts: Value) -> Result<Value> {
     use std::collections::HashSet;
     let path = req_str(&opts, "path")?;
@@ -15587,6 +15662,7 @@ export!(office__sheet_describe, op_sheet_describe);
 export!(office__sheet_dtypes, op_sheet_dtypes);
 export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_nunique, op_sheet_nunique);
+export!(office__sheet_entropy, op_sheet_entropy);
 export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
