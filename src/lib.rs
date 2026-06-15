@@ -16088,6 +16088,7 @@ export!(office__text_shuf, op_text_shuf);
 export!(office__text_base64, op_text_base64);
 export!(office__text_hash, op_text_hash);
 export!(office__text_redact, op_text_redact);
+export!(office__text_template, op_text_template);
 export!(office__text_wrap, op_text_wrap);
 export!(office__text_head, op_text_head);
 
