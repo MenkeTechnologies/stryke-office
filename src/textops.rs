@@ -1199,3 +1199,41 @@ fn op_text_redact(opts: Value) -> Result<Value> {
     std::fs::write(&output, text)?;
     Ok(json!({ "ok": true, "path": output, "redactions": redactions }))
 }
+
+/// Fill `{{key}}` placeholders in a text template from a key→value map (a
+/// lightweight mustache; the plain-text counterpart of `mail_merge`). opts:
+/// path => template file, or template => the template text directly; output =>
+/// destination file (required); data => an object of `key => value` (values are
+/// stringified); missing => `leave` (default; unmatched `{{…}}` kept) | `blank`
+/// (unmatched placeholders removed). Returns `{ ok, path, replaced }` (count of
+/// substitutions made).
+fn op_text_template(opts: Value) -> Result<Value> {
+    let mut text = match opts.get("template").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            let path = req_str(&opts, "path")?;
+            String::from_utf8_lossy(&std::fs::read(path)?).into_owned()
+        }
+    };
+    let output = req_str(&opts, "output")?.to_string();
+    let data = opts
+        .get("data")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("missing data (an object of key => value)"))?;
+
+    let mut replaced = 0u64;
+    for (k, v) in data {
+        let token = format!("{{{{{k}}}}}");
+        let val = cell_to_string(v);
+        replaced += text.matches(&token).count() as u64;
+        text = text.replace(&token, &val);
+    }
+    // Optionally strip any placeholders left unfilled.
+    if opts.get("missing").and_then(Value::as_str) == Some("blank") {
+        let re = regex::Regex::new(r"\{\{[^}]*\}\}").unwrap();
+        text = re.replace_all(&text, "").into_owned();
+    }
+
+    std::fs::write(&output, text)?;
+    Ok(json!({ "ok": true, "path": output, "replaced": replaced }))
+}

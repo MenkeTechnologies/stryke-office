@@ -140,10 +140,16 @@ val $rdo = "$dir/$tag-redact-out.txt"
 val $rdr = Office::text_redact($rdx, patterns => ["email", "ssn"], mask => "XXX", output => $rdo)
 assert_eq $rdr->{redactions}, 2, "text_redact: two matches masked"
 assert_ok (!(slurp($rdo) =~ /example\.com/)), "text_redact: email removed"
-unlink $gpa
-unlink $gpb
 unlink $rdx
 unlink $rdo
+# text_template: fill {{key}} placeholders
+val $tplo = "$dir/$tag-tpl-out.txt"
+val $tplr = Office::text_template($tplo, { name => "Jane", amount => 42 }, template => "Hi {{name}}, balance {{amount}}")
+assert_eq $tplr->{replaced}, 2, "text_template: two placeholders filled"
+assert_eq slurp($tplo), "Hi Jane, balance 42", "text_template: rendered output"
+unlink $gpa
+unlink $gpb
+unlink $tplo
 unlink $grx
 unlink $grt
 unlink $gso

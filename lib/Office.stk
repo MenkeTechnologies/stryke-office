@@ -2327,6 +2327,14 @@ fn Office::text_redact ($path, %opts) {
         office__text_redact(to_json({ path => $path, patterns => $opts{patterns}, custom => $opts{custom}, mask => $opts{mask}, output => $opts{output} })))
 }
 
+## Fill {{key}} placeholders in a text template from $data (hashref). opts: path
+## (template file) OR template (text); output (required); missing => "leave"
+## (default) | "blank". Returns { ok, path, replaced }.
+fn Office::text_template ($output, $data, %opts) {
+    Office::_decode("text_template",
+        office__text_template(to_json({ output => $output, data => $data, path => $opts{path}, template => $opts{template}, missing => $opts{missing} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

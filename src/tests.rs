@@ -14361,6 +14361,36 @@ fn text_redact_pii() {
 }
 
 #[test]
+fn text_template_fill() {
+    let path = tmp("template.txt");
+    std::fs::write(
+        &path,
+        "Dear {{name}}, your balance is {{amount}}. {{missing}}",
+    )
+    .unwrap();
+    let out = tmp("template_out.txt");
+    let r = call(
+        office__text_template,
+        &format!(
+            r#"{{"path":"{path}","output":"{out}","data":{{"name":"Jane","amount":42}},"missing":"blank"}}"#
+        ),
+    );
+    assert_eq!(
+        r["replaced"].as_u64().unwrap(),
+        2,
+        "two placeholders filled: {r}"
+    );
+    let t = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(
+        t, "Dear Jane, your balance is 42. ",
+        "filled + blanked: {t:?}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
