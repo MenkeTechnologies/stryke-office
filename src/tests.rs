@@ -3767,6 +3767,34 @@ fn sheet_slugify_column() {
 }
 
 #[test]
+fn sheet_format_number_currency() {
+    let path = tmp("fmtnum.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["amt"],[1234.5],[-9999.99],[7]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("fmtnum_out.xlsx");
+    let r = call(
+        office__sheet_format_number,
+        &format!(
+            r#"{{"path":"{path}","column":"amt","output":"{out}","prefix":"$","into":"disp"}}"#
+        ),
+    );
+    assert_eq!(r["column"], "disp", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1], "$1,234.50", "thousands + currency: {rd}");
+    assert_eq!(rows[2][1], "-$9,999.99", "negative currency: {rd}");
+    assert_eq!(rows[3][1], "$7.00", "small value: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_pad_fixed_width() {
     let path = tmp("pad.xlsx");
     let w = call(

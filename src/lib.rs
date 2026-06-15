@@ -13806,6 +13806,133 @@ fn op_sheet_slugify(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "column": into }))
 }
 
+/// Group a non-negative integer's digit string with a thousands separator.
+fn group_thousands(digits: &str, sep: char) -> String {
+    let n = digits.len();
+    let mut grouped = String::with_capacity(n + n / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i != 0 && (n - i).is_multiple_of(3) {
+            grouped.push(sep);
+        }
+        grouped.push(ch);
+    }
+    grouped
+}
+
+/// Append a human-readable formatted-number column from a numeric column —
+/// thousands separators, fixed decimals, and an optional currency prefix /
+/// unit suffix (e.g. `1234.5` → `$1,234.50`). opts: path, output, column =>
+/// name/index (required), decimals (default 2), thousands => group integer part
+/// (default true), separator => thousands char (default ","), prefix, suffix,
+/// into => new column (default `{column}_fmt`), sheet, header (default true),
+/// format. Non-numeric cells become blank. Returns `{ ok, path, column }`.
+fn op_sheet_format_number(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    let decimals = opts
+        .get("decimals")
+        .and_then(Value::as_i64)
+        .unwrap_or(2)
+        .max(0) as usize;
+    let thousands = opts.get("thousands").and_then(flag_of).unwrap_or(true);
+    let sep = opts
+        .get("separator")
+        .and_then(Value::as_str)
+        .and_then(|s| s.chars().next())
+        .unwrap_or(',');
+    let prefix = opts
+        .get("prefix")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let suffix = opts
+        .get("suffix")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let mut sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let target = sheet_target_index(&opts, &mut sheets)?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let rows = sheets[target]["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let base = header_row
+        .and_then(|hr| hr.get(col))
+        .map(cell_to_string)
+        .unwrap_or_else(|| format!("Col{}", col + 1));
+    let into = opts
+        .get("into")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{base}_fmt"));
+
+    let fmt = |x: f64| -> String {
+        let neg = x.is_sign_negative() && x != 0.0;
+        let s = format!("{:.*}", decimals, x.abs());
+        let (int_part, frac_part) = match s.split_once('.') {
+            Some((i, f)) => (i.to_string(), Some(f.to_string())),
+            None => (s, None),
+        };
+        let grouped = if thousands {
+            group_thousands(&int_part, sep)
+        } else {
+            int_part
+        };
+        let mut out = String::new();
+        if neg {
+            out.push('-');
+        }
+        out.push_str(&prefix);
+        out.push_str(&grouped);
+        if let Some(f) = frac_part {
+            out.push('.');
+            out.push_str(&f);
+        }
+        out.push_str(&suffix);
+        out
+    };
+
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let new_rows: Vec<Value> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut cells = row.as_array().cloned().unwrap_or_default();
+            if i < data_start {
+                cells.push(json!(into));
+            } else {
+                let cell = cells
+                    .get(col)
+                    .and_then(sheet_cell_num)
+                    .map_or(json!(""), |x| json!(fmt(x)));
+                cells.push(cell);
+            }
+            Value::Array(cells)
+        })
+        .collect();
+    sheets[target]["rows"] = Value::Array(new_rows);
+
+    let mut wopts = json!({ "path": output, "sheets": sheets });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "column": into }))
+}
+
 fn op_sheet_strip(opts: Value) -> Result<Value> {
     let path = req_str(&opts, "path")?;
     let output = opts
@@ -16601,6 +16728,7 @@ export!(office__sheet_transform, op_sheet_transform);
 export!(office__sheet_cast, op_sheet_cast);
 export!(office__sheet_strip, op_sheet_strip);
 export!(office__sheet_slugify, op_sheet_slugify);
+export!(office__sheet_format_number, op_sheet_format_number);
 export!(office__sheet_pad, op_sheet_pad);
 export!(office__sheet_substr, op_sheet_substr);
 export!(office__sheet_extract, op_sheet_extract);
