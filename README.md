@@ -163,6 +163,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_autocorr($path, $column, %opts)` | `{ok, column, n, acf}` | autocorrelation function (ACF) of a column as an ordered series; `lags` (default 10) |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | correlation matrix between numeric columns (pandas `df.corr()`); `method` pearson (default), spearman (rank), or kendall (tau-b) |
 | `Office::sheet_regress($path, $x, $y, %opts)` | `{ok, slope, intercept, r2, n, path?}` | simple OLS regression `lm(y ~ x)`; `output` appends predicted/residual columns, `decimals` rounds coefficients |
+| `Office::sheet_forecast($path, $column, %opts)` | `{ok, slope, intercept, forecast, n, path?}` | linear-trend extrapolation of a series; `periods` future points, `output` writes a chartable actual+forecast sheet |
 | `Office::sheet_ttest($path, $a, $b, %opts)` | `{ok, t, df, p, mean_a, mean_b, n_a, n_b}` | Welch's two-sample t-test between columns; two-sided Student-t p-value; `decimals` opt |
 | `Office::sheet_anova($path, %opts)` | `{ok, f, df_between, df_within, p, groups, n}` | one-way ANOVA across group columns (`columns` default all numeric); upper-tail F p-value |
 | `Office::sheet_chisq($path, %opts)` | `{ok, chi2, df, p, rows, cols}` | Pearson chi-square test of independence on a contingency table of counts; upper-tail chi-square p-value |

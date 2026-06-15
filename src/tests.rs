@@ -1007,6 +1007,51 @@ fn sheet_regress_ols() {
 }
 
 #[test]
+fn sheet_forecast_linear_trend() {
+    let path = tmp("forecast.xlsx");
+    // y = 2*index + 1 -> 1,3,5,7,9; forecast index 5,6 -> 11,13
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["y"],[1],[3],[5],[7],[9]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("forecast_out.xlsx");
+    let r = call(
+        office__sheet_forecast,
+        &format!(r#"{{"path":"{path}","column":"y","periods":2,"output":"{out}","decimals":6}}"#),
+    );
+    assert!(
+        (r["slope"].as_f64().unwrap() - 2.0).abs() < 1e-9,
+        "slope 2: {r}"
+    );
+    assert!(
+        (r["intercept"].as_f64().unwrap() - 1.0).abs() < 1e-9,
+        "intercept 1: {r}"
+    );
+    let fc = r["forecast"].as_array().unwrap();
+    assert_eq!(fc.len(), 2, "two forecast points: {r}");
+    assert!(
+        (fc[0].as_f64().unwrap() - 11.0).abs() < 1e-9,
+        "forecast[5]=11: {r}"
+    );
+    assert!(
+        (fc[1].as_f64().unwrap() - 13.0).abs() < 1e-9,
+        "forecast[6]=13: {r}"
+    );
+
+    // output sheet: 5 actual + 2 forecast + header = 8 rows
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 8, "header + 5 actual + 2 forecast: {rd}");
+    assert_eq!(rows[7][2], "forecast", "last row is forecast: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_ttest_welch() {
     let path = tmp("ttest.xlsx");
     // a centered at 3, b centered at 12 (well separated); equal spread
