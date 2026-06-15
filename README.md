@@ -851,6 +851,7 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_average_color($h)` | mean color over all pixels `{r, g, b, a, hex}` (LQIP placeholder / theme color) |
 | `img_brightness($h)` | mean perceived luma `{brightness, normalized, is_dark}` (auto light/dark, overlay-text color) |
 | `color_contrast($a, $b)` | WCAG contrast ratio between two colors `{ratio, aa, aa_large, aaa}` (accessibility check) |
+| `color_info($color)` | full breakdown of a color `{hex, rgb, hsl, luminance, brightness}` (theming/design) |
 | `img_text_size($text, %opts)` | measure → `{width,height}` |
 | `img_caption($input, $output, $text, %opts)` | add a caption bar with centered text above/below an image; `position`/`height`/`size`/`color`/`background` opts |
 | `img_crop_circle($h)` / `img_round_corners($h, %opts)` | circular / rounded mask |
