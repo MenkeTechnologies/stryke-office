@@ -1717,6 +1717,34 @@ fn sheet_group_pct_share_within_group() {
 }
 
 #[test]
+fn sheet_cumcount_occurrences() {
+    let path = tmp("cumcount.xlsx");
+    // a,a,b,a -> counts 0,1,0,2
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["g"],["a"],["a"],["b"],["a"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let out = tmp("cumcount_out.xlsx");
+    let r = call(
+        office__sheet_cumcount,
+        &format!(r#"{{"path":"{path}","column":"g","output":"{out}","into":"n"}}"#),
+    );
+    assert_eq!(r["column"], "n", "new column: {r}");
+    let rd = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = rd["sheets"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows[1][1].as_f64().unwrap(), 0.0, "first a -> 0: {rd}");
+    assert_eq!(rows[2][1].as_f64().unwrap(), 1.0, "second a -> 1: {rd}");
+    assert_eq!(rows[3][1].as_f64().unwrap(), 0.0, "first b -> 0: {rd}");
+    assert_eq!(rows[4][1].as_f64().unwrap(), 2.0, "third a -> 2: {rd}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn sheet_running_per_group() {
     let path = tmp("running.xlsx");
     // west: 10, then +30 = 40 ; east: 5 (independent running total)

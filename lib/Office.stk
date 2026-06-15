@@ -425,6 +425,14 @@ fn Office::sheet_running ($path, $output, $group, $value, %opts) {
         office__sheet_running(to_json({ path => $path, output => $output, group => $group, value => $value, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append a running per-value occurrence count for $column (pandas
+## groupby.cumcount — Nth time each value is seen). opts: into, start (0|1,
+## default 0), sheet, header, format. Returns { ok, path, column }.
+fn Office::sheet_cumcount ($path, $column, $output, %opts) {
+    Office::_decode("sheet_cumcount",
+        office__sheet_cumcount(to_json({ path => $path, column => $column, output => $output, into => $opts{into}, start => $opts{start}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a normalized column (method => "minmax" 0..1 or "zscore"). opts: into,
 ## method, decimals, sheet, header, format. Returns { ok, path, column }.
 fn Office::sheet_normalize ($path, $column, $output, %opts) {

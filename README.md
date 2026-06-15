@@ -302,6 +302,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_weekday($path, $column, $output, %opts)` | `{ok, path, column}` | append day-of-week of an ISO-date column; `format` name/short/num (0=Sun)/iso (1=Mon) |
 | `Office::sheet_standardize($path, $output, %opts)` | `{ok, path, columns}` | z-score numeric column(s) in place (whole-sheet); `by`/`decimals` opts |
 | `Office::sheet_running($path, $output, $group, $value, %opts)` | `{ok, path, column}` | append a group-wise running total column (running balance per group; pandas `groupby.cumsum`); `into`/`decimals` opts |
+| `Office::sheet_cumcount($path, $column, $output, %opts)` | `{ok, path, column}` | append a running per-value occurrence count (pandas `groupby.cumcount`); `into`/`start` opts |
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |
 | `Office::sheet_movavg($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a moving-average (rolling mean) column over a window; `into`/`decimals` opts |
 | `Office::sheet_rolling($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a rolling-window aggregate column; `agg` sum/mean/min/max/median/std (superset of `sheet_movavg`) |

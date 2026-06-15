@@ -61,6 +61,7 @@ exports = [
     "office__sheet_pct",
     "office__sheet_group_pct",
     "office__sheet_running",
+    "office__sheet_cumcount",
     "office__sheet_normalize",
     "office__sheet_standardize",
     "office__sheet_movavg",
