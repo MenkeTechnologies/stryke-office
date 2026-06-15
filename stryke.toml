@@ -108,6 +108,7 @@ exports = [
     "office__sheet_unique",
     "office__sheet_split_column",
     "office__sheet_concat_columns",
+    "office__sheet_str_distance",
     "office__sheet_pivot",
     "office__sheet_unpivot",
     "office__sheet_join",
