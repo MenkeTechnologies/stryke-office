@@ -3251,6 +3251,14 @@ fn Office::a1_of ($row, $col) {
     Office::_decode("a1_of", office__a1_of(to_json({ row => $row, col => $col })))->{cell}
 }
 
+## Build an A1 reference with Excel $ absolute markers from 0-based $row/$col and
+## $col_abs/$row_abs flags — inverse of parse_a1_abs. With both true → $A$1; both
+## false → the plain A1. Returns the cell string.
+fn Office::a1_abs_of ($row, $col, $col_abs = undef, $row_abs = undef) {
+    Office::_decode("a1_abs_of",
+        office__a1_abs_of(to_json({ row => $row, col => $col, col_absolute => $col_abs, row_absolute => $row_abs })))->{cell}
+}
+
 ## 0-based column index → column letters (0 → "A", 26 → "AA").
 fn Office::col_to_letter ($col) {
     Office::_decode("col_to_letter", office__col_to_letter(to_json({ col => $col })))->{letter}

@@ -14930,6 +14930,59 @@ fn parse_a1_abs_reads_dollar_absolute_markers() {
 }
 
 #[test]
+fn a1_abs_of_builds_dollar_markers_and_inverts_parse_a1_abs() {
+    // Both flags → fully absolute.
+    assert_eq!(
+        call(
+            office__a1_abs_of,
+            r#"{"row":1,"col":1,"col_absolute":true,"row_absolute":true}"#
+        )["cell"],
+        "$B$2"
+    );
+    // Mixed and plain forms.
+    assert_eq!(
+        call(
+            office__a1_abs_of,
+            r#"{"row":0,"col":0,"col_absolute":true}"#
+        )["cell"],
+        "$A1"
+    );
+    assert_eq!(
+        call(
+            office__a1_abs_of,
+            r#"{"row":0,"col":0,"row_absolute":true}"#
+        )["cell"],
+        "A$1"
+    );
+    assert_eq!(
+        call(office__a1_abs_of, r#"{"row":9,"col":26}"#)["cell"],
+        "AA10",
+        "no flags is the plain ref"
+    );
+    // Round-trips parse_a1_abs for every marker combination.
+    for cell in ["$B$2", "$A1", "A$1", "B2"] {
+        let p = call(office__parse_a1_abs, &format!(r#"{{"cell":"{cell}"}}"#));
+        let rebuilt = call(
+            office__a1_abs_of,
+            &format!(
+                r#"{{"row":{},"col":{},"col_absolute":{},"row_absolute":{}}}"#,
+                p["row"], p["col"], p["col_absolute"], p["row_absolute"]
+            ),
+        );
+        assert_eq!(rebuilt["cell"], json!(cell), "round-trip for {cell}");
+    }
+    // truthy flag accepts a number (stryke serializes bools as 1).
+    assert_eq!(
+        call(
+            office__a1_abs_of,
+            r#"{"row":1,"col":1,"col_absolute":1,"row_absolute":1}"#
+        )["cell"],
+        "$B$2"
+    );
+    assert!(err_of(&call(office__a1_abs_of, r#"{"col":1}"#)).contains("row"));
+}
+
+#[test]
 fn a1_of_is_the_inverse_of_parse_a1() {
     let v = call(office__a1_of, r#"{"row":9,"col":26}"#);
     assert_eq!(v["cell"], "AA10");
