@@ -494,6 +494,14 @@ fn Office::sheet_rolling ($path, $column, $window, $output, %opts) {
         office__sheet_rolling(to_json({ path => $path, column => $column, window => $window, output => $output, agg => $opts{agg}, into => $opts{into}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
 }
 
+## Append Bollinger Bands (rolling mean +/- k*std) for $column as three columns
+## {prefix}_mid/_upper/_lower. opts: window (20), k (2.0), prefix ("bb"),
+## decimals, sheet, header, format. Returns { ok, path, columns }.
+fn Office::sheet_bollinger ($path, $column, $output, %opts) {
+    Office::_decode("sheet_bollinger",
+        office__sheet_bollinger(to_json({ path => $path, column => $column, output => $output, window => $opts{window}, k => $opts{k}, prefix => $opts{prefix}, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header}, format => $opts{format} })))
+}
+
 ## Append a row-over-row difference (current - previous) column. opts: into,
 ## decimals, sheet, header, format. Returns { ok, path, column }.
 fn Office::sheet_delta ($path, $column, $output, %opts) {

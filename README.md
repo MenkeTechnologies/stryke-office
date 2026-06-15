@@ -309,6 +309,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_normalize($path, $column, $output, %opts)` | `{ok, path, column}` | append a normalized column (`minmax` 0..1 or `zscore`); `method`/`into`/`decimals` opts |
 | `Office::sheet_movavg($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a moving-average (rolling mean) column over a window; `into`/`decimals` opts |
 | `Office::sheet_rolling($path, $column, $window, $output, %opts)` | `{ok, path, column}` | append a rolling-window aggregate column; `agg` sum/mean/min/max/median/std (superset of `sheet_movavg`) |
+| `Office::sheet_bollinger($path, $column, $output, %opts)` | `{ok, path, columns}` | append Bollinger Bands (rolling mean ± k·std) as `{prefix}_mid/_upper/_lower`; `window`/`k`/`prefix` opts |
 | `Office::sheet_ewm($path, $column, $output, %opts)` | `{ok, path, column}` | append an exponentially-weighted moving average (pandas `ewm().mean()`); `alpha` or `span`, `into`/`decimals` opts |
 | `Office::sheet_delta($path, $column, $output, %opts)` | `{ok, path, column}` | append a row-over-row difference (current − previous) column; `into`/`decimals` opts |
 | `Office::sheet_pct_change($path, $column, $output, %opts)` | `{ok, path, column}` | append a row-over-row percentage-change column (pandas `pct_change`); `fraction`/`into`/`decimals` opts |

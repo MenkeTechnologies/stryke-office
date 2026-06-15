@@ -70,6 +70,7 @@ exports = [
     "office__sheet_movavg",
     "office__sheet_ewm",
     "office__sheet_rolling",
+    "office__sheet_bollinger",
     "office__sheet_delta",
     "office__sheet_pct_change",
     "office__sheet_shift",
