@@ -105,4 +105,10 @@ assert_eq $rg->{rows}, 4, "parse_range: 4 rows"
 assert_eq $rg->{cols}, 3, "parse_range: 3 cols"
 assert_eq $rg->{end}{col}, 2, "parse_range: end col 0-based"
 
+# range_of: inverse of parse_range, corners normalized.
+assert_eq Office::range_of(0, 0, 3, 2)->{range}, "A1:C4", "range_of: corners → A1 range"
+assert_eq Office::range_of(3, 2, 0, 0)->{range}, "A1:C4", "range_of: normalizes swapped corners"
+assert_eq Office::range_of(0, 0, 0, 27)->{range}, "A1:AB1", "range_of: multi-letter column carry"
+assert_eq Office::range_of(0, 0, 3, 2)->{rows}, 4, "range_of: row span"
+
 test_run

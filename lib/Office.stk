@@ -3258,3 +3258,13 @@ fn Office::letter_to_col ($letter) {
 fn Office::parse_range ($range) {
     Office::_decode("parse_range", office__parse_range(to_json({ range => $range })))
 }
+
+## Build an A1 range "A1:C4" from 0-based corner indices. Corners are
+## normalized to top-left:bottom-right regardless of order. Returns a hashref
+## { range, start, end, rows, cols }. Inverse of parse_range.
+fn Office::range_of ($start_row, $start_col, $end_row, $end_col) {
+    Office::_decode("range_of", office__range_of(to_json({
+        start_row => $start_row, start_col => $start_col,
+        end_row   => $end_row,   end_col   => $end_col,
+    })))
+}
