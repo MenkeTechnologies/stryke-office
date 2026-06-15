@@ -15850,6 +15850,32 @@ fn op_slides_reorder(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "path": output, "slides": n }))
 }
 
+/// Reverse the slide order of a deck (last slide first) — convenience over
+/// `slides_reorder` that builds the descending order automatically. opts: path
+/// (pptx/odp), output (default in place), format. Returns `{ ok, path, slides }`.
+fn op_slides_reverse(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let read = op_slides_read(json!({ "path": path }))?;
+    let n = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    if n == 0 {
+        return Err(anyhow!("no slides"));
+    }
+    let order: Vec<usize> = (1..=n).rev().collect();
+    let mut ro = json!({ "path": path, "output": output, "order": order });
+    if let Some(f) = opts.get("format") {
+        ro["format"] = f.clone();
+    }
+    op_slides_reorder(ro)
+}
+
 /// Delete one or more slides by 1-based number (the deck analogue of
 /// `pdf_delete`). opts: path (pptx/odp), output (default in-place), slides =>
 /// number or array of 1-based slide numbers to remove, format. Returns
@@ -16514,6 +16540,7 @@ export!(office__slides_set_notes, op_slides_set_notes);
 export!(office__slides_add_text, op_slides_add_text);
 export!(office__slides_merge, op_slides_merge);
 export!(office__slides_reorder, op_slides_reorder);
+export!(office__slides_reverse, op_slides_reverse);
 export!(office__slides_delete, op_slides_delete);
 export!(office__slides_split, op_slides_split);
 export!(office__slides_stats, op_slides_stats);

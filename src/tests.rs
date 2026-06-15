@@ -7662,8 +7662,21 @@ fn slides_reorder_and_subset() {
     assert_eq!(slides[0]["text"][0], "C", "first is C: {rd}");
     assert_eq!(slides[1]["text"][0], "A", "second is A: {rd}");
 
+    // reverse: A,B,C -> C,B,A
+    let rev = tmp("reorder_rev.pptx");
+    let rv = call(
+        office__slides_reverse,
+        &format!(r#"{{"path":"{deck}","output":"{rev}"}}"#),
+    );
+    assert_eq!(rv["slides"], 3, "all three slides: {rv}");
+    let rdv = call(office__slides_read, &format!(r#"{{"path":"{rev}"}}"#));
+    let sv = rdv["slides"].as_array().unwrap();
+    assert_eq!(sv[0]["text"][0], "C", "reversed first is C: {rdv}");
+    assert_eq!(sv[2]["text"][0], "A", "reversed last is A: {rdv}");
+
     std::fs::remove_file(&deck).ok();
     std::fs::remove_file(&out).ok();
+    std::fs::remove_file(&rev).ok();
 }
 
 #[test]

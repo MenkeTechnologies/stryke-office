@@ -445,6 +445,14 @@ assert_eq $sdr->{slides}, 2, "slides_delete: two remain"
 val $sdread = Office::slides_read($sdo)
 assert_eq $sdread->[0]{text}[0], "A", "slides_delete: slide A kept"
 assert_eq $sdread->[1]{text}[0], "C", "slides_delete: slide C kept"
+unlink $sdo
+# slides_reverse: A,B,C -> C,B,A
+val $svo = "$dir/$tag-srev-out.pptx"
+val $svr = Office::slides_reverse($sdx, output => $svo)
+assert_eq $svr->{slides}, 3, "slides_reverse: three slides"
+val $svread = Office::slides_read($svo)
+assert_eq $svread->[0]{text}[0], "C", "slides_reverse: first is C"
+unlink $svo
 unlink $sdx
 unlink $sdo
 # slides_insert: place a new slide mid-deck
