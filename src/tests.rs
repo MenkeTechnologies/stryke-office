@@ -257,6 +257,38 @@ fn sheet_dtypes_infers_column_types() {
 }
 
 #[test]
+fn sheet_profile_per_column() {
+    let path = tmp("profile.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[
+                ["age","city"],
+                [30,"NYC"],
+                [40,"NYC"],
+                [50,"LA"]
+            ]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let p = call(office__sheet_profile, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(p["rows"].as_u64().unwrap(), 3, "three data rows: {p}");
+    let cols = p["columns"].as_array().unwrap();
+    // numeric column
+    assert_eq!(cols[0]["name"], "age", "col name: {p}");
+    assert_eq!(cols[0]["type"], "numeric", "age numeric: {p}");
+    assert_eq!(cols[0]["min"].as_f64().unwrap(), 30.0, "age min: {p}");
+    assert_eq!(cols[0]["mean"].as_f64().unwrap(), 40.0, "age mean: {p}");
+    // text column with a top value
+    assert_eq!(cols[1]["type"], "text", "city text: {p}");
+    assert_eq!(cols[1]["distinct"].as_u64().unwrap(), 2, "two cities: {p}");
+    assert_eq!(cols[1]["top"], "NYC", "top city: {p}");
+    assert_eq!(cols[1]["top_count"].as_u64().unwrap(), 2, "NYC count: {p}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_mode_most_frequent() {
     let path = tmp("mode.xlsx");
     let w = call(

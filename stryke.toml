@@ -19,6 +19,7 @@ exports = [
     "office__sheet_stats",
     "office__sheet_describe",
     "office__sheet_dtypes",
+    "office__sheet_profile",
     "office__sheet_mode",
     "office__sheet_nunique",
     "office__sheet_entropy",

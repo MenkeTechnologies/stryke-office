@@ -289,6 +289,10 @@ val $dt = Office::sheet_dtypes($dtx)
 assert_eq $dt->{columns}[0]{type}, "string", "sheet_dtypes: name -> string"
 assert_eq $dt->{columns}[1]{type}, "integer", "sheet_dtypes: qty -> integer"
 assert_eq $dt->{columns}[2]{type}, "float", "sheet_dtypes: price -> float"
+# sheet_profile: per-column profile
+val $pfr = Office::sheet_profile($dtx)
+assert_eq $pfr->{columns}[1]{type}, "numeric", "sheet_profile: qty numeric"
+assert_eq $pfr->{columns}[0]{type}, "text", "sheet_profile: name text"
 unlink $dtx
 
 # mode: most-frequent value per column
