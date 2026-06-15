@@ -132,9 +132,18 @@ spew $hshx, "123456789"
 val $hshr = Office::text_hash($hshx)
 assert_eq $hshr->{crc32}, "cbf43926", "text_hash: canonical CRC-32"
 assert_eq $hshr->{bytes}, 9, "text_hash: byte count"
+unlink $hshx
+# text_redact: mask PII patterns
+val $rdx = "$dir/$tag-redact.txt"
+spew $rdx, "Email jane\@example.com and SSN 123-45-6789 here"
+val $rdo = "$dir/$tag-redact-out.txt"
+val $rdr = Office::text_redact($rdx, patterns => ["email", "ssn"], mask => "XXX", output => $rdo)
+assert_eq $rdr->{redactions}, 2, "text_redact: two matches masked"
+assert_ok (!(slurp($rdo) =~ /example\.com/)), "text_redact: email removed"
 unlink $gpa
 unlink $gpb
-unlink $hshx
+unlink $rdx
+unlink $rdo
 unlink $grx
 unlink $grt
 unlink $gso

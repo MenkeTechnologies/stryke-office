@@ -1144,3 +1144,58 @@ fn op_text_hash(opts: Value) -> Result<Value> {
         "fnv1a64": format!("{fnv:016x}"),
     }))
 }
+
+/// Built-in regex for a named PII pattern. Returns None for an unknown name.
+fn redact_pattern(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "email" => r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}",
+        "phone" => r"\+?\d{0,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}",
+        "ssn" => r"\b\d{3}-\d{2}-\d{4}\b",
+        "ipv4" => r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+        "creditcard" => r"\b(?:\d[ -]?){13,16}\b",
+        _ => return None,
+    })
+}
+
+/// Redact personally-identifiable information from a text file by masking matches
+/// of built-in (or custom) regex patterns. opts: path => input file, output =>
+/// destination (default in place), patterns => array of built-in names to apply
+/// (`email`, `phone`, `ssn`, `ipv4`, `creditcard`; default `[email, phone, ssn]`),
+/// custom => array of extra regex strings, mask => replacement text (default
+/// "[REDACTED]"). Returns `{ ok, path, redactions }` (total matches masked).
+fn op_text_redact(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts.get("output").and_then(Value::as_str).unwrap_or(path).to_string();
+    let mask = opts.get("mask").and_then(Value::as_str).unwrap_or("[REDACTED]");
+
+    // Collect the patterns: named built-ins (default email/phone/ssn) + custom.
+    let mut pats: Vec<String> = Vec::new();
+    match opts.get("patterns").and_then(Value::as_array) {
+        Some(names) => {
+            for n in names.iter().filter_map(Value::as_str) {
+                let p = redact_pattern(n).ok_or_else(|| anyhow!("unknown pattern: {n}"))?;
+                pats.push(p.to_string());
+            }
+        }
+        None => {
+            for n in ["email", "phone", "ssn"] {
+                pats.push(redact_pattern(n).unwrap().to_string());
+            }
+        }
+    }
+    if let Some(custom) = opts.get("custom").and_then(Value::as_array) {
+        for c in custom.iter().filter_map(Value::as_str) {
+            pats.push(c.to_string());
+        }
+    }
+
+    let mut text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    let mut redactions = 0u64;
+    for p in &pats {
+        let re = regex::Regex::new(p).map_err(|e| anyhow!("bad pattern: {e}"))?;
+        redactions += re.find_iter(&text).count() as u64;
+        text = re.replace_all(&text, mask).into_owned();
+    }
+    std::fs::write(&output, text)?;
+    Ok(json!({ "ok": true, "path": output, "redactions": redactions }))
+}
