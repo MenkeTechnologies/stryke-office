@@ -164,6 +164,13 @@ fn Office::sheet_irr ($path, $column, %opts) {
         office__sheet_irr(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Compound annual growth rate of a value $column: (last/first)^(1/periods) - 1.
+## opts: decimals, sheet, header. Returns { ok, cagr, start, end, periods }.
+fn Office::sheet_cagr ($path, $column, %opts) {
+    Office::_decode("sheet_cagr",
+        office__sheet_cagr(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Generate a loan amortization schedule [period, payment, principal, interest,
 ## balance] from $rate (periodic), $nper (periods), $pv (principal) into $output.
 ## opts: decimals (default 2), format. Returns { ok, path, payment, periods }.

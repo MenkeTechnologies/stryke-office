@@ -548,6 +548,32 @@ fn sheet_irr_internal_rate() {
 }
 
 #[test]
+fn sheet_cagr_growth_rate() {
+    let path = tmp("cagr.xlsx");
+    // 100 -> 200 over 2 intervals (3 values) -> CAGR = sqrt(2)-1 ≈ 0.41421
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[100],[150],[200]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_cagr,
+        &format!(r#"{{"path":"{path}","column":"v","decimals":6}}"#),
+    );
+    assert_eq!(s["start"].as_f64().unwrap(), 100.0, "start: {s}");
+    assert_eq!(s["end"].as_f64().unwrap(), 200.0, "end: {s}");
+    assert_eq!(s["periods"].as_f64().unwrap(), 2.0, "two intervals: {s}");
+    assert!(
+        (s["cagr"].as_f64().unwrap() - 0.414214).abs() < 1e-5,
+        "cagr sqrt(2)-1: {s}"
+    );
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_amortize_schedule() {
     // $1000 at 1%/period over 12 periods
     let out = tmp("amort.xlsx");

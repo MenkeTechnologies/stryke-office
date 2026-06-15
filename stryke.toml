@@ -27,6 +27,7 @@ exports = [
     "office__sheet_npv",
     "office__sheet_sumproduct",
     "office__sheet_irr",
+    "office__sheet_cagr",
     "office__sheet_amortize",
     "office__sheet_autocorr",
     "office__sheet_agg",

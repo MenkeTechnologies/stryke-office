@@ -1441,6 +1441,14 @@ val $irr = Office::sheet_irr($irx, "cf")
 assert_ok ($irr->{irr} > 0.130 && $irr->{irr} < 0.131), "sheet_irr: ~13.07%"
 unlink $irx
 
+# ── sheet_cagr: compound annual growth rate ─────────────────────────
+val $cgx = "$dir/$tag-cagr.xlsx"
+Office::sheet_write($cgx, [{ name => "D", rows => [["v"], [100], [150], [200]] }])
+val $cgr = Office::sheet_cagr($cgx, "v", decimals => 6)
+assert_eq $cgr->{periods}, 2, "sheet_cagr: two intervals"
+assert_ok ($cgr->{cagr} > 0.414 && $cgr->{cagr} < 0.415), "sheet_cagr: sqrt(2)-1"
+unlink $cgx
+
 # ── sheet_amortize: loan schedule generator ─────────────────────────
 val $amo = "$dir/$tag-amort.xlsx"
 val $amr = Office::sheet_amortize(0.01, 12, 1000, $amo)
