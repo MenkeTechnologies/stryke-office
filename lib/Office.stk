@@ -1461,6 +1461,14 @@ fn Office::html_to_doc ($input, $output, %opts) {
         office__html_to_doc(to_json({ input => $input, output => $output, format => $opts{format} })))
 }
 
+## Strip an HTML file to plain text (drops script/style, decodes entities,
+## block tags -> newlines). opts: output (write the text). Returns
+## { ok, text, chars, path? }.
+fn Office::html_to_text ($input, %opts) {
+    Office::_decode("html_to_text",
+        office__html_to_text(to_json({ input => $input, output => $opts{output} })))
+}
+
 ## Parse an HTML table into a spreadsheet (inverse of sheet_to_html). opts:
 ## index (0-based table), name, format. Returns { ok, path, rows, cols }.
 fn Office::html_to_sheet ($input, $output, %opts) {
