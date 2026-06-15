@@ -125,6 +125,13 @@ fn Office::sheet_entropy ($path, $column, %opts) {
         office__sheet_entropy(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Gini coefficient of a numeric $column (inequality/concentration, 0..1). opts:
+## decimals, sheet, header. Returns { ok, gini, n }.
+fn Office::sheet_gini ($path, $column, %opts) {
+    Office::_decode("sheet_gini",
+        office__sheet_gini(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Count filled/blank cells per column (completeness; pandas count). opts: sheet,
 ## header. Returns { sheet, rows, columns => [{ name, count, blank }] }.
 fn Office::sheet_count ($path, %opts) {

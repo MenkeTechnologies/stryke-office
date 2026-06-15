@@ -22,6 +22,7 @@ exports = [
     "office__sheet_mode",
     "office__sheet_nunique",
     "office__sheet_entropy",
+    "office__sheet_gini",
     "office__sheet_count",
     "office__sheet_quantile",
     "office__sheet_moments",

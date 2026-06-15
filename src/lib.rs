@@ -1664,6 +1664,69 @@ fn op_sheet_entropy(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Gini coefficient of a numeric column — an inequality / concentration measure
+/// (0 = perfectly equal, →1 = maximally concentrated), as used for income,
+/// market-share, etc. opts: path, column => name/index (required), sheet, header
+/// (default true), decimals => round. Values should be non-negative. Returns
+/// `{ ok, gini, n }`.
+fn op_sheet_gini(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let mut xs: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if xs.is_empty() {
+        return Err(anyhow!("no numeric values"));
+    }
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = xs.len();
+    let sum: f64 = xs.iter().sum();
+    if sum <= 0.0 {
+        return Err(anyhow!("sum must be positive for a Gini coefficient"));
+    }
+    // Sorted-formula Gini: (2·Σ i·x_i)/(n·Σx) − (n+1)/n  (i is 1-based).
+    let weighted: f64 = xs
+        .iter()
+        .enumerate()
+        .map(|(i, &x)| (i as f64 + 1.0) * x)
+        .sum();
+    let gini = (2.0 * weighted) / (n as f64 * sum) - (n as f64 + 1.0) / n as f64;
+    let gini = match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (gini * f).round() / f
+        }
+        None => gini,
+    };
+    Ok(json!({ "ok": true, "gini": gini, "n": n }))
+}
+
 fn op_sheet_nunique(opts: Value) -> Result<Value> {
     use std::collections::HashSet;
     let path = req_str(&opts, "path")?;
@@ -15663,6 +15726,7 @@ export!(office__sheet_dtypes, op_sheet_dtypes);
 export!(office__sheet_mode, op_sheet_mode);
 export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_entropy, op_sheet_entropy);
+export!(office__sheet_gini, op_sheet_gini);
 export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);

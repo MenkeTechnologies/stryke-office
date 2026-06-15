@@ -367,6 +367,42 @@ fn sheet_entropy_diversity() {
 }
 
 #[test]
+fn sheet_gini_inequality() {
+    // equal values -> Gini 0
+    let path = tmp("gini.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[5],[5],[5],[5]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_gini,
+        &format!(r#"{{"path":"{path}","column":"v","decimals":6}}"#),
+    );
+    assert_eq!(s["gini"].as_f64().unwrap(), 0.0, "equal -> Gini 0: {s}");
+
+    // maximal concentration [0,0,0,4] -> Gini (n-1)/n = 0.75
+    let path2 = tmp("gini2.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path2}","sheets":[{{"name":"D","rows":[["v"],[0],[0],[0],[4]]}}]}}"#
+        ),
+    );
+    let s2 = call(
+        office__sheet_gini,
+        &format!(r#"{{"path":"{path2}","column":"v","decimals":6}}"#),
+    );
+    assert!(
+        (s2["gini"].as_f64().unwrap() - 0.75).abs() < 1e-9,
+        "concentrated -> 0.75: {s2}"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_count_completeness() {
     let path = tmp("count.xlsx");
     let w = call(

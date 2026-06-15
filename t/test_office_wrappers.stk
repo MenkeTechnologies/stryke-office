@@ -1507,6 +1507,12 @@ val $enr = Office::sheet_entropy($enx, "c", decimals => 6)
 assert_eq $enr->{distinct}, 4, "sheet_entropy: four distinct"
 assert_eq $enr->{entropy}, 2, "sheet_entropy: uniform 4 -> 2 bits"
 unlink $enx
+# sheet_gini: inequality of a numeric column
+val $gix = "$dir/$tag-gini.xlsx"
+Office::sheet_write($gix, [{ name => "D", rows => [["v"], [0], [0], [0], [4]] }])
+val $gir = Office::sheet_gini($gix, "v", decimals => 6)
+assert_eq $gir->{gini}, 0.75, "sheet_gini: maximal concentration -> 0.75"
+unlink $gix
 
 # ── sheet_means: arithmetic / geometric / harmonic ──────────────────
 val $mnx = "$dir/$tag-means.xlsx"
