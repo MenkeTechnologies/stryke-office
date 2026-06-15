@@ -16135,6 +16135,7 @@ export!(office__img_phash, op_img_phash);
 export!(office__img_average_color, op_img_average_color);
 export!(office__img_brightness, op_img_brightness);
 export!(office__color_contrast, op_color_contrast);
+export!(office__color_info, op_color_info);
 export!(office__img_text_size, op_img_text_size);
 export!(office__img_caption, op_img_caption);
 export!(office__img_crop_circle, op_img_crop_circle);

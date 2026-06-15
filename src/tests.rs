@@ -11717,6 +11717,22 @@ fn color_contrast_wcag() {
 }
 
 #[test]
+fn color_info_breakdown() {
+    // pure red -> #ff0000, HSL (0, 1, 0.5)
+    let r = call(office__color_info, r#"{"color":[255,0,0]}"#);
+    assert_eq!(r["hex"], "#ff0000", "red hex: {r}");
+    assert_eq!(r["rgb"][0].as_u64().unwrap(), 255, "rgb r: {r}");
+    let hsl = r["hsl"].as_array().unwrap();
+    assert_eq!(hsl[0].as_f64().unwrap(), 0.0, "hue 0: {r}");
+    assert_eq!(hsl[1].as_f64().unwrap(), 1.0, "saturation 1: {r}");
+    assert_eq!(hsl[2].as_f64().unwrap(), 0.5, "lightness 0.5: {r}");
+
+    // pure green -> hue 120
+    let g = call(office__color_info, r#"{"color":[0,255,0]}"#);
+    assert_eq!(g["hsl"][0].as_f64().unwrap(), 120.0, "green hue 120: {g}");
+}
+
+#[test]
 fn image_color_science_and_distortions() {
     let n = call(
         office__img_new,

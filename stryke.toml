@@ -391,6 +391,7 @@ exports = [
     "office__img_average_color",
     "office__img_brightness",
     "office__color_contrast",
+    "office__color_info",
     "office__img_text_size",
     "office__img_caption",
     "office__img_crop_circle",

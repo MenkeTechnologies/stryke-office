@@ -2867,6 +2867,12 @@ fn Office::color_contrast ($a, $b) {
     Office::_decode("color_contrast", office__color_contrast(to_json({ a => $a, b => $b })))
 }
 
+## Full color breakdown from any spec (hex string or [r,g,b]). Returns
+## { hex, rgb, hsl, luminance, brightness } (hsl hue in degrees, s/l 0..1).
+fn Office::color_info ($color) {
+    Office::_decode("color_info", office__color_info(to_json({ color => $color })))
+}
+
 ## Measure rendered text. opts: size (16), font. Returns { width, height }.
 fn Office::img_text_size ($text, %opts) {
     Office::_decode("img_text_size", office__img_text_size(to_json({ text => $text, size => $opts{size}, font => $opts{font} })))

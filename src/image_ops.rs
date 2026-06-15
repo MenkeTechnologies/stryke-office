@@ -2185,6 +2185,25 @@ fn op_color_contrast(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Full breakdown of a color from any spec — hex, RGB, HSL, WCAG relative
+/// luminance, and Rec. 601 luma. For theming, design tokens, and color math.
+/// opts: color => hex string (e.g. "#1e90ff") or `[r,g,b]`. Returns
+/// `{ hex, rgb: [r,g,b], hsl: [h,s,l], luminance, brightness }` (hsl hue in
+/// degrees, s/l 0..1 rounded; luminance/brightness 0..1 and 0..255).
+fn op_color_info(opts: Value) -> Result<Value> {
+    let c = parse_color(opts.get("color"));
+    let (h, s, l) = rgb_to_hsl(c.0[0], c.0[1], c.0[2]);
+    let round = |v: f64| (v * 1000.0).round() / 1000.0;
+    let brightness = 0.299 * c.0[0] as f64 + 0.587 * c.0[1] as f64 + 0.114 * c.0[2] as f64;
+    Ok(json!({
+        "hex": format!("#{:02x}{:02x}{:02x}", c.0[0], c.0[1], c.0[2]),
+        "rgb": [c.0[0], c.0[1], c.0[2]],
+        "hsl": [round(h), round(s), round(l)],
+        "luminance": round(wcag_luminance(c)),
+        "brightness": (brightness * 100.0).round() / 100.0,
+    }))
+}
+
 /// Mean perceived brightness (luma) of an image — for auto light/dark detection,
 /// e.g. choosing black vs white overlay text. Uses Rec. 601 luma
 /// `0.299R + 0.587G + 0.114B` averaged over all pixels. opts: handle. Returns
