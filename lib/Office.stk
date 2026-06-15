@@ -2294,6 +2294,15 @@ fn Office::text_hash ($path) {
         office__text_hash(to_json({ path => $path })))
 }
 
+## Redact PII in a text file by masking regex matches. opts: patterns (arrayref
+## of built-in names: email|phone|ssn|ipv4|creditcard; default email/phone/ssn),
+## custom (extra regex strings), mask (default "[REDACTED]"), output (default in
+## place). Returns { ok, path, redactions }.
+fn Office::text_redact ($path, %opts) {
+    Office::_decode("text_redact",
+        office__text_redact(to_json({ path => $path, patterns => $opts{patterns}, custom => $opts{custom}, mask => $opts{mask}, output => $opts{output} })))
+}
+
 ## First (or last) N lines of a text file (head/tail). opts: n (default 10),
 ## tail, output. Returns { count, lines, path? }.
 fn Office::text_head ($path, %opts) {

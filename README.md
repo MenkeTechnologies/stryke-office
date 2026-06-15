@@ -367,6 +367,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::text_shuf($path, %opts)` | `{ok, path, lines}` | reproducibly shuffle a file's lines (seeded Fisher–Yates, `shuf`); `seed`/`output` opts |
 | `Office::text_base64($path, %opts)` | `{ok, bytes, base64?, path?}` | base64-encode (default) or `decode` a file (RFC 4648); `output` opt (required for decode) |
 | `Office::text_hash($path)` | `{ok, bytes, crc32, fnv1a64}` | non-cryptographic file checksums (CRC-32 + FNV-1a 64) for integrity checks and dedup |
+| `Office::text_redact($path, %opts)` | `{ok, path, redactions}` | mask PII (email/phone/ssn/ipv4/creditcard) in a file via regex; `patterns`/`custom`/`mask`/`output` opts |
 | `Office::text_head($path, %opts)` | `{count, lines, path?}` | first (or last) N lines of a text file (`head`/`tail`); `n`/`tail`/`output` opts |
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}`; opts `header`/`footer`/`page_numbers`/`page_size` |

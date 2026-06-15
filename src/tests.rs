@@ -14136,6 +14136,35 @@ fn text_hash_checksums() {
 }
 
 #[test]
+fn text_redact_pii() {
+    let path = tmp("redact.txt");
+    std::fs::write(
+        &path,
+        "Contact jane@example.com or 555-123-4567. SSN 123-45-6789.",
+    )
+    .unwrap();
+    let out = tmp("redact_out.txt");
+    let r = call(
+        office__text_redact,
+        &format!(r#"{{"path":"{path}","output":"{out}","patterns":["email","ssn"],"mask":"XXX"}}"#),
+    );
+    assert_eq!(
+        r["redactions"].as_u64().unwrap(),
+        2,
+        "email + ssn masked: {r}"
+    );
+    let t = std::fs::read_to_string(&out).unwrap();
+    assert!(!t.contains("jane@example.com"), "email gone: {t}");
+    assert!(!t.contains("123-45-6789"), "ssn gone: {t}");
+    assert!(t.contains("XXX"), "mask applied: {t}");
+    // phone was not in the selected patterns -> still present
+    assert!(t.contains("555-123-4567"), "phone untouched: {t}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
 fn text_head_and_tail() {
     let path = tmp("head.txt");
     std::fs::write(&path, "l1\nl2\nl3\nl4\nl5\n").unwrap();
