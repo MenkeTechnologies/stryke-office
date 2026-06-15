@@ -14961,3 +14961,35 @@ fn range_of_is_the_inverse_of_parse_range() {
     assert_eq!(wide["range"], "A1:AB1");
     assert!(err_of(&call(office__range_of, r#"{"start_row":0}"#)).contains("missing"));
 }
+
+#[test]
+fn expand_range_lists_cells_row_major() {
+    let v = call(office__expand_range, r#"{"range":"A1:B2"}"#);
+    assert_eq!(v["count"], 4);
+    assert_eq!(
+        v["cells"],
+        json!(["A1", "B1", "A2", "B2"]),
+        "row-major order"
+    );
+    // Single cell range.
+    assert_eq!(
+        call(office__expand_range, r#"{"range":"C3:C3"}"#)["cells"],
+        json!(["C3"])
+    );
+    // Swapped corners normalize to the same expansion.
+    assert_eq!(
+        call(office__expand_range, r#"{"range":"B2:A1"}"#)["cells"],
+        json!(["A1", "B1", "A2", "B2"])
+    );
+    // Multi-letter column carry past Z.
+    let wide = call(office__expand_range, r#"{"range":"Z1:AA1"}"#);
+    assert_eq!(wide["cells"], json!(["Z1", "AA1"]));
+    // The limit guard rejects an oversized range.
+    assert!(err_of(&call(
+        office__expand_range,
+        r#"{"range":"A1:Z100","limit":10}"#
+    ))
+    .contains("over the limit"));
+    // Malformed range errors.
+    assert!(err_of(&call(office__expand_range, r#"{"range":"A1"}"#)).contains("A1 range"));
+}
