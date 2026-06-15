@@ -210,6 +210,13 @@ fn Office::sheet_cagr ($path, $column, %opts) {
         office__sheet_cagr(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
 }
 
+## Maximum drawdown of a value $column (largest peak-to-trough decline). opts:
+## decimals, sheet, header. Returns { ok, max_drawdown, peak, trough, n }.
+fn Office::sheet_drawdown ($path, $column, %opts) {
+    Office::_decode("sheet_drawdown",
+        office__sheet_drawdown(to_json({ path => $path, column => $column, decimals => $opts{decimals}, sheet => $opts{sheet}, header => $opts{header} })))
+}
+
 ## Generate a loan amortization schedule [period, payment, principal, interest,
 ## balance] from $rate (periodic), $nper (periods), $pv (principal) into $output.
 ## opts: decimals (default 2), format. Returns { ok, path, payment, periods }.

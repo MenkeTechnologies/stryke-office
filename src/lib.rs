@@ -2215,6 +2215,79 @@ fn op_sheet_cagr(opts: Value) -> Result<Value> {
     Ok(json!({ "ok": true, "cagr": cagr, "start": start, "end": end, "periods": periods }))
 }
 
+/// Maximum drawdown of a value series — the largest peak-to-trough decline,
+/// `max_t (peak_so_far − value_t) / peak_so_far`, as used to assess risk of an
+/// equity curve. opts: path, column => name/index (required), sheet, header
+/// (default true), decimals => round the drawdown fraction. Returns
+/// `{ ok, max_drawdown, peak, trough, n }` (max_drawdown is a 0..1 fraction).
+fn op_sheet_drawdown(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let vals: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    if vals.is_empty() {
+        return Err(anyhow!("no numeric values"));
+    }
+    let mut peak = f64::NEG_INFINITY;
+    let mut max_dd = 0.0;
+    let mut peak_at_max = vals[0];
+    let mut trough = vals[0];
+    for &x in &vals {
+        if x > peak {
+            peak = x;
+        }
+        if peak > 0.0 {
+            let dd = (peak - x) / peak;
+            if dd > max_dd {
+                max_dd = dd;
+                peak_at_max = peak;
+                trough = x;
+            }
+        }
+    }
+    let max_dd = match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (max_dd * f).round() / f
+        }
+        None => max_dd,
+    };
+    Ok(json!({
+        "ok": true,
+        "max_drawdown": max_dd,
+        "peak": peak_at_max,
+        "trough": trough,
+        "n": vals.len(),
+    }))
+}
+
 /// Generate a loan amortization schedule from a fixed `rate`, term `nper`, and
 /// present value `pv` — writes a sheet with columns `[period, payment, principal,
 /// interest, balance]` (one row per period, plus header). opts: rate => periodic
@@ -16089,6 +16162,7 @@ export!(office__sheet_npv, op_sheet_npv);
 export!(office__sheet_sumproduct, op_sheet_sumproduct);
 export!(office__sheet_irr, op_sheet_irr);
 export!(office__sheet_cagr, op_sheet_cagr);
+export!(office__sheet_drawdown, op_sheet_drawdown);
 export!(office__sheet_amortize, op_sheet_amortize);
 export!(office__sheet_autocorr, op_sheet_autocorr);
 export!(office__sheet_agg, op_sheet_agg);

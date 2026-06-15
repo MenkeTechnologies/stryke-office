@@ -160,6 +160,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_sumproduct($path, $columns, %opts)` | `{ok, sumproduct, n}` | sum of element-wise products across columns (Excel `SUMPRODUCT`); non-numeric cells count as 0 |
 | `Office::sheet_irr($path, $column, %opts)` | `{ok, irr, n}` | internal rate of return of a cashflow column (Excel `IRR`), found by bisection; requires a sign change |
 | `Office::sheet_cagr($path, $column, %opts)` | `{ok, cagr, start, end, periods}` | compound annual growth rate of a value column `(last/first)^(1/periods) − 1` |
+| `Office::sheet_drawdown($path, $column, %opts)` | `{ok, max_drawdown, peak, trough, n}` | maximum peak-to-trough decline of a value series (risk metric) |
 | `Office::sheet_amortize($rate, $nper, $pv, $output, %opts)` | `{ok, path, payment, periods}` | generate a loan amortization schedule `[period, payment, principal, interest, balance]`; `decimals` opt |
 | `Office::sheet_autocorr($path, $column, %opts)` | `{ok, column, n, acf}` | autocorrelation function (ACF) of a column as an ordered series; `lags` (default 10) |
 | `Office::sheet_corr($path, %opts)` | `{sheet, columns, matrix}` | correlation matrix between numeric columns (pandas `df.corr()`); `method` pearson (default), spearman (rank), or kendall (tau-b) |

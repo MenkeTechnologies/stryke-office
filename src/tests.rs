@@ -766,6 +766,31 @@ fn sheet_cagr_growth_rate() {
 }
 
 #[test]
+fn sheet_drawdown_max() {
+    let path = tmp("drawdown.xlsx");
+    // 100,120,90,110,80: peak 120, worst trough 80 -> dd = 40/120 = 0.3333
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[100],[120],[90],[110],[80]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_drawdown,
+        &format!(r#"{{"path":"{path}","column":"v","decimals":6}}"#),
+    );
+    assert!(
+        (s["max_drawdown"].as_f64().unwrap() - 0.333333).abs() < 1e-5,
+        "max dd ~0.333: {s}"
+    );
+    assert_eq!(s["peak"].as_f64().unwrap(), 120.0, "peak 120: {s}");
+    assert_eq!(s["trough"].as_f64().unwrap(), 80.0, "trough 80: {s}");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn sheet_amortize_schedule() {
     // $1000 at 1%/period over 12 periods
     let out = tmp("amort.xlsx");
