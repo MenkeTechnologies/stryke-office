@@ -1540,6 +1540,13 @@ val $cgr = Office::sheet_cagr($cgx, "v", decimals => 6)
 assert_eq $cgr->{periods}, 2, "sheet_cagr: two intervals"
 assert_ok ($cgr->{cagr} > 0.414 && $cgr->{cagr} < 0.415), "sheet_cagr: sqrt(2)-1"
 unlink $cgx
+# sheet_drawdown: max peak-to-trough decline
+val $ddx2 = "$dir/$tag-drawdown.xlsx"
+Office::sheet_write($ddx2, [{ name => "D", rows => [["v"], [100], [120], [90], [110], [80]] }])
+val $ddr2 = Office::sheet_drawdown($ddx2, "v", decimals => 6)
+assert_eq $ddr2->{peak}, 120, "sheet_drawdown: peak 120"
+assert_eq $ddr2->{trough}, 80, "sheet_drawdown: trough 80"
+unlink $ddx2
 
 # ── sheet_amortize: loan schedule generator ─────────────────────────
 val $amo = "$dir/$tag-amort.xlsx"
