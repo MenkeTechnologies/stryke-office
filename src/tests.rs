@@ -444,6 +444,52 @@ fn sheet_moments_skew_kurtosis() {
 }
 
 #[test]
+fn sheet_means_three_kinds() {
+    let path = tmp("means.xlsx");
+    // 1,2,4: arithmetic 7/3≈2.3333, geometric (1*2*4)^(1/3)=2, harmonic 3/(1.75)≈1.7143
+    let w = call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["v"],[1],[2],[4]]}}]}}"#),
+    );
+    assert_eq!(w["ok"], true, "write: {w}");
+    let s = call(
+        office__sheet_means,
+        &format!(r#"{{"path":"{path}","column":"v","decimals":6}}"#),
+    );
+    assert!(
+        (s["arithmetic"].as_f64().unwrap() - 2.333333).abs() < 1e-5,
+        "arithmetic: {s}"
+    );
+    assert!(
+        (s["geometric"].as_f64().unwrap() - 2.0).abs() < 1e-9,
+        "geometric: {s}"
+    );
+    assert!(
+        (s["harmonic"].as_f64().unwrap() - 1.714286).abs() < 1e-5,
+        "harmonic: {s}"
+    );
+
+    // a zero value -> harmonic null, and a negative -> geometric null
+    let path2 = tmp("means2.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path2}","sheets":[{{"name":"D","rows":[["v"],[0],[-1],[2]]}}]}}"#),
+    );
+    let s2 = call(
+        office__sheet_means,
+        &format!(r#"{{"path":"{path2}","column":"v"}}"#),
+    );
+    assert!(
+        s2["geometric"].is_null(),
+        "geometric null with non-positive: {s2}"
+    );
+    assert!(s2["harmonic"].is_null(), "harmonic null with zero: {s2}");
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
 fn sheet_npv_discount() {
     let path = tmp("npv.xlsx");
     // cashflows 100, 200, 300 at 10% — Excel NPV (first discounted 1 period)

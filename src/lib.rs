@@ -2133,6 +2133,76 @@ fn op_sheet_moments(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Arithmetic, geometric, and harmonic means of a numeric column. The arithmetic
+/// mean always applies; the geometric mean is null unless every value is
+/// positive; the harmonic mean is null if any value is zero. opts: path, column
+/// => name/index (required), sheet, header (default true), decimals => round.
+/// Returns `{ ok, n, arithmetic, geometric, harmonic }`.
+fn op_sheet_means(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let header_row = if header {
+        rows.first().and_then(Value::as_array).map(|v| v.as_slice())
+    } else {
+        None
+    };
+    let col = resolve_col(opts.get("column"), header_row)?;
+    let data_start = if header && !rows.is_empty() { 1 } else { 0 };
+    let xs: Vec<f64> = rows[data_start..]
+        .iter()
+        .filter_map(|r| {
+            r.as_array()
+                .and_then(|a| a.get(col))
+                .and_then(sheet_cell_num)
+        })
+        .collect();
+    let n = xs.len();
+    if n == 0 {
+        return Err(anyhow!("no numeric values"));
+    }
+    let round = |v: f64| match opts.get("decimals").and_then(Value::as_i64) {
+        Some(d) => {
+            let f = 10f64.powi(d as i32);
+            (v * f).round() / f
+        }
+        None => v,
+    };
+    let arithmetic = xs.iter().sum::<f64>() / n as f64;
+    let geometric = if xs.iter().all(|&x| x > 0.0) {
+        json!(round(
+            (xs.iter().map(|x| x.ln()).sum::<f64>() / n as f64).exp()
+        ))
+    } else {
+        Value::Null
+    };
+    let harmonic = if xs.iter().all(|&x| x != 0.0) {
+        json!(round(n as f64 / xs.iter().map(|x| 1.0 / x).sum::<f64>()))
+    } else {
+        Value::Null
+    };
+    Ok(json!({
+        "ok": true,
+        "n": n,
+        "arithmetic": round(arithmetic),
+        "geometric": geometric,
+        "harmonic": harmonic,
+    }))
+}
+
 /// Autocorrelation function (ACF) of a numeric column treated as an ordered
 /// series — the correlation of the series with lagged copies of itself. opts:
 /// path, column => name/index (required), lags => maximum lag (default 10),
@@ -15313,6 +15383,7 @@ export!(office__sheet_nunique, op_sheet_nunique);
 export!(office__sheet_count, op_sheet_count);
 export!(office__sheet_quantile, op_sheet_quantile);
 export!(office__sheet_moments, op_sheet_moments);
+export!(office__sheet_means, op_sheet_means);
 export!(office__sheet_npv, op_sheet_npv);
 export!(office__sheet_sumproduct, op_sheet_sumproduct);
 export!(office__sheet_irr, op_sheet_irr);
