@@ -939,6 +939,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 | `Office::range_of($sr, $sc, $er, $ec)` | A1 range from 0-based corners (normalized to top-left:bottom-right) — inverse of `parse_range` |
 | `Office::expand_range("A1:B2")` | individual cell refs in row-major order — `("A1","B1","A2","B2")`; `limit` opt caps the cell count |
 | `Office::bounding_range(@cells)` | smallest A1 range containing every cell — `{ range, start, end, rows, cols }` (selection bounding box) |
+| `Office::range_intersection($a, $b)` | overlapping rectangle of two A1 ranges — `{ intersect, range, start, end, rows, cols }`; `intersect => 0` when disjoint |
 
 ## [0x05] No external binaries
 

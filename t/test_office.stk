@@ -152,4 +152,11 @@ assert_eq Office::bounding_range("Z1", "AA2")->{range}, "Z1:AA2", "bounding_rang
 assert_eq Office::bounding_range(Office::expand_range("B2:D4"))->{range}, "B2:D4", "bounding_range: round-trips expand_range"
 assert_dies fn { Office::bounding_range() }, "bounding_range: rejects an empty cell list"
 
+# range_intersection: overlapping rectangle of two A1 ranges.
+assert_eq Office::range_intersection("A1:C3", "B2:D4")->{range}, "B2:C3", "range_intersection: overlap box"
+assert_eq Office::range_intersection("A1:Z100", "C3:E5")->{range}, "C3:E5", "range_intersection: inner range when nested"
+assert_eq Office::range_intersection("A1:B2", "D1:E2")->{intersect}, 0, "range_intersection: disjoint columns → no overlap"
+assert_eq Office::range_intersection("A1:C3", "C1:E3")->{cols}, 1, "range_intersection: shared edge column"
+assert_dies fn { Office::range_intersection("A1", "B2:C3") }, "range_intersection: rejects a malformed range"
+
 test_run

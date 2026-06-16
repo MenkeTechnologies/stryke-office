@@ -15139,3 +15139,42 @@ fn bounding_range_is_the_envelope_of_a_cell_list() {
     assert!(err_of(&call(office__bounding_range, r#"{"cells":[]}"#)).contains("empty"));
     assert!(err_of(&call(office__bounding_range, r#"{"cells":["nope"]}"#)).contains("invalid A1"));
 }
+
+#[test]
+fn range_intersection_overlaps_two_ranges() {
+    // Overlapping rectangles → the shared box.
+    let v = call(office__range_intersection, r#"{"a":"A1:C3","b":"B2:D4"}"#);
+    assert_eq!(v["intersect"], json!(true));
+    assert_eq!(v["range"], json!("B2:C3"));
+    assert_eq!(v["rows"], 2);
+    assert_eq!(v["cols"], 2);
+    // Corners are normalized: B2:D4 reversed to D4:B2 gives the same overlap.
+    assert_eq!(
+        call(office__range_intersection, r#"{"a":"C3:A1","b":"D4:B2"}"#)["range"],
+        json!("B2:C3")
+    );
+    // One range fully inside the other → the inner range.
+    assert_eq!(
+        call(office__range_intersection, r#"{"a":"A1:Z100","b":"C3:E5"}"#)["range"],
+        json!("C3:E5")
+    );
+    // A shared edge column still overlaps (single-column intersection).
+    let edge = call(office__range_intersection, r#"{"a":"A1:C3","b":"C1:E3"}"#);
+    assert_eq!(edge["range"], json!("C1:C3"));
+    assert_eq!(edge["cols"], 1);
+    // Disjoint in the column axis → no intersection.
+    let none = call(office__range_intersection, r#"{"a":"A1:B2","b":"D1:E2"}"#);
+    assert_eq!(none["intersect"], json!(false));
+    assert_eq!(none["range"], json!(null));
+    // Disjoint in the row axis → no intersection.
+    assert_eq!(
+        call(office__range_intersection, r#"{"a":"A1:B2","b":"A5:B6"}"#)["intersect"],
+        json!(false)
+    );
+    // Malformed range errors.
+    assert!(err_of(&call(
+        office__range_intersection,
+        r#"{"a":"A1","b":"B2:C3"}"#
+    ))
+    .contains("A1 range"));
+}
