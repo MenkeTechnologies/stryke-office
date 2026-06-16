@@ -166,4 +166,16 @@ assert_eq Office::range_contains("A1:Z100", inner => "C3:E5")->{contains}, 1, "r
 assert_eq Office::range_contains("A1:C3", inner => "B2:D4")->{contains}, 0, "range_contains: sub-range pokes outside"
 assert_dies fn { Office::range_contains("A1:C3") }, "range_contains: requires a cell or inner range"
 
+# range_union: smallest A1 range enclosing both (bounding box).
+assert_eq Office::range_union("A1:B2", "D5:E6")->{range}, "A1:E6", "range_union: disjoint → bounding box"
+assert_eq Office::range_union("A1:C3", "B2:D4")->{range}, "A1:D4", "range_union: overlapping → enclosing box"
+assert_eq Office::range_union("A1:Z100", "C3:E5")->{range}, "A1:Z100", "range_union: nested → the outer range"
+val $u = Office::range_union("B2:C3", "B2:C3")
+assert_eq $u->{range}, "B2:C3", "range_union: identical ranges → itself"
+assert_eq $u->{rows}, 2, "range_union: rows of the bounding box"
+assert_eq $u->{cols}, 2, "range_union: cols of the bounding box"
+# Union always contains both inputs (cross-check with range_contains).
+assert_eq Office::range_contains(Office::range_union("A1:B2", "D5:E6")->{range}, inner => "A1:B2")->{contains}, 1, "range_union: result contains the first input"
+assert_dies fn { Office::range_union("A1", "B2:C3") }, "range_union: rejects a malformed range"
+
 test_run

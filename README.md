@@ -941,6 +941,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 | `Office::bounding_range(@cells)` | smallest A1 range containing every cell — `{ range, start, end, rows, cols }` (selection bounding box) |
 | `Office::range_intersection($a, $b)` | overlapping rectangle of two A1 ranges — `{ intersect, range, start, end, rows, cols }`; `intersect => 0` when disjoint |
 | `Office::range_contains($range, %opts)` | whether `$range` fully contains a `cell =>` or `inner =>` sub-range — `{ range, contains }` |
+| `Office::range_union($a, $b)` | smallest A1 range enclosing both (bounding box; min/max inverse of `range_intersection`) — `{ range, start, end, rows, cols }`; not Excel's multi-area union |
 
 ## [0x05] No external binaries
 
