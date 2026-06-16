@@ -15178,3 +15178,63 @@ fn range_intersection_overlaps_two_ranges() {
     ))
     .contains("A1 range"));
 }
+
+#[test]
+fn range_contains_cell_and_subrange() {
+    // A cell inside the box, on a corner, and outside it.
+    assert_eq!(
+        call(office__range_contains, r#"{"range":"A1:C3","cell":"B2"}"#)["contains"],
+        json!(true)
+    );
+    assert_eq!(
+        call(office__range_contains, r#"{"range":"A1:C3","cell":"A1"}"#)["contains"],
+        json!(true)
+    );
+    assert_eq!(
+        call(office__range_contains, r#"{"range":"A1:C3","cell":"C3"}"#)["contains"],
+        json!(true)
+    );
+    assert_eq!(
+        call(office__range_contains, r#"{"range":"A1:C3","cell":"D4"}"#)["contains"],
+        json!(false)
+    );
+    // A sub-range fully inside, equal, and partly outside.
+    assert_eq!(
+        call(
+            office__range_contains,
+            r#"{"range":"A1:Z100","inner":"C3:E5"}"#
+        )["contains"],
+        json!(true)
+    );
+    assert_eq!(
+        call(
+            office__range_contains,
+            r#"{"range":"A1:C3","inner":"A1:C3"}"#
+        )["contains"],
+        json!(true)
+    );
+    assert_eq!(
+        call(
+            office__range_contains,
+            r#"{"range":"A1:C3","inner":"B2:D4"}"#
+        )["contains"],
+        json!(false)
+    );
+    // Reversed corners normalize the same way.
+    assert_eq!(
+        call(office__range_contains, r#"{"range":"C3:A1","cell":"B2"}"#)["contains"],
+        json!(true)
+    );
+    // Missing cell/inner and a malformed range error.
+    assert!(err_of(&call(office__range_contains, r#"{"range":"A1:C3"}"#)).contains("cell"));
+    assert!(err_of(&call(
+        office__range_contains,
+        r#"{"range":"A1","cell":"B2"}"#
+    ))
+    .contains("A1 range"));
+    assert!(err_of(&call(
+        office__range_contains,
+        r#"{"range":"A1:C3","cell":"nope"}"#
+    ))
+    .contains("invalid A1"));
+}

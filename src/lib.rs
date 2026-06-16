@@ -17378,6 +17378,26 @@ fn op_range_intersection(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Whether an A1 `range` fully contains a `cell` (single A1 ref) or an `inner`
+/// sub-range (A1 range) — every targeted cell lies within the range's box. The
+/// containment test (`range_intersection` only computes the overlap; this answers
+/// the all-inside question used for freeze-pane / data-region checks). opts:
+/// `range` (required) plus exactly one of `cell` or `inner`. Returns
+/// `{range, contains}`. Pure.
+fn op_range_contains(opts: Value) -> Result<Value> {
+    let (r1, c1, r2, c2) = range_corners(req_str(&opts, "range")?)?;
+    let contains = if let Some(cell) = opts.get("cell").and_then(Value::as_str) {
+        let (cr, cc) = parse_a1(cell).ok_or_else(|| anyhow!("invalid A1 cell: {cell}"))?;
+        cr >= r1 && cr <= r2 && cc >= c1 && cc <= c2
+    } else if let Some(inner) = opts.get("inner").and_then(Value::as_str) {
+        let (ir1, ic1, ir2, ic2) = range_corners(inner)?;
+        ir1 >= r1 && ir2 <= r2 && ic1 >= c1 && ic2 <= c2
+    } else {
+        return Err(anyhow!("range_contains requires a `cell` or `inner` range"));
+    };
+    Ok(json!({ "range": req_str(&opts, "range")?, "contains": contains }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17390,6 +17410,7 @@ export!(office__range_of, op_range_of);
 export!(office__expand_range, op_expand_range);
 export!(office__bounding_range, op_bounding_range);
 export!(office__range_intersection, op_range_intersection);
+export!(office__range_contains, op_range_contains);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

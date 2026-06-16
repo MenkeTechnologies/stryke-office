@@ -940,6 +940,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 | `Office::expand_range("A1:B2")` | individual cell refs in row-major order — `("A1","B1","A2","B2")`; `limit` opt caps the cell count |
 | `Office::bounding_range(@cells)` | smallest A1 range containing every cell — `{ range, start, end, rows, cols }` (selection bounding box) |
 | `Office::range_intersection($a, $b)` | overlapping rectangle of two A1 ranges — `{ intersect, range, start, end, rows, cols }`; `intersect => 0` when disjoint |
+| `Office::range_contains($range, %opts)` | whether `$range` fully contains a `cell =>` or `inner =>` sub-range — `{ range, contains }` |
 
 ## [0x05] No external binaries
 
