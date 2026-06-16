@@ -17131,6 +17131,23 @@ fn op_offset_a1(opts: Value) -> Result<Value> {
     }))
 }
 
+/// The row/column offset from one A1 cell to another — the inverse of
+/// `offset_a1`. `offset_a1(from, row_delta, col_delta)` lands on `to`, so this
+/// recovers the deltas (`to` minus `from`, which may be negative). opts: `from`,
+/// `to` (both A1 references). Returns `{from, to, row_delta, col_delta}`. Pure.
+fn op_cell_delta(opts: Value) -> Result<Value> {
+    let from = req_str(&opts, "from")?;
+    let to = req_str(&opts, "to")?;
+    let (fr, fc) = parse_a1(from).ok_or_else(|| anyhow!("invalid A1 reference: {from}"))?;
+    let (tr, tc) = parse_a1(to).ok_or_else(|| anyhow!("invalid A1 reference: {to}"))?;
+    Ok(json!({
+        "from": from,
+        "to": to,
+        "row_delta": tr as i64 - fr as i64,
+        "col_delta": tc as i64 - fc as i64,
+    }))
+}
+
 /// Build an A1 reference with Excel `$` absolute markers from 0-based
 /// `{row, col}` plus optional `col_absolute`/`row_absolute` flags — the inverse
 /// of `parse_a1_abs`. `{row:1, col:1, col_absolute:true, row_absolute:true}`
@@ -17497,6 +17514,7 @@ export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
 export!(office__offset_a1, op_offset_a1);
+export!(office__cell_delta, op_cell_delta);
 export!(office__a1_abs_of, op_a1_abs_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);

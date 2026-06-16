@@ -102,6 +102,17 @@ assert_eq Office::offset_a1("D3", -1, -2)->{cell}, "B2",  "offset_a1: negative d
 assert_eq Office::offset_a1("Z1", 0, 1)->{cell},   "AA1", "offset_a1: column carry past Z"
 assert_eq Office::offset_a1("c5")->{cell},         "C5",  "offset_a1: zero deltas normalize casing"
 assert_dies fn { Office::offset_a1("A1", -1, 0) }, "offset_a1: rejects an offset above row 1"
+
+# cell_delta: inverse of offset_a1 — the deltas between two cells.
+assert_eq Office::cell_delta("B2", "D3")->{row_delta}, 1,  "cell_delta: B2→D3 row delta"
+assert_eq Office::cell_delta("B2", "D3")->{col_delta}, 2,  "cell_delta: B2→D3 col delta"
+assert_eq Office::cell_delta("D3", "B2")->{col_delta}, -2, "cell_delta: backward delta is negative"
+assert_eq Office::cell_delta("A1", "A1")->{row_delta}, 0,  "cell_delta: same cell has zero delta"
+# Round-trips offset_a1: applying the delta from $from lands on $to.
+val $d = Office::cell_delta("B2", "Z10")
+assert_eq Office::offset_a1("B2", $d->{row_delta}, $d->{col_delta})->{cell}, "Z10", "cell_delta: round-trips offset_a1"
+assert_dies fn { Office::cell_delta("nope", "A1") }, "cell_delta: rejects an invalid A1 reference"
+
 # parse_a1_abs: Excel dollar absolute markers ('\$' escapes stryke interpolation).
 val $abs = Office::parse_a1_abs("\$B\$2")
 assert_eq $abs->{row}, 1,             "parse_a1_abs: row 0-based"
