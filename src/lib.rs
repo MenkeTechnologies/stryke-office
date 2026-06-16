@@ -17423,6 +17423,40 @@ fn op_range_union(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Shift an entire A1 `range` by `row_delta` rows and `col_delta` columns — the
+/// range analog of `offset_a1`, i.e. the relative adjustment a spreadsheet applies
+/// to a multi-cell reference on fill/copy. Both corners move together so the
+/// rectangle's size is preserved; corners are normalized first, so `range_offset`
+/// of `B2:C4` by `(1, 2)` gives `D3:E5`. Deltas may be negative; an offset that
+/// moves either corner above row 1 or left of column A is off the grid and errors.
+/// opts: `range` (required), `row_delta`, `col_delta` (default 0). Returns
+/// `{range, start, end, rows, cols}` like `range_of`. Pure.
+fn op_range_offset(opts: Value) -> Result<Value> {
+    let (r1, c1, r2, c2) = range_corners(req_str(&opts, "range")?)?;
+    let dr = opts.get("row_delta").and_then(Value::as_i64).unwrap_or(0);
+    let dc = opts.get("col_delta").and_then(Value::as_i64).unwrap_or(0);
+    let nr1 = r1 as i64 + dr;
+    let nr2 = r2 as i64 + dr;
+    let nc1 = c1 as i64 + dc;
+    let nc2 = c2 as i64 + dc;
+    if nr1 < 0 {
+        return Err(anyhow!("offset moves above row 1 (row_delta {dr})"));
+    }
+    if nc1 < 0 {
+        return Err(anyhow!("offset moves left of column A (col_delta {dc})"));
+    }
+    let (nr1, nc1, nr2, nc2) = (nr1 as usize, nc1 as usize, nr2 as usize, nc2 as usize);
+    let start = format!("{}{}", col_letters(nc1), nr1 + 1);
+    let end = format!("{}{}", col_letters(nc2), nr2 + 1);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (nr2 - nr1) + 1,
+        "cols": (nc2 - nc1) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17437,6 +17471,7 @@ export!(office__bounding_range, op_bounding_range);
 export!(office__range_intersection, op_range_intersection);
 export!(office__range_contains, op_range_contains);
 export!(office__range_union, op_range_union);
+export!(office__range_offset, op_range_offset);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

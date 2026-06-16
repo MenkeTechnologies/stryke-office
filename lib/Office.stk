@@ -3328,3 +3328,13 @@ fn Office::range_contains ($range, %opts) {
 fn Office::range_union ($a, $b) {
     Office::_decode("range_union", office__range_union(to_json({ a => $a, b => $b })))
 }
+
+## Shift an entire A1 $range by $row_delta rows and $col_delta columns — the range
+## analog of offset_a1 (the relative adjustment on formula fill/copy). Both corners
+## move together so the rectangle's size is preserved: range_offset("B2:C4", 1, 2)
+## → "D3:E5". Deltas may be negative; moving either corner above row 1 or left of
+## column A errors. Returns { range, start, end, rows, cols }.
+fn Office::range_offset ($range, $row_delta = 0, $col_delta = 0) {
+    Office::_decode("range_offset",
+        office__range_offset(to_json({ range => $range, row_delta => $row_delta, col_delta => $col_delta })))
+}

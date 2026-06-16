@@ -178,4 +178,15 @@ assert_eq $u->{cols}, 2, "range_union: cols of the bounding box"
 assert_eq Office::range_contains(Office::range_union("A1:B2", "D5:E6")->{range}, inner => "A1:B2")->{contains}, 1, "range_union: result contains the first input"
 assert_dies fn { Office::range_union("A1", "B2:C3") }, "range_union: rejects a malformed range"
 
+# range_offset: shift a whole range, preserving its size (range analog of offset_a1).
+assert_eq Office::range_offset("B2:C4", 1, 2)->{range}, "D3:E5", "range_offset: B2:C4 + (1,2) = D3:E5"
+val $ro = Office::range_offset("B2:C4", 1, 2)
+assert_eq $ro->{rows}, 3, "range_offset: preserves row count"
+assert_eq $ro->{cols}, 2, "range_offset: preserves col count"
+assert_eq Office::range_offset("D3:E5", -1, -2)->{range}, "B2:C4", "range_offset: negative deltas invert"
+assert_eq Office::range_offset("Z1:Z2", 0, 1)->{range},   "AA1:AA2", "range_offset: column carry past Z"
+assert_eq Office::range_offset("C5:D6")->{range},         "C5:D6", "range_offset: zero deltas normalize casing"
+assert_dies fn { Office::range_offset("A1:B2", -1, 0) }, "range_offset: rejects an offset above row 1"
+assert_dies fn { Office::range_offset("A1:B2", 0, -1) }, "range_offset: rejects an offset left of column A"
+
 test_run
