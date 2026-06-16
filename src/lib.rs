@@ -17276,6 +17276,41 @@ fn op_expand_range(opts: Value) -> Result<Value> {
     Ok(json!({"cells": cells, "count": count}))
 }
 
+/// Compute the smallest A1 range that contains every cell in a list — the
+/// selection bounding box. opts: `cells`, a non-empty array of A1 refs. Returns
+/// `{range, start, end, rows, cols}` like `range_of`; `expand_range` of the
+/// result is the full rectangle covering the inputs. Pure.
+fn op_bounding_range(opts: Value) -> Result<Value> {
+    let cells = opts
+        .get("cells")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing cells (array of A1 refs)"))?;
+    if cells.is_empty() {
+        return Err(anyhow!("cells is empty"));
+    }
+    let (mut min_r, mut min_c) = (usize::MAX, usize::MAX);
+    let (mut max_r, mut max_c) = (0usize, 0usize);
+    for cell in cells {
+        let s = cell
+            .as_str()
+            .ok_or_else(|| anyhow!("cell ref must be a string"))?;
+        let (r, c) = parse_a1(s).ok_or_else(|| anyhow!("invalid A1 cell: {s}"))?;
+        min_r = min_r.min(r);
+        min_c = min_c.min(c);
+        max_r = max_r.max(r);
+        max_c = max_c.max(c);
+    }
+    let start = format!("{}{}", col_letters(min_c), min_r + 1);
+    let end = format!("{}{}", col_letters(max_c), max_r + 1);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (max_r - min_r) + 1,
+        "cols": (max_c - min_c) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17285,6 +17320,7 @@ export!(office__letter_to_col, op_letter_to_col);
 export!(office__parse_range, op_parse_range);
 export!(office__range_of, op_range_of);
 export!(office__expand_range, op_expand_range);
+export!(office__bounding_range, op_bounding_range);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");
