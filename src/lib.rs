@@ -17476,6 +17476,23 @@ fn op_range_to_absolute(opts: Value) -> Result<Value> {
     }))
 }
 
+fn op_range_to_relative(opts: Value) -> Result<Value> {
+    // The input is typically absolute (`$A$1:$B$2`); strip the `$` locks first
+    // since `range_corners` only parses relative refs.
+    let stripped = req_str(&opts, "range")?.replace('$', "");
+    let (r1, c1, r2, c2) = range_corners(&stripped)?;
+    let rel = |c: usize, r: usize| format!("{}{}", col_letters(c), r + 1);
+    let start = rel(c1, r1);
+    let end = rel(c2, r2);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (r2 - r1) + 1,
+        "cols": (c2 - c1) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17492,6 +17509,7 @@ export!(office__range_contains, op_range_contains);
 export!(office__range_union, op_range_union);
 export!(office__range_offset, op_range_offset);
 export!(office__range_to_absolute, op_range_to_absolute);
+export!(office__range_to_relative, op_range_to_relative);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

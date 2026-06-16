@@ -197,4 +197,10 @@ assert_eq $abs->{end},   "\$C\$4", "range_to_absolute: end corner locked"
 assert_eq $abs->{rows},  3,         "range_to_absolute: preserves row count"
 assert_eq Office::range_to_absolute("C4:B2")->{range}, "\$B\$2:\$C\$4", "range_to_absolute: corners normalized"
 
+# range_to_relative: inverse of range_to_absolute (strip the $ locks).
+assert_eq Office::range_to_relative("\$A\$1:\$B\$2")->{range}, "A1:B2", "range_to_relative: \$A\$1:\$B\$2 → A1:B2"
+assert_eq Office::range_to_relative(Office::range_to_absolute("B2:C4")->{range})->{range}, "B2:C4", "range_to_relative: round-trips range_to_absolute"
+assert_eq Office::range_to_relative("\$C\$4:\$B\$2")->{range}, "B2:C4", "range_to_relative: corners normalized"
+assert_eq Office::range_to_relative("A1:B2")->{range}, "A1:B2", "range_to_relative: already-relative input is unchanged"
+
 test_run

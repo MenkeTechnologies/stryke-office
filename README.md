@@ -944,6 +944,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 | `Office::range_union($a, $b)` | smallest A1 range enclosing both (bounding box; min/max inverse of `range_intersection`) — `{ range, start, end, rows, cols }`; not Excel's multi-area union |
 | `Office::range_offset($range, $row_delta, $col_delta)` | shift a whole range, preserving its size (range analog of `offset_a1`) — `range_offset("B2:C4",1,2)` → `{ range:"D3:E5", … }` |
 | `Office::range_to_absolute($range)` | lock both corners with `$` (range analog of `a1_abs_of`) — `range_to_absolute("A1:B2")` → `{ range:"$A$1:$B$2", … }` |
+| `Office::range_to_relative($range)` | inverse: strip the `$` locks — `range_to_relative("$A$1:$B$2")` → `{ range:"A1:B2", … }` |
 
 ## [0x05] No external binaries
 

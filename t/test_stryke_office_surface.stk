@@ -94,5 +94,6 @@ assert_ok exists &Office::range_contains, "Office::range_contains exists"
 assert_ok exists &Office::range_union, "Office::range_union exists"
 assert_ok exists &Office::range_offset, "Office::range_offset exists"
 assert_ok exists &Office::range_to_absolute, "Office::range_to_absolute exists"
+assert_ok exists &Office::range_to_relative, "Office::range_to_relative exists"
 
 test_run
