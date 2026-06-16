@@ -17191,8 +17191,9 @@ fn op_a1_abs_of(opts: Value) -> Result<Value> {
 /// column and row are absolute, and a `cell` normalized to canonical casing with
 /// its `$` markers preserved (so it round-trips). Unlike `parse_a1`, which is
 /// relative-only, this is what formula references look like. Pure.
-fn op_parse_a1_abs(opts: Value) -> Result<Value> {
-    let cell = req_str(&opts, "cell")?;
+/// Parse an A1 cell reference honoring `$` absolute markers → `(row, col,
+/// row_abs, col_abs)`, all 0-based. Shared by `parse_a1_abs` and `a1_to_r1c1`.
+fn a1_abs_parts(cell: &str) -> Result<(usize, usize, bool, bool)> {
     let t = cell.trim();
     // A leading `$` marks an absolute column.
     let (col_abs, rest) = match t.strip_prefix('$') {
@@ -17211,6 +17212,12 @@ fn op_parse_a1_abs(opts: Value) -> Result<Value> {
     // Reuse the relative parser on the `$`-stripped reference.
     let (row, col) = parse_a1(&format!("{letters}{digits}"))
         .ok_or_else(|| anyhow!("invalid A1 reference: {cell}"))?;
+    Ok((row, col, row_abs, col_abs))
+}
+
+fn op_parse_a1_abs(opts: Value) -> Result<Value> {
+    let cell = req_str(&opts, "cell")?;
+    let (row, col, row_abs, col_abs) = a1_abs_parts(cell)?;
     let normalized = format!(
         "{}{}{}{}",
         if col_abs { "$" } else { "" },
@@ -17227,6 +17234,54 @@ fn op_parse_a1_abs(opts: Value) -> Result<Value> {
         "letter": col_letters(col),
         "col_absolute": col_abs,
         "row_absolute": row_abs,
+    }))
+}
+
+/// Convert an A1 cell reference to Excel R1C1 notation. Without an `anchor` every
+/// part is rendered absolute (`C10` → `R10C3`), since a relative offset has no
+/// reference point. With an `anchor` cell, a `$`-absolute part stays absolute
+/// (`R10`/`C3`) while a relative part becomes an offset from the anchor in
+/// brackets — `R[2]`/`C[-1]`, or a bare `R`/`C` when the offset is zero (e.g.
+/// `A1` relative to `A1` is `RC`). opts: `cell` (required), `anchor` (optional).
+/// Returns `{cell, r1c1, row, col, row_absolute, col_absolute}` (row/col 0-based).
+/// Pure.
+fn op_a1_to_r1c1(opts: Value) -> Result<Value> {
+    let cell = req_str(&opts, "cell")?;
+    let (row, col, row_abs, col_abs) = a1_abs_parts(cell)?;
+    let anchor = opts.get("anchor").and_then(Value::as_str);
+    let anchor_parts = match anchor {
+        Some(a) => Some(a1_abs_parts(a)?),
+        None => None,
+    };
+    let r_part = match anchor_parts {
+        Some((arow, _, _, _)) if !row_abs => {
+            let d = row as i64 - arow as i64;
+            if d == 0 {
+                "R".to_string()
+            } else {
+                format!("R[{d}]")
+            }
+        }
+        _ => format!("R{}", row + 1),
+    };
+    let c_part = match anchor_parts {
+        Some((_, acol, _, _)) if !col_abs => {
+            let d = col as i64 - acol as i64;
+            if d == 0 {
+                "C".to_string()
+            } else {
+                format!("C[{d}]")
+            }
+        }
+        _ => format!("C{}", col + 1),
+    };
+    Ok(json!({
+        "cell": cell,
+        "r1c1": format!("{r_part}{c_part}"),
+        "row": row,
+        "col": col,
+        "row_absolute": row_abs,
+        "col_absolute": col_abs,
     }))
 }
 
@@ -17512,6 +17567,7 @@ fn op_range_to_relative(opts: Value) -> Result<Value> {
 
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
+export!(office__a1_to_r1c1, op_a1_to_r1c1);
 export!(office__a1_of, op_a1_of);
 export!(office__offset_a1, op_offset_a1);
 export!(office__cell_delta, op_cell_delta);
