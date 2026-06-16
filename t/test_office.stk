@@ -96,6 +96,12 @@ assert_eq $c->{letter}, "B", "parse_a1: column letter"
 val $aa = Office::parse_a1("AA10")
 assert_eq $aa->{col}, 26, "parse_a1: AA is column 26 (0-based)"
 
+# offset_a1: relative-reference adjustment (formula fill/copy).
+assert_eq Office::offset_a1("B2", 1, 2)->{cell},   "D3",  "offset_a1: B2 + (1,2) = D3"
+assert_eq Office::offset_a1("D3", -1, -2)->{cell}, "B2",  "offset_a1: negative deltas move up/left"
+assert_eq Office::offset_a1("Z1", 0, 1)->{cell},   "AA1", "offset_a1: column carry past Z"
+assert_eq Office::offset_a1("c5")->{cell},         "C5",  "offset_a1: zero deltas normalize casing"
+assert_dies fn { Office::offset_a1("A1", -1, 0) }, "offset_a1: rejects an offset above row 1"
 # parse_a1_abs: Excel dollar absolute markers ('\$' escapes stryke interpolation).
 val $abs = Office::parse_a1_abs("\$B\$2")
 assert_eq $abs->{row}, 1,             "parse_a1_abs: row 0-based"
