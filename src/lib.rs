@@ -17232,6 +17232,18 @@ fn op_letter_to_col(opts: Value) -> Result<Value> {
 
 /// Parse an A1 range `A1:B10` into `{start, end, rows, cols}` (0-based row/col).
 /// Pure.
+/// Split an A1 range string `A1:B10` and return its corners as normalized
+/// 0-based `(top_row, left_col, bottom_row, right_col)` (so `B2:A1` yields the
+/// same box as `A1:B2`). Shared by `expand_range` and `range_intersection`.
+fn range_corners(range: &str) -> Result<(usize, usize, usize, usize)> {
+    let (a, b) = range
+        .split_once(':')
+        .ok_or_else(|| anyhow!("not an A1 range (want A1:B10): {range}"))?;
+    let (sr, sc) = parse_a1(a).ok_or_else(|| anyhow!("invalid range start: {a}"))?;
+    let (er, ec) = parse_a1(b).ok_or_else(|| anyhow!("invalid range end: {b}"))?;
+    Ok((sr.min(er), sc.min(ec), sr.max(er), sc.max(ec)))
+}
+
 fn op_parse_range(opts: Value) -> Result<Value> {
     let range = req_str(&opts, "range")?;
     let (a, b) = range
@@ -17283,13 +17295,7 @@ fn op_range_of(opts: Value) -> Result<Value> {
 /// 100_000) caps the cell count so a giant range can't blow up memory. Pure.
 fn op_expand_range(opts: Value) -> Result<Value> {
     let range = req_str(&opts, "range")?;
-    let (a, b) = range
-        .split_once(':')
-        .ok_or_else(|| anyhow!("not an A1 range (want A1:B10): {range}"))?;
-    let (sr, sc) = parse_a1(a).ok_or_else(|| anyhow!("invalid range start: {a}"))?;
-    let (er, ec) = parse_a1(b).ok_or_else(|| anyhow!("invalid range end: {b}"))?;
-    let (r1, r2) = (sr.min(er), sr.max(er));
-    let (c1, c2) = (sc.min(ec), sc.max(ec));
+    let (r1, c1, r2, c2) = range_corners(range)?;
     let count = (r2 - r1 + 1) * (c2 - c1 + 1);
     let limit = opts
         .get("limit")
@@ -17345,6 +17351,33 @@ fn op_bounding_range(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Compute the overlapping rectangle of two A1 ranges — the spreadsheet range
+/// intersection operator. opts: `a`, `b` (both A1 ranges like `A1:C10`; corners
+/// are normalized). When they overlap, returns `{intersect: true, range, start,
+/// end, rows, cols}` like `range_of`; when they are disjoint in either axis,
+/// returns `{intersect: false, range: null}`. Pure.
+fn op_range_intersection(opts: Value) -> Result<Value> {
+    let (ar1, ac1, ar2, ac2) = range_corners(req_str(&opts, "a")?)?;
+    let (br1, bc1, br2, bc2) = range_corners(req_str(&opts, "b")?)?;
+    let r1 = ar1.max(br1);
+    let c1 = ac1.max(bc1);
+    let r2 = ar2.min(br2);
+    let c2 = ac2.min(bc2);
+    if r1 > r2 || c1 > c2 {
+        return Ok(json!({"intersect": false, "range": Value::Null}));
+    }
+    let start = format!("{}{}", col_letters(c1), r1 + 1);
+    let end = format!("{}{}", col_letters(c2), r2 + 1);
+    Ok(json!({
+        "intersect": true,
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (r2 - r1) + 1,
+        "cols": (c2 - c1) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17356,6 +17389,7 @@ export!(office__parse_range, op_parse_range);
 export!(office__range_of, op_range_of);
 export!(office__expand_range, op_expand_range);
 export!(office__bounding_range, op_bounding_range);
+export!(office__range_intersection, op_range_intersection);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

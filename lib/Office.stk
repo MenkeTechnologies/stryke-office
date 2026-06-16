@@ -3306,3 +3306,10 @@ fn Office::expand_range ($range, %opts) {
 fn Office::bounding_range (@cells) {
     Office::_decode("bounding_range", office__bounding_range(to_json({ cells => \@cells })))
 }
+
+## Overlapping rectangle of two A1 ranges (the spreadsheet intersection
+## operator). Returns { intersect => 1, range, start, end, rows, cols } when
+## they overlap, or { intersect => 0, range => undef } when disjoint.
+fn Office::range_intersection ($a, $b) {
+    Office::_decode("range_intersection", office__range_intersection(to_json({ a => $a, b => $b })))
+}
