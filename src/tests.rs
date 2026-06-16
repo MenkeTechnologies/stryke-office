@@ -15076,3 +15076,31 @@ fn expand_range_lists_cells_row_major() {
     // Malformed range errors.
     assert!(err_of(&call(office__expand_range, r#"{"range":"A1"}"#)).contains("A1 range"));
 }
+
+#[test]
+fn bounding_range_is_the_envelope_of_a_cell_list() {
+    // Smallest range containing a scattered set of cells.
+    let v = call(office__bounding_range, r#"{"cells":["B2","D1","C5","A3"]}"#);
+    assert_eq!(v["range"], json!("A1:D5"));
+    assert_eq!(v["start"], json!("A1"));
+    assert_eq!(v["end"], json!("D5"));
+    assert_eq!(v["rows"], 5);
+    assert_eq!(v["cols"], 4);
+    // A single cell bounds to itself.
+    assert_eq!(
+        call(office__bounding_range, r#"{"cells":["C3"]}"#)["range"],
+        json!("C3:C3")
+    );
+    // Multi-letter column past Z.
+    assert_eq!(
+        call(office__bounding_range, r#"{"cells":["Z1","AA2"]}"#)["range"],
+        json!("Z1:AA2")
+    );
+    // bounding_range ∘ expand_range round-trips a normalized range.
+    let cells = call(office__expand_range, r#"{"range":"B2:D4"}"#)["cells"].clone();
+    let back = call(office__bounding_range, &format!(r#"{{"cells":{cells}}}"#));
+    assert_eq!(back["range"], json!("B2:D4"));
+    // Empty list and invalid cell error.
+    assert!(err_of(&call(office__bounding_range, r#"{"cells":[]}"#)).contains("empty"));
+    assert!(err_of(&call(office__bounding_range, r#"{"cells":["nope"]}"#)).contains("invalid A1"));
+}

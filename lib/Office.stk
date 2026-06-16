@@ -3292,3 +3292,9 @@ fn Office::expand_range ($range, %opts) {
     $req{limit} = $opts{limit} if defined $opts{limit}
     @{ Office::_decode("expand_range", office__expand_range(to_json(\%req)))->{cells} }
 }
+
+## Smallest A1 range that contains every cell in @cells — the selection bounding
+## box. Returns a hashref { range, start, end, rows, cols }.
+fn Office::bounding_range (@cells) {
+    Office::_decode("bounding_range", office__bounding_range(to_json({ cells => \@cells })))
+}

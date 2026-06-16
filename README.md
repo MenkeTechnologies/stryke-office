@@ -937,6 +937,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 | `Office::parse_range("A1:C4")` | `{ start, end, rows, cols }` — 0-based row/col |
 | `Office::range_of($sr, $sc, $er, $ec)` | A1 range from 0-based corners (normalized to top-left:bottom-right) — inverse of `parse_range` |
 | `Office::expand_range("A1:B2")` | individual cell refs in row-major order — `("A1","B1","A2","B2")`; `limit` opt caps the cell count |
+| `Office::bounding_range(@cells)` | smallest A1 range containing every cell — `{ range, start, end, rows, cols }` (selection bounding box) |
 
 ## [0x05] No external binaries
 

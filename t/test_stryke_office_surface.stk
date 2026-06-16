@@ -87,5 +87,6 @@ assert_ok exists &Office::letter_to_col, "Office::letter_to_col exists"
 assert_ok exists &Office::parse_range, "Office::parse_range exists"
 assert_ok exists &Office::range_of, "Office::range_of exists"
 assert_ok exists &Office::expand_range, "Office::expand_range exists"
+assert_ok exists &Office::bounding_range, "Office::bounding_range exists"
 
 test_run
