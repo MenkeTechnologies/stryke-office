@@ -3313,3 +3313,10 @@ fn Office::bounding_range (@cells) {
 fn Office::range_intersection ($a, $b) {
     Office::_decode("range_intersection", office__range_intersection(to_json({ a => $a, b => $b })))
 }
+
+## Whether an A1 $range fully contains a target — pass %opts cell => "B2" for a
+## single cell or inner => "A1:B2" for a sub-range. Returns { range, contains }.
+fn Office::range_contains ($range, %opts) {
+    Office::_decode("range_contains",
+        office__range_contains(to_json({ range => $range, cell => $opts{cell}, inner => $opts{inner} })))
+}

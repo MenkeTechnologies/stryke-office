@@ -1,6 +1,6 @@
 [package]
 name = "stryke-office"
-version = "0.10.0"
+version = "0.11.0"
 description = "Office + image document I/O for stryke. Read+write Excel/Calc (xlsx/ods), Word/Writer (docx/odt), PowerPoint/Impress (pptx/odp), PDF, and a full PIL-style image surface (open/save/crop/resize/convert/paste/draw across png/jpeg/gif/bmp/webp/tiff) — all native Rust, no LibreOffice/soffice subprocess. cdylib loaded on first `use Office`."
 authors = ["MenkeTechnologies"]
 license = "MIT"
@@ -447,6 +447,7 @@ exports = [
     "office__expand_range",
     "office__bounding_range",
     "office__range_intersection",
+    "office__range_contains",
 ]
 
 [scripts]
