@@ -3259,6 +3259,14 @@ fn Office::offset_a1 ($cell, $row_delta = 0, $col_delta = 0) {
     Office::_decode("offset_a1", office__offset_a1(to_json({ cell => $cell, row_delta => $row_delta, col_delta => $col_delta })))
 }
 
+## The row/col offset FROM cell $from TO cell $to — inverse of offset_a1, so
+## offset_a1($from, ...deltas) lands on $to. Deltas may be negative.
+## cell_delta("B2", "D3") → { row_delta => 1, col_delta => 2, ... }. Returns
+## { from, to, row_delta, col_delta }.
+fn Office::cell_delta ($from, $to) {
+    Office::_decode("cell_delta", office__cell_delta(to_json({ from => $from, to => $to })))
+}
+
 ## Build an A1 reference with Excel $ absolute markers from 0-based $row/$col and
 ## $col_abs/$row_abs flags — inverse of parse_a1_abs. With both true → $A$1; both
 ## false → the plain A1. Returns the cell string.
