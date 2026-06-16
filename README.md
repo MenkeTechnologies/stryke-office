@@ -930,6 +930,7 @@ Pure A1 / column math — no file is opened, so these run standalone:
 |----------|---------|
 | `Office::parse_a1("B2")` | `{ cell, row, col, row_1, col_1, letter }` — row/col 0-based |
 | `Office::parse_a1_abs("$B$2")` | `{ cell, row, col, …, col_absolute, row_absolute }` — Excel `$` absolute refs (`$A$1`, `A$1`, `$A1`) |
+| `Office::a1_to_r1c1($cell, $anchor?)` | `{ cell, r1c1, row, col, row_absolute, col_absolute }` — Excel R1C1 notation; absolute without an anchor (`C10`→`R10C3`), relative offsets with one (`B3`@`A1`→`R[2]C[1]`, `$B$3`→`R3C2`) |
 | `Office::a1_of($row, $col)` | A1 string from 0-based row/col — inverse of `parse_a1` |
 | `Office::offset_a1($cell, $row_delta, $col_delta)` | shift an A1 ref (relative-reference fill/copy) — `offset_a1("B2",1,2)` → `{ cell:"D3", … }` |
 | `Office::cell_delta($from, $to)` | inverse: the row/col offset between two cells — `cell_delta("B2","D3")` → `{ row_delta:1, col_delta:2, … }` |

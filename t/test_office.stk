@@ -123,6 +123,14 @@ val $mix = Office::parse_a1_abs("A\$1")
 assert_eq $mix->{col_absolute}, 0,    "parse_a1_abs: relative column"
 assert_ok $mix->{row_absolute},       "parse_a1_abs: absolute row"
 assert_eq Office::parse_a1_abs("aa10")->{cell}, "AA10", "parse_a1_abs: relative ref normalizes casing"
+
+# a1_to_r1c1: Excel R1C1 notation (absolute without anchor, relative with one).
+assert_eq Office::a1_to_r1c1("C10")->{r1c1}, "R10C3", "a1_to_r1c1: absolute mapping without an anchor"
+assert_eq Office::a1_to_r1c1("B3", "A1")->{r1c1}, "R[2]C[1]", "a1_to_r1c1: relative offset from an anchor"
+assert_eq Office::a1_to_r1c1("\$B\$3", "A1")->{r1c1}, "R3C2", "a1_to_r1c1: \$-absolute parts stay absolute"
+assert_eq Office::a1_to_r1c1("B\$3", "A1")->{r1c1}, "R3C[1]", "a1_to_r1c1: mixed \$ ref (absolute row, relative col)"
+assert_eq Office::a1_to_r1c1("A1", "A1")->{r1c1}, "RC", "a1_to_r1c1: zero offset is a bare RC"
+assert_dies fn { Office::a1_to_r1c1("notacell") }, "a1_to_r1c1: rejects an invalid reference"
 assert_dies fn { Office::parse_a1_abs("A1\$") }, "parse_a1_abs: rejects malformed reference"
 
 # a1_abs_of: build $-marked reference from parts (inverse of parse_a1_abs).
