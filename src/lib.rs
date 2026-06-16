@@ -17457,6 +17457,25 @@ fn op_range_offset(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Make an A1 range fully absolute — lock both corners with `$` so the reference
+/// survives a fill or copy: `A1:B2` → `$A$1:$B$2`. Corners are normalized
+/// (top-left`:`bottom-right). The range-level companion of `a1_abs_of` (which
+/// makes a single cell absolute). opts: `range` (required). Returns
+/// `{range, start, end, rows, cols}`. Pure.
+fn op_range_to_absolute(opts: Value) -> Result<Value> {
+    let (r1, c1, r2, c2) = range_corners(req_str(&opts, "range")?)?;
+    let abs = |c: usize, r: usize| format!("${}${}", col_letters(c), r + 1);
+    let start = abs(c1, r1);
+    let end = abs(c2, r2);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (r2 - r1) + 1,
+        "cols": (c2 - c1) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17472,6 +17491,7 @@ export!(office__range_intersection, op_range_intersection);
 export!(office__range_contains, op_range_contains);
 export!(office__range_union, op_range_union);
 export!(office__range_offset, op_range_offset);
+export!(office__range_to_absolute, op_range_to_absolute);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

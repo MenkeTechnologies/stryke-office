@@ -189,4 +189,12 @@ assert_eq Office::range_offset("C5:D6")->{range},         "C5:D6", "range_offset
 assert_dies fn { Office::range_offset("A1:B2", -1, 0) }, "range_offset: rejects an offset above row 1"
 assert_dies fn { Office::range_offset("A1:B2", 0, -1) }, "range_offset: rejects an offset left of column A"
 
+# range_to_absolute: lock both corners with $ (range analog of a1_abs_of).
+assert_eq Office::range_to_absolute("A1:B2")->{range}, "\$A\$1:\$B\$2", "range_to_absolute: A1:B2 → \$A\$1:\$B\$2"
+val $abs = Office::range_to_absolute("B2:C4")
+assert_eq $abs->{start}, "\$B\$2", "range_to_absolute: start corner locked"
+assert_eq $abs->{end},   "\$C\$4", "range_to_absolute: end corner locked"
+assert_eq $abs->{rows},  3,         "range_to_absolute: preserves row count"
+assert_eq Office::range_to_absolute("C4:B2")->{range}, "\$B\$2:\$C\$4", "range_to_absolute: corners normalized"
+
 test_run

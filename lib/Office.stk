@@ -3338,3 +3338,11 @@ fn Office::range_offset ($range, $row_delta = 0, $col_delta = 0) {
     Office::_decode("range_offset",
         office__range_offset(to_json({ range => $range, row_delta => $row_delta, col_delta => $col_delta })))
 }
+
+## Make an A1 $range fully absolute — lock both corners with "$" so the reference
+## survives a fill/copy: range_to_absolute("A1:B2") → "$A$1:$B$2". Corners are
+## normalized. The range-level companion of a1_abs_of. Returns
+## { range, start, end, rows, cols }.
+fn Office::range_to_absolute ($range) {
+    Office::_decode("range_to_absolute", office__range_to_absolute(to_json({ range => $range })))
+}
