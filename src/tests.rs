@@ -14996,6 +14996,41 @@ fn a1_of_is_the_inverse_of_parse_a1() {
 }
 
 #[test]
+fn offset_a1_applies_relative_reference_adjustment() {
+    // Fill-down/right: B2 shifted by (1,2) → D3.
+    let v = call(
+        office__offset_a1,
+        r#"{"cell":"B2","row_delta":1,"col_delta":2}"#,
+    );
+    assert_eq!(v["cell"], "D3");
+    assert_eq!(v["row"], 2);
+    assert_eq!(v["col"], 3);
+    // Negative deltas move up/left.
+    assert_eq!(
+        call(
+            office__offset_a1,
+            r#"{"cell":"D3","row_delta":-1,"col_delta":-2}"#
+        )["cell"],
+        "B2"
+    );
+    // Multi-letter column carry: Z1 shifted one column right → AA1.
+    assert_eq!(
+        call(office__offset_a1, r#"{"cell":"Z1","col_delta":1}"#)["cell"],
+        "AA1"
+    );
+    // Zero deltas are a no-op (normalized to uppercase).
+    assert_eq!(call(office__offset_a1, r#"{"cell":"c5"}"#)["cell"], "C5");
+    // Off-grid offsets error.
+    assert!(
+        err_of(&call(office__offset_a1, r#"{"cell":"A1","row_delta":-1}"#)).contains("above row 1")
+    );
+    assert!(
+        err_of(&call(office__offset_a1, r#"{"cell":"A1","col_delta":-1}"#)).contains("column A")
+    );
+    assert!(err_of(&call(office__offset_a1, r#"{"cell":"2B"}"#)).contains("invalid"));
+}
+
+#[test]
 fn col_letter_conversions_round_trip() {
     assert_eq!(call(office__col_to_letter, r#"{"col":0}"#)["letter"], "A");
     assert_eq!(call(office__col_to_letter, r#"{"col":25}"#)["letter"], "Z");

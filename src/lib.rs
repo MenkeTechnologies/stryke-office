@@ -17097,6 +17097,40 @@ fn op_a1_of(opts: Value) -> Result<Value> {
     Ok(json!({"cell": format!("{}{}", col_letters(col), row + 1), "row": row, "col": col}))
 }
 
+/// Shift an A1 cell reference by `row_delta` rows and `col_delta` columns — the
+/// relative-reference adjustment a spreadsheet applies when a formula is filled
+/// or copied. `offset_a1("B2", 1, 2)` → `D3`. Deltas may be negative; an offset
+/// past row 1 / column A is off the grid and errors. opts: `cell`, `row_delta`,
+/// `col_delta` (deltas default 0). Returns `{cell, row, col, row_1, col_1,
+/// letter}`. Pure.
+fn op_offset_a1(opts: Value) -> Result<Value> {
+    let cell = req_str(&opts, "cell")?;
+    let (row, col) = parse_a1(cell).ok_or_else(|| anyhow!("invalid A1 reference: {cell}"))?;
+    let dr = opts.get("row_delta").and_then(Value::as_i64).unwrap_or(0);
+    let dc = opts.get("col_delta").and_then(Value::as_i64).unwrap_or(0);
+    let new_row = row as i64 + dr;
+    let new_col = col as i64 + dc;
+    if new_row < 0 {
+        return Err(anyhow!(
+            "offset moves above row 1 (row_delta {dr} from {cell})"
+        ));
+    }
+    if new_col < 0 {
+        return Err(anyhow!(
+            "offset moves left of column A (col_delta {dc} from {cell})"
+        ));
+    }
+    let (new_row, new_col) = (new_row as usize, new_col as usize);
+    Ok(json!({
+        "cell": format!("{}{}", col_letters(new_col), new_row + 1),
+        "row": new_row,
+        "col": new_col,
+        "row_1": new_row + 1,
+        "col_1": new_col + 1,
+        "letter": col_letters(new_col),
+    }))
+}
+
 /// Build an A1 reference with Excel `$` absolute markers from 0-based
 /// `{row, col}` plus optional `col_absolute`/`row_absolute` flags — the inverse
 /// of `parse_a1_abs`. `{row:1, col:1, col_absolute:true, row_absolute:true}`
@@ -17314,6 +17348,7 @@ fn op_bounding_range(opts: Value) -> Result<Value> {
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
+export!(office__offset_a1, op_offset_a1);
 export!(office__a1_abs_of, op_a1_abs_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);
