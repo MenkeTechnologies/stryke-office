@@ -3346,3 +3346,11 @@ fn Office::range_offset ($range, $row_delta = 0, $col_delta = 0) {
 fn Office::range_to_absolute ($range) {
     Office::_decode("range_to_absolute", office__range_to_absolute(to_json({ range => $range })))
 }
+
+## Inverse of range_to_absolute: strip the "$" locks from an A1 $range so both
+## corners are relative: range_to_relative("$A$1:$B$2") → "A1:B2". Corners are
+## normalized; tolerates mixed/relative input. Returns
+## { range, start, end, rows, cols }.
+fn Office::range_to_relative ($range) {
+    Office::_decode("range_to_relative", office__range_to_relative(to_json({ range => $range })))
+}
