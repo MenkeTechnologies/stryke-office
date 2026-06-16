@@ -3320,3 +3320,11 @@ fn Office::range_contains ($range, %opts) {
     Office::_decode("range_contains",
         office__range_contains(to_json({ range => $range, cell => $opts{cell}, inner => $opts{inner} })))
 }
+
+## Smallest single A1 range enclosing BOTH $a and $b — their bounding box, the
+## min/max inverse of range_intersection (always exists). NOT Excel's multi-area
+## union: A1:B2 ∪ D5:E6 → A1:E6 (includes cells in neither). Returns
+## { range, start, end, rows, cols }.
+fn Office::range_union ($a, $b) {
+    Office::_decode("range_union", office__range_union(to_json({ a => $a, b => $b })))
+}

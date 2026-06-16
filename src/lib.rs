@@ -17398,6 +17398,31 @@ fn op_range_contains(opts: Value) -> Result<Value> {
     Ok(json!({ "range": req_str(&opts, "range")?, "contains": contains }))
 }
 
+/// The smallest single A1 range that encloses BOTH `a` and `b` — their bounding
+/// box (min of the top-left corners, max of the bottom-right). The min/max
+/// inverse of `range_intersection`'s overlap, and unlike it this always exists.
+/// Note this is the geometric bounding box, NOT Excel's multi-area union (the
+/// comma operator): `A1:B2` ∪ `D5:E6` → `A1:E6`, which includes cells in
+/// neither input. opts: `a`, `b`. Returns `{range, start, end, rows, cols}`.
+/// Pure.
+fn op_range_union(opts: Value) -> Result<Value> {
+    let (ar1, ac1, ar2, ac2) = range_corners(req_str(&opts, "a")?)?;
+    let (br1, bc1, br2, bc2) = range_corners(req_str(&opts, "b")?)?;
+    let r1 = ar1.min(br1);
+    let c1 = ac1.min(bc1);
+    let r2 = ar2.max(br2);
+    let c2 = ac2.max(bc2);
+    let start = format!("{}{}", col_letters(c1), r1 + 1);
+    let end = format!("{}{}", col_letters(c2), r2 + 1);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (r2 - r1) + 1,
+        "cols": (c2 - c1) + 1,
+    }))
+}
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_of, op_a1_of);
@@ -17411,6 +17436,7 @@ export!(office__expand_range, op_expand_range);
 export!(office__bounding_range, op_bounding_range);
 export!(office__range_intersection, op_range_intersection);
 export!(office__range_contains, op_range_contains);
+export!(office__range_union, op_range_union);
 
 // minimal pptx writer (OOXML via zip + hand-built XML)
 include!("pptx_write.rs");

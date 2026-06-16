@@ -91,5 +91,6 @@ assert_ok exists &Office::expand_range, "Office::expand_range exists"
 assert_ok exists &Office::bounding_range, "Office::bounding_range exists"
 assert_ok exists &Office::range_intersection, "Office::range_intersection exists"
 assert_ok exists &Office::range_contains, "Office::range_contains exists"
+assert_ok exists &Office::range_union, "Office::range_union exists"
 
 test_run
