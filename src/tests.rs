@@ -14996,6 +14996,51 @@ fn a1_of_is_the_inverse_of_parse_a1() {
 }
 
 #[test]
+fn r1c1_to_a1_inverts_a1_to_r1c1() {
+    // Bracketless R1C1 is absolute → $-locked A1.
+    let v = call(office__r1c1_to_a1, r#"{"r1c1":"R3C2"}"#);
+    assert_eq!(v["cell"], "$B$3");
+    assert_eq!(v["row"], 2);
+    assert_eq!(v["col"], 1);
+    assert_eq!(v["row_absolute"], true);
+    // Relative parts resolve against the anchor and stay unlocked.
+    let rel = call(office__r1c1_to_a1, r#"{"r1c1":"R[1]C[-1]","anchor":"C3"}"#);
+    assert_eq!(rel["cell"], "B4");
+    assert_eq!(rel["row_absolute"], false);
+    // Bare R/C mean offset 0 from the anchor.
+    assert_eq!(
+        call(office__r1c1_to_a1, r#"{"r1c1":"RC","anchor":"D5"}"#)["cell"],
+        "D5"
+    );
+    // Mixed: absolute row ($ on the row number), relative col (unlocked).
+    assert_eq!(
+        call(office__r1c1_to_a1, r#"{"r1c1":"R5C[2]","anchor":"B1"}"#)["cell"],
+        "D$5"
+    );
+    // Round-trips a1_to_r1c1 for an absolute cell (no anchor needed).
+    let fwd = call(office__a1_to_r1c1, r#"{"cell":"$B$3"}"#);
+    let back = call(
+        office__r1c1_to_a1,
+        &format!(r#"{{"r1c1":"{}"}}"#, fwd["r1c1"].as_str().unwrap()),
+    );
+    assert_eq!(back["cell"], "$B$3");
+    // Round-trips a relative cell through a shared anchor.
+    let fwd_rel = call(office__a1_to_r1c1, r#"{"cell":"E7","anchor":"A1"}"#);
+    let back_rel = call(
+        office__r1c1_to_a1,
+        &format!(
+            r#"{{"r1c1":"{}","anchor":"A1"}}"#,
+            fwd_rel["r1c1"].as_str().unwrap()
+        ),
+    );
+    assert_eq!(back_rel["cell"], "E7");
+    // A relative reference with no anchor is an error.
+    assert!(call(office__r1c1_to_a1, r#"{"r1c1":"R[1]C[1]"}"#)
+        .get("error")
+        .is_some());
+}
+
+#[test]
 fn offset_a1_applies_relative_reference_adjustment() {
     // Fill-down/right: B2 shifted by (1,2) → D3.
     let v = call(

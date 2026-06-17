@@ -131,6 +131,14 @@ assert_eq Office::a1_to_r1c1("\$B\$3", "A1")->{r1c1}, "R3C2", "a1_to_r1c1: \$-ab
 assert_eq Office::a1_to_r1c1("B\$3", "A1")->{r1c1}, "R3C[1]", "a1_to_r1c1: mixed \$ ref (absolute row, relative col)"
 assert_eq Office::a1_to_r1c1("A1", "A1")->{r1c1}, "RC", "a1_to_r1c1: zero offset is a bare RC"
 assert_dies fn { Office::a1_to_r1c1("notacell") }, "a1_to_r1c1: rejects an invalid reference"
+
+# r1c1_to_a1: the inverse of a1_to_r1c1.
+assert_eq Office::r1c1_to_a1("R3C2")->{cell}, "\$B\$3", "r1c1_to_a1: bracketless R1C1 → \$-locked A1"
+assert_eq Office::r1c1_to_a1("R[1]C[-1]", "C3")->{cell}, "B4", "r1c1_to_a1: relative parts resolve against the anchor"
+assert_eq Office::r1c1_to_a1("RC", "D5")->{cell}, "D5", "r1c1_to_a1: bare RC is the anchor itself"
+assert_eq Office::r1c1_to_a1("R5C[2]", "B1")->{cell}, "D\$5", "r1c1_to_a1: absolute row, relative col"
+assert_eq Office::r1c1_to_a1(Office::a1_to_r1c1("E7", "A1")->{r1c1}, "A1")->{cell}, "E7", "r1c1_to_a1: round-trips a1_to_r1c1 through an anchor"
+assert_dies fn { Office::r1c1_to_a1("R[1]C[1]") }, "r1c1_to_a1: relative ref needs an anchor"
 assert_dies fn { Office::parse_a1_abs("A1\$") }, "parse_a1_abs: rejects malformed reference"
 
 # a1_abs_of: build $-marked reference from parts (inverse of parse_a1_abs).

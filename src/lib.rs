@@ -17285,6 +17285,87 @@ fn op_a1_to_r1c1(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Convert one R1C1 reference component (`R`/`C` already stripped) to either an
+/// absolute 1-based index or a relative offset. `""` → relative 0 (current
+/// row/col), `[d]` → relative offset d, a bare integer `n` → absolute n.
+fn parse_r1c1_part(spec: &str, axis: char) -> Result<(i64, bool)> {
+    let spec = spec.trim();
+    if spec.is_empty() {
+        return Ok((0, false));
+    }
+    if let Some(inner) = spec.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
+        let d: i64 = inner
+            .trim()
+            .parse()
+            .map_err(|_| anyhow!("bad R1C1 {axis} offset [{inner}]"))?;
+        Ok((d, false))
+    } else {
+        let n: i64 = spec
+            .parse()
+            .map_err(|_| anyhow!("bad R1C1 {axis} index {spec}"))?;
+        if n < 1 {
+            return Err(anyhow!("R1C1 absolute {axis} index must be >= 1: {spec}"));
+        }
+        Ok((n, true))
+    }
+}
+
+/// Convert an R1C1 reference to A1 — the inverse of a1_to_r1c1. A bracketless
+/// component (`R3`, `C2`) is absolute and becomes a `$`-locked A1 part; a bracketed
+/// or bare component (`R[2]`, `C`, `R`) is relative to `anchor` (an A1 cell,
+/// required for any relative part) and becomes an unlocked A1 part. Round-trips
+/// a1_to_r1c1. opts: `r1c1` (required, e.g. `R3C2` or `R[1]C[-2]`), `anchor`
+/// (optional A1 cell). Returns `{r1c1, cell, row, col, row_absolute, col_absolute}`
+/// (row/col 0-based). Pure.
+fn op_r1c1_to_a1(opts: Value) -> Result<Value> {
+    let r1c1 = req_str(&opts, "r1c1")?;
+    let anchor = opts.get("anchor").and_then(Value::as_str);
+    let anchor_parts = match anchor {
+        Some(a) => Some(a1_abs_parts(a)?),
+        None => None,
+    };
+    let body = r1c1
+        .trim()
+        .strip_prefix(['R', 'r'])
+        .ok_or_else(|| anyhow!("R1C1 reference must start with R: {r1c1}"))?;
+    let cpos = body
+        .find(['C', 'c'])
+        .ok_or_else(|| anyhow!("R1C1 reference missing a C part: {r1c1}"))?;
+    let (row_val, row_abs) = parse_r1c1_part(&body[..cpos], 'R')?;
+    let (col_val, col_abs) = parse_r1c1_part(&body[cpos + 1..], 'C')?;
+    let resolve =
+        |val: i64, absolute: bool, anchor_idx: Option<usize>, axis: char| -> Result<usize> {
+            if absolute {
+                Ok((val - 1) as usize)
+            } else {
+                let base = anchor_idx
+                    .ok_or_else(|| anyhow!("relative R1C1 {axis} needs an anchor cell"))?;
+                let idx = base as i64 + val;
+                if idx < 0 {
+                    return Err(anyhow!("R1C1 {axis} resolves before the first row/column"));
+                }
+                Ok(idx as usize)
+            }
+        };
+    let row = resolve(row_val, row_abs, anchor_parts.map(|p| p.0), 'R')?;
+    let col = resolve(col_val, col_abs, anchor_parts.map(|p| p.1), 'C')?;
+    let cell = format!(
+        "{}{}{}{}",
+        if col_abs { "$" } else { "" },
+        col_letters(col),
+        if row_abs { "$" } else { "" },
+        row + 1
+    );
+    Ok(json!({
+        "r1c1": r1c1,
+        "cell": cell,
+        "row": row,
+        "col": col,
+        "row_absolute": row_abs,
+        "col_absolute": col_abs,
+    }))
+}
+
 /// 0-based column index → column letters (`0` → `A`, `26` → `AA`). Pure.
 fn op_col_to_letter(opts: Value) -> Result<Value> {
     let col = opts
@@ -17568,6 +17649,7 @@ fn op_range_to_relative(opts: Value) -> Result<Value> {
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_to_r1c1, op_a1_to_r1c1);
+export!(office__r1c1_to_a1, op_r1c1_to_a1);
 export!(office__a1_of, op_a1_of);
 export!(office__offset_a1, op_offset_a1);
 export!(office__cell_delta, op_cell_delta);
