@@ -3256,6 +3256,16 @@ fn Office::a1_to_r1c1 ($cell, $anchor = undef) {
     Office::_decode("a1_to_r1c1", office__a1_to_r1c1(to_json({ cell => $cell, anchor => $anchor })))
 }
 
+## Convert an Excel R1C1 reference to A1 — the inverse of a1_to_r1c1. A bracketless
+## part ("R3", "C2") is absolute and becomes a $-locked A1 part ("R3C2" → "$B$3");
+## a bracketed or bare part ("R[2]", "C", "R") is relative to $anchor (an A1 cell,
+## required for any relative part) and becomes an unlocked A1 part ("R[1]C[-1]"
+## anchored at "C3" → "B4"; "RC" anchored at "D5" → "D5"). Returns a hashref
+## { r1c1, cell, row, col, row_absolute, col_absolute }.
+fn Office::r1c1_to_a1 ($r1c1, $anchor = undef) {
+    Office::_decode("r1c1_to_a1", office__r1c1_to_a1(to_json({ r1c1 => $r1c1, anchor => $anchor })))
+}
+
 ## Build an A1 cell reference from 0-based $row and $col. Inverse of parse_a1.
 fn Office::a1_of ($row, $col) {
     Office::_decode("a1_of", office__a1_of(to_json({ row => $row, col => $col })))->{cell}
