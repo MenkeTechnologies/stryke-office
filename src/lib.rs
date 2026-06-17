@@ -17412,6 +17412,26 @@ fn op_parse_range(opts: Value) -> Result<Value> {
     }))
 }
 
+/// Canonicalize an A1 range to top-left`:`bottom-right form. A range may be
+/// written with its corners in any order (`C3:A1`, `B5:B2`) or in mixed case;
+/// this reorders them so the start is the minimum row/column and the end the
+/// maximum, and upper-cases the column letters — the form to compare or store a
+/// range by. Where `parse_range` preserves the literal corners, this rewrites
+/// them. opts: `range` (required, e.g. `C3:A1`). Returns
+/// `{range, start, end, rows, cols}`. Pure.
+fn op_normalize_range(opts: Value) -> Result<Value> {
+    let (r1, c1, r2, c2) = range_corners(req_str(&opts, "range")?)?;
+    let start = format!("{}{}", col_letters(c1), r1 + 1);
+    let end = format!("{}{}", col_letters(c2), r2 + 1);
+    Ok(json!({
+        "range": format!("{start}:{end}"),
+        "start": start,
+        "end": end,
+        "rows": (r2 - r1) + 1,
+        "cols": (c2 - c1) + 1,
+    }))
+}
+
 /// Build an A1 range `A1:B10` from 0-based corner indices. opts: `start_row`,
 /// `start_col`, `end_row`, `end_col`. Corners are normalized so the result is
 /// always top-left`:`bottom-right regardless of argument order. Inverse of
@@ -17657,6 +17677,7 @@ export!(office__a1_abs_of, op_a1_abs_of);
 export!(office__col_to_letter, op_col_to_letter);
 export!(office__letter_to_col, op_letter_to_col);
 export!(office__parse_range, op_parse_range);
+export!(office__normalize_range, op_normalize_range);
 export!(office__range_of, op_range_of);
 export!(office__expand_range, op_expand_range);
 export!(office__bounding_range, op_bounding_range);

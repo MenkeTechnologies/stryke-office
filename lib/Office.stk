@@ -3310,6 +3310,15 @@ fn Office::parse_range ($range) {
     Office::_decode("parse_range", office__parse_range(to_json({ range => $range })))
 }
 
+## Canonicalize an A1 $range to top-left:bottom-right form. Corners written in any
+## order ("C3:A1", "B5:B2") or mixed case reorder to min-row/col .. max-row/col
+## with upper-case letters — the form to compare or store a range by. Where
+## parse_range keeps the literal corners, this rewrites them. Returns a hashref
+## { range, start, end, rows, cols }.
+fn Office::normalize_range ($range) {
+    Office::_decode("normalize_range", office__normalize_range(to_json({ range => $range })))
+}
+
 ## Build an A1 range "A1:C4" from 0-based corner indices. Corners are
 ## normalized to top-left:bottom-right regardless of order. Returns a hashref
 ## { range, start, end, rows, cols }. Inverse of parse_range.

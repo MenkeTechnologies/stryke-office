@@ -159,6 +159,13 @@ assert_eq $rg->{rows}, 4, "parse_range: 4 rows"
 assert_eq $rg->{cols}, 3, "parse_range: 3 cols"
 assert_eq $rg->{end}{col}, 2, "parse_range: end col 0-based"
 
+# normalize_range: canonicalize corner order to top-left:bottom-right.
+assert_eq Office::normalize_range("C3:A1")->{range}, "A1:C3", "normalize_range: reversed corners reorder"
+assert_eq Office::normalize_range("b5:b2")->{range}, "B2:B5", "normalize_range: single-axis reversal + lowercase"
+assert_eq Office::normalize_range("A1:C4")->{range}, "A1:C4", "normalize_range: already canonical unchanged"
+assert_eq Office::normalize_range("D7:D7")->{rows}, 1, "normalize_range: single-cell range is 1x1"
+assert_dies fn { Office::normalize_range("A1") }, "normalize_range: rejects a non-range (no colon)"
+
 # range_of: inverse of parse_range, corners normalized.
 assert_eq Office::range_of(0, 0, 3, 2)->{range}, "A1:C4", "range_of: corners → A1 range"
 assert_eq Office::range_of(3, 2, 0, 0)->{range}, "A1:C4", "range_of: normalizes swapped corners"

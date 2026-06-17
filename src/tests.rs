@@ -15098,6 +15098,37 @@ fn parse_range_gives_span_dimensions() {
 }
 
 #[test]
+fn normalize_range_canonicalizes_corner_order() {
+    // Reversed corners reorder to top-left:bottom-right.
+    let v = call(office__normalize_range, r#"{"range":"C3:A1"}"#);
+    assert_eq!(v["range"], "A1:C3");
+    assert_eq!(v["start"], "A1");
+    assert_eq!(v["end"], "C3");
+    assert_eq!(v["rows"], 3);
+    assert_eq!(v["cols"], 3);
+    // A single-axis reversal and lowercase input.
+    assert_eq!(
+        call(office__normalize_range, r#"{"range":"b5:b2"}"#)["range"],
+        "B2:B5"
+    );
+    // An already-canonical range is unchanged.
+    assert_eq!(
+        call(office__normalize_range, r#"{"range":"A1:C4"}"#)["range"],
+        "A1:C4"
+    );
+    // A single-cell range stays itself.
+    assert_eq!(
+        call(office__normalize_range, r#"{"range":"D7:D7"}"#)["range"],
+        "D7:D7"
+    );
+    // Bad input (no colon, missing arg) errors.
+    assert!(err_of(&call(office__normalize_range, r#"{"range":"A1"}"#)).contains("range"));
+    assert!(call(office__normalize_range, r#"{}"#)
+        .get("error")
+        .is_some());
+}
+
+#[test]
 fn range_of_is_the_inverse_of_parse_range() {
     // 0-based corners → A1 range, round-trips through parse_range.
     let v = call(
