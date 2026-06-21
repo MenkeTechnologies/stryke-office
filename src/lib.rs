@@ -17030,6 +17030,14 @@ export!(office__img_dither, op_img_dither);
 export!(office__img_quantize, op_img_quantize);
 export!(office__img_favicon, op_img_favicon);
 
+// PIL parity: point / reduce / entropy / getcolors / getbbox / chops
+export!(office__img_point, op_img_point);
+export!(office__img_reduce, op_img_reduce);
+export!(office__img_entropy, op_img_entropy);
+export!(office__img_count_colors, op_img_count_colors);
+export!(office__img_bbox, op_img_bbox);
+export!(office__img_chop, op_img_chop);
+
 // barcode + QR-code generation (-> image handle, composes with image surface)
 include!("barcode.rs");
 export!(office__barcode_qr, op_barcode_qr);

@@ -2845,3 +2845,267 @@ fn op_img_drop_shadow(opts: Value) -> Result<Value> {
     })?;
     with_image(h, |img| Ok(info_json(h, img)))
 }
+
+// ── PIL parity: point / reduce / entropy / getcolors / getbbox / chops ───────
+
+/// Read a 256-entry lookup table from `v`. Accepts an array of 256 numbers
+/// (clamped to 0..255). Shorter arrays are right-padded with identity values;
+/// missing entries default to identity. Returns `None` when `v` is absent.
+fn read_lut(v: Option<&Value>) -> Option<[u8; 256]> {
+    let arr = v?.as_array()?;
+    let mut lut = [0u8; 256];
+    for (i, slot) in lut.iter_mut().enumerate() {
+        *slot = match arr.get(i).and_then(Value::as_i64) {
+            Some(n) => n.clamp(0, 255) as u8,
+            None => i as u8, // identity past the supplied entries
+        };
+    }
+    Some(lut)
+}
+
+/// Apply a per-channel 256-entry lookup table (PIL `Image.point`). opts:
+/// handle, and either a single `lut` (one 256-entry array applied to R, G and
+/// B) or per-channel `r`/`g`/`b`/`a` arrays. Channels without a table pass
+/// through unchanged. Alpha is left alone unless an `a` table is given. This is
+/// the general primitive behind curves/levels/gamma — any monotone or arbitrary
+/// tonal remap. Returns `{ ok }`.
+fn op_img_point(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let shared = read_lut(opts.get("lut"));
+    let rl = read_lut(opts.get("r")).or(shared);
+    let gl = read_lut(opts.get("g")).or(shared);
+    let bl = read_lut(opts.get("b")).or(shared);
+    let al = read_lut(opts.get("a"));
+    if rl.is_none() && gl.is_none() && bl.is_none() && al.is_none() {
+        return Err(anyhow!("missing lut (expected a 256-entry array, or r/g/b/a arrays)"));
+    }
+    pixel_map(h, move |[r, g, b, a]| {
+        [
+            rl.map_or(r, |l| l[r as usize]),
+            gl.map_or(g, |l| l[g as usize]),
+            bl.map_or(b, |l| l[b as usize]),
+            al.map_or(a, |l| l[a as usize]),
+        ]
+    })
+}
+
+/// Downscale by an integer factor with box averaging (PIL `Image.reduce`).
+/// Each output pixel is the mean of an `fx`×`fy` block, so it is a true
+/// area-average shrink (better for thumbnails than point sampling) without the
+/// cost/quality tradeoffs of the resampling filters. opts: handle, and either
+/// `factor` (same factor both axes) or `[fx, fy]`; factors are clamped to ≥ 1.
+/// Edge blocks use whatever pixels remain. Returns the new geometry.
+fn op_img_reduce(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let (fx, fy) = match opts.get("factor") {
+        Some(Value::Array(a)) => (
+            a.first().and_then(Value::as_u64).unwrap_or(1).max(1) as u32,
+            a.get(1).and_then(Value::as_u64).unwrap_or(1).max(1) as u32,
+        ),
+        Some(v) => {
+            let f = v.as_u64().unwrap_or(1).max(1) as u32;
+            (f, f)
+        }
+        None => return Err(anyhow!("missing factor (integer, or [fx, fy])")),
+    };
+    transform(h, move |img| {
+        let src = img.to_rgba8();
+        let (w, ht) = (src.width(), src.height());
+        let (ow, oh) = (w.div_ceil(fx).max(1), ht.div_ceil(fy).max(1));
+        let mut out = image::RgbaImage::new(ow, oh);
+        for oy in 0..oh {
+            for ox in 0..ow {
+                let mut acc = [0u64; 4];
+                let mut n = 0u64;
+                for dy in 0..fy {
+                    let sy = oy * fy + dy;
+                    if sy >= ht {
+                        break;
+                    }
+                    for dx in 0..fx {
+                        let sx = ox * fx + dx;
+                        if sx >= w {
+                            break;
+                        }
+                        let p = src.get_pixel(sx, sy).0;
+                        for c in 0..4 {
+                            acc[c] += p[c] as u64;
+                        }
+                        n += 1;
+                    }
+                }
+                let n = n.max(1);
+                out.put_pixel(
+                    ox,
+                    oy,
+                    image::Rgba([
+                        (acc[0] / n) as u8,
+                        (acc[1] / n) as u8,
+                        (acc[2] / n) as u8,
+                        (acc[3] / n) as u8,
+                    ]),
+                );
+            }
+        }
+        Ok(DynamicImage::ImageRgba8(out))
+    })?;
+    with_image(h, |img| Ok(info_json(h, img)))
+}
+
+/// Shannon entropy of the image (PIL `Image.entropy`) — a measure of tonal
+/// information / detail in bits (0 = a flat fill, up to 8 for a uniformly
+/// random gray ramp). opts: handle, channel => "luma" (default) | "r" | "g" |
+/// "b". Returns `{ entropy, channel }`.
+fn op_img_entropy(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let channel = opts.get("channel").and_then(Value::as_str).unwrap_or("luma").to_string();
+    with_image(h, |img| {
+        let buf = img.to_rgba8();
+        let mut hist = [0u64; 256];
+        let mut total = 0u64;
+        for px in buf.pixels() {
+            let v = match channel.as_str() {
+                "r" => px.0[0],
+                "g" => px.0[1],
+                "b" => px.0[2],
+                "a" => px.0[3],
+                _ => luma601(px.0[0], px.0[1], px.0[2]),
+            };
+            hist[v as usize] += 1;
+            total += 1;
+        }
+        let total = total.max(1) as f64;
+        let entropy: f64 = hist
+            .iter()
+            .filter(|&&c| c > 0)
+            .map(|&c| {
+                let p = c as f64 / total;
+                -p * p.log2()
+            })
+            .sum();
+        Ok(json!({ "entropy": entropy, "channel": channel }))
+    })
+}
+
+/// Count exact unique colors (PIL `Image.getcolors`). Returns the number of
+/// distinct RGBA values; with `top => N` also returns the N most frequent as
+/// `[{ r, g, b, a, hex, count }]`. Unlike `img_dominant_colors` (which buckets
+/// into a coarse palette) this is exact and is the right tool for "is this a
+/// flat/few-color image?" and palette/index analysis. opts: handle, top
+/// (optional). Returns `{ unique, colors? }`.
+fn op_img_count_colors(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let top = opts.get("top").and_then(Value::as_u64).map(|n| n as usize);
+    with_image(h, |img| {
+        let buf = img.to_rgba8();
+        let mut hist: HashMap<[u8; 4], u32> = HashMap::new();
+        for px in buf.pixels() {
+            *hist.entry(px.0).or_insert(0) += 1;
+        }
+        let unique = hist.len();
+        let mut out = json!({ "unique": unique });
+        if let Some(k) = top {
+            let mut v: Vec<([u8; 4], u32)> = hist.into_iter().collect();
+            v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+            let colors: Vec<Value> = v
+                .into_iter()
+                .take(k)
+                .map(|(c, cnt)| {
+                    json!({
+                        "r": c[0], "g": c[1], "b": c[2], "a": c[3],
+                        "hex": format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]),
+                        "count": cnt,
+                    })
+                })
+                .collect();
+            out["colors"] = json!(colors);
+        }
+        Ok(out)
+    })
+}
+
+/// Bounding box of the non-background content (PIL `Image.getbbox`) — the
+/// smallest rectangle that contains every pixel differing from the background.
+/// Non-mutating: returns coordinates only (unlike `img_trim`, which crops).
+/// Background is the alpha-zero / corner color by default, or a supplied
+/// `color`; `tolerance` (default 0) allows near-matches. opts: handle, color
+/// (optional bg spec; defaults to the top-left pixel), tolerance. Returns
+/// `{ x, y, width, height, right, bottom, empty }`; `empty` is true (and the
+/// box is zero-sized) when the whole image matches the background.
+fn op_img_bbox(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let tol = opts.get("tolerance").and_then(Value::as_i64).unwrap_or(0).max(0) as i32;
+    let bg_override = opts.get("color").map(|c| parse_color(Some(c)));
+    with_image(h, |img| {
+        let buf = img.to_rgba8();
+        let (w, ht) = (buf.width(), buf.height());
+        if w == 0 || ht == 0 {
+            return Ok(json!({ "x": 0, "y": 0, "width": 0, "height": 0, "right": 0, "bottom": 0, "empty": true }));
+        }
+        let bg = bg_override.unwrap_or_else(|| *buf.get_pixel(0, 0)).0;
+        let matches = |p: &[u8; 4]| (0..4).all(|c| (p[c] as i32 - bg[c] as i32).abs() <= tol);
+        let (mut minx, mut miny, mut maxx, mut maxy) = (w, ht, 0u32, 0u32);
+        let mut any = false;
+        for (x, y, px) in buf.enumerate_pixels() {
+            if !matches(&px.0) {
+                any = true;
+                minx = minx.min(x);
+                miny = miny.min(y);
+                maxx = maxx.max(x);
+                maxy = maxy.max(y);
+            }
+        }
+        if !any {
+            return Ok(json!({ "x": 0, "y": 0, "width": 0, "height": 0, "right": 0, "bottom": 0, "empty": true }));
+        }
+        Ok(json!({
+            "x": minx, "y": miny,
+            "width": maxx - minx + 1, "height": maxy - miny + 1,
+            "right": maxx + 1, "bottom": maxy + 1,
+            "empty": false,
+        }))
+    })
+}
+
+/// Per-channel integer channel operation between two image handles (PIL
+/// `ImageChops`), producing a NEW image (the base is not modified) — the
+/// counterpart to `img_blend_mode` for the integer/modulo/bitwise operations
+/// that `blend_mode`'s 0..1 float math does not cover. opts: handle (base),
+/// src (other handle; resized to base), mode => "add_modulo" | "subtract_modulo"
+/// | "and" | "or" | "xor". `add_modulo`/`subtract_modulo` wrap at 256 (no
+/// clamping), and `and`/`or`/`xor` are bitwise. Alpha is taken from the base.
+/// Returns the new geometry `{ handle, width, height, mode }`.
+fn op_img_chop(opts: Value) -> Result<Value> {
+    let h = req_u64_img(&opts, "handle")?;
+    let src = req_u64_img(&opts, "src")?;
+    let mode = opts.get("mode").and_then(Value::as_str).unwrap_or("add_modulo").to_string();
+    let base = rgba_of(h)?;
+    let s_raw = rgba_of(src)?;
+    let s = if s_raw.width() != base.width() || s_raw.height() != base.height() {
+        image::imageops::resize(&s_raw, base.width(), base.height(), image::imageops::FilterType::Triangle)
+    } else {
+        s_raw
+    };
+    let f = move |a: u8, b: u8| -> u8 {
+        match mode.as_str() {
+            "subtract_modulo" => a.wrapping_sub(b),
+            "and" => a & b,
+            "or" => a | b,
+            "xor" => a ^ b,
+            _ => a.wrapping_add(b), // add_modulo
+        }
+    };
+    let mut out = base.clone();
+    for (p, q) in out.pixels_mut().zip(s.pixels()) {
+        for c in 0..3 {
+            p.0[c] = f(p.0[c], q.0[c]);
+        }
+    }
+    let handle = insert_image(DynamicImage::ImageRgba8(out));
+    let mode_str = opts.get("mode").and_then(Value::as_str).unwrap_or("add_modulo");
+    with_image(handle, |img| {
+        let mut j = info_json(handle, img);
+        j["mode"] = json!(mode_str);
+        Ok(j)
+    })
+}

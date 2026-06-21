@@ -3078,6 +3078,49 @@ fn Office::img_average_color ($handle) {
     Office::_decode("img_average_color", office__img_average_color(to_json({ handle => $handle })))
 }
 
+## Apply a per-channel 256-entry lookup table (PIL Image.point) — the general
+## tonal-remap primitive. Pass a single `lut` (256-entry arrayref applied to
+## R/G/B) or per-channel `r`/`g`/`b`/`a` arrays; untabled channels pass through.
+## Returns { ok }.
+fn Office::img_point ($handle, %opts) {
+    Office::_decode("img_point",
+        office__img_point(to_json({ handle => $handle, lut => $opts{lut}, r => $opts{r}, g => $opts{g}, b => $opts{b}, a => $opts{a} })))
+}
+
+## Integer box-average downscale (PIL Image.reduce). $factor is a single integer
+## (both axes) or [fx, fy]. Returns the new geometry.
+fn Office::img_reduce ($handle, $factor) {
+    Office::_decode("img_reduce", office__img_reduce(to_json({ handle => $handle, factor => $factor })))
+}
+
+## Shannon entropy of the image in bits (PIL Image.entropy) — tonal information
+## / detail. opts: channel => "luma" (default) | "r" | "g" | "b" | "a". Returns
+## { entropy, channel }.
+fn Office::img_entropy ($handle, %opts) {
+    Office::_decode("img_entropy", office__img_entropy(to_json({ handle => $handle, channel => $opts{channel} })))
+}
+
+## Count exact unique colors (PIL Image.getcolors). opts: top => N to also get
+## the N most-frequent as [{r,g,b,a,hex,count}]. Returns { unique, colors? }.
+fn Office::img_count_colors ($handle, %opts) {
+    Office::_decode("img_count_colors", office__img_count_colors(to_json({ handle => $handle, top => $opts{top} })))
+}
+
+## Bounding box of non-background content (PIL Image.getbbox); non-mutating
+## (returns coords, unlike img_trim which crops). opts: color (bg spec; default
+## top-left pixel), tolerance. Returns { x, y, width, height, right, bottom, empty }.
+fn Office::img_bbox ($handle, %opts) {
+    Office::_decode("img_bbox", office__img_bbox(to_json({ handle => $handle, color => $opts{color}, tolerance => $opts{tolerance} })))
+}
+
+## Integer/bitwise channel op between two handles (PIL ImageChops), producing a
+## NEW handle (base unmodified). $mode => "add_modulo" | "subtract_modulo" |
+## "and" | "or" | "xor" ($src resized to base; alpha from base). Returns
+## { handle, width, height, mode }.
+fn Office::img_chop ($handle, $src, $mode) {
+    Office::_decode("img_chop", office__img_chop(to_json({ handle => $handle, src => $src, mode => $mode })))
+}
+
 ## Mean perceived brightness (luma) of an image — auto light/dark detection.
 ## Returns { brightness (0..255), normalized (0..1), is_dark }.
 fn Office::img_brightness ($handle) {

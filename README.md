@@ -891,6 +891,12 @@ All in-place on a handle unless noted; geometry-changing ops return new
 | `img_crop_aspect($h, %opts)` | center-crop to a target aspect ratio (max area, no distortion); `aspect => [w,h]` or `ratio => w/h` |
 | `img_average_color($h)` | mean color over all pixels `{r, g, b, a, hex}` (LQIP placeholder / theme color) |
 | `img_brightness($h)` | mean perceived luma `{brightness, normalized, is_dark}` (auto light/dark, overlay-text color) |
+| `img_point($h, %opts)` | apply a per-channel 256-entry LUT (PIL `Image.point`); single `lut` or per-channel `r`/`g`/`b`/`a` arrays |
+| `img_reduce($h, $factor)` | integer box-average downscale (PIL `Image.reduce`); `$factor` is an int or `[fx,fy]` |
+| `img_entropy($h, %opts)` | Shannon entropy in bits (PIL `Image.entropy`) `{entropy, channel}`; `channel` luma/r/g/b/a |
+| `img_count_colors($h, %opts)` | exact unique-color count (PIL `getcolors`) `{unique}`; `top => N` adds the `N` most frequent |
+| `img_bbox($h, %opts)` | non-background bounding box (PIL `getbbox`, non-mutating) `{x,y,width,height,right,bottom,empty}`; `color`/`tolerance` |
+| `img_chop($h, $src, $mode)` | integer/bitwise two-image op (PIL `ImageChops`) → new handle; `add_modulo`/`subtract_modulo`/`and`/`or`/`xor` |
 | `color_contrast($a, $b)` | WCAG contrast ratio between two colors `{ratio, aa, aa_large, aaa}` (accessibility check) |
 | `color_info($color)` | full breakdown of a color `{hex, rgb, hsl, luminance, brightness}` (theming/design) |
 | `img_text_size($text, %opts)` | measure → `{width,height}` |

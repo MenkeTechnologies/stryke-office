@@ -11675,6 +11675,137 @@ fn image_extended_processing_ops() {
 }
 
 #[test]
+fn image_pil_parity_point_reduce_entropy_colors_bbox_chop() {
+    // img_point: identity LUT is a no-op, and a constant LUT flattens a channel.
+    let a = call(
+        office__img_new,
+        r#"{"width":8,"height":8,"color":[10,20,30,255]}"#,
+    );
+    let h = a["handle"].as_u64().unwrap();
+    // map every R input to 200 via a 256-entry constant LUT on `r` only.
+    let const_lut = format!("[{}]", vec!["200"; 256].join(","));
+    let pt = call(
+        office__img_point,
+        &format!(r#"{{"handle":{h},"r":{const_lut}}}"#),
+    );
+    assert_eq!(pt["ok"], true, "img_point applied: {pt}");
+    let px = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{h},"x":0,"y":0}}"#),
+    );
+    assert_eq!(px["r"], 200, "point remapped R: {px}");
+    assert_eq!(px["g"], 20, "point left G untouched: {px}");
+    // missing lut is an error
+    let bad = call(office__img_point, &format!(r#"{{"handle":{h}}}"#));
+    assert!(err_of(&bad).contains("lut"), "point needs a lut: {bad}");
+
+    // img_reduce: a 9x8 image with factor [3,2] -> ceil(9/3)=3, ceil(8/2)=4.
+    let rim = call(
+        office__img_new,
+        r#"{"width":9,"height":8,"color":[100,100,100,255]}"#,
+    );
+    let rh = rim["handle"].as_u64().unwrap();
+    let red = call(
+        office__img_reduce,
+        &format!(r#"{{"handle":{rh},"factor":[3,2]}}"#),
+    );
+    assert_eq!(red["width"], 3, "reduce width ceil(9/3): {red}");
+    assert_eq!(red["height"], 4, "reduce height ceil(8/2): {red}");
+    let red_px = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{rh},"x":0,"y":0}}"#),
+    );
+    assert_eq!(
+        red_px["r"], 100,
+        "reduce of a flat fill keeps the color: {red_px}"
+    );
+
+    // img_entropy: a solid fill has zero entropy.
+    let ent = call(office__img_entropy, &format!(r#"{{"handle":{rh}}}"#));
+    assert_eq!(ent["entropy"], 0.0, "flat fill has zero entropy: {ent}");
+
+    // img_count_colors: a solid fill has exactly one unique color; top lists it.
+    // rh was downscaled by img_reduce above to 3x4 = 12 pixels, all one color.
+    let cc = call(
+        office__img_count_colors,
+        &format!(r#"{{"handle":{rh},"top":3}}"#),
+    );
+    assert_eq!(cc["unique"], 1, "solid fill is one color: {cc}");
+    assert_eq!(
+        cc["colors"][0]["count"], 12,
+        "3*4 pixels all one color: {cc}"
+    );
+
+    // img_bbox: paint a single non-bg pixel and find its 1x1 box.
+    let bim = call(
+        office__img_new,
+        r#"{"width":20,"height":20,"color":[0,0,0,255]}"#,
+    );
+    let bh = bim["handle"].as_u64().unwrap();
+    let empty = call(office__img_bbox, &format!(r#"{{"handle":{bh}}}"#));
+    assert_eq!(empty["empty"], true, "all-bg image has empty bbox: {empty}");
+    call(
+        office__img_put_pixel,
+        &format!(r#"{{"handle":{bh},"x":5,"y":7,"color":[255,255,255,255]}}"#),
+    );
+    let bb = call(office__img_bbox, &format!(r#"{{"handle":{bh}}}"#));
+    assert_eq!(bb["x"], 5, "bbox x of the lone pixel: {bb}");
+    assert_eq!(bb["y"], 7, "bbox y of the lone pixel: {bb}");
+    assert_eq!(bb["width"], 1, "bbox is 1px wide: {bb}");
+    assert_eq!(bb["height"], 1, "bbox is 1px tall: {bb}");
+    assert_eq!(bb["empty"], false, "content present: {bb}");
+
+    // img_chop: xor of two equal images is all-black; produces a NEW handle.
+    let c1 = call(
+        office__img_new,
+        r#"{"width":4,"height":4,"color":[170,170,170,255]}"#,
+    );
+    let c1h = c1["handle"].as_u64().unwrap();
+    let c2 = call(
+        office__img_new,
+        r#"{"width":4,"height":4,"color":[170,170,170,255]}"#,
+    );
+    let c2h = c2["handle"].as_u64().unwrap();
+    let xor = call(
+        office__img_chop,
+        &format!(r#"{{"handle":{c1h},"src":{c2h},"mode":"xor"}}"#),
+    );
+    let xh = xor["handle"].as_u64().unwrap();
+    assert_ne!(xh, c1h, "chop returns a new handle: {xor}");
+    assert_eq!(xor["mode"], "xor", "chop echoes the mode: {xor}");
+    let xpx = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{xh},"x":0,"y":0}}"#),
+    );
+    assert_eq!(xpx["r"], 0, "xor of equal channels is 0: {xpx}");
+    // add_modulo wraps: 200 + 100 = 300 mod 256 = 44.
+    let w1 = call(
+        office__img_new,
+        r#"{"width":2,"height":2,"color":[200,0,0,255]}"#,
+    );
+    let w1h = w1["handle"].as_u64().unwrap();
+    let w2 = call(
+        office__img_new,
+        r#"{"width":2,"height":2,"color":[100,0,0,255]}"#,
+    );
+    let w2h = w2["handle"].as_u64().unwrap();
+    let addm = call(
+        office__img_chop,
+        &format!(r#"{{"handle":{w1h},"src":{w2h},"mode":"add_modulo"}}"#),
+    );
+    let amh = addm["handle"].as_u64().unwrap();
+    let ampx = call(
+        office__img_get_pixel,
+        &format!(r#"{{"handle":{amh},"x":0,"y":0}}"#),
+    );
+    assert_eq!(ampx["r"], 44, "200+100 wraps to 44: {ampx}");
+
+    for handle in [h, rh, bh, c1h, c2h, xh, w1h, w2h, amh] {
+        call(office__img_close, &format!(r#"{{"handle":{handle}}}"#));
+    }
+}
+
+#[test]
 fn image_animation_drawing_transform_base64() {
     // build 3 distinct frames, write an animated GIF, read frames back
     let mut handles = Vec::new();
