@@ -17646,6 +17646,446 @@ fn op_range_to_relative(opts: Value) -> Result<Value> {
     }))
 }
 
+// ── additional spreadsheet / document / presentation / metadata ops ──────────
+
+/// Flat list of every sheet name in a workbook, in workbook order. opts: path.
+/// Returns `{ count, names: [ "Sheet1", … ] }`. (Distinct from `sheet_info`,
+/// which returns per-sheet dimension objects.)
+fn op_sheet_names(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let names: Vec<Value> = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().map(|s| s["name"].clone()).collect())
+        .unwrap_or_default();
+    Ok(json!({ "count": names.len(), "names": names }))
+}
+
+/// Dimensions of a single sheet. opts: path, sheet => name/index (default
+/// first). Returns `{ name, rows, cols }` where `cols` is the widest row.
+fn op_sheet_dims(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_sheet_read(json!({ "path": path }))?;
+    let sheets = read
+        .get("sheets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let sheet = match opts.get("sheet") {
+        Some(Value::String(name)) => sheets.iter().find(|s| s["name"] == *name),
+        Some(Value::Number(n)) => n.as_u64().and_then(|i| sheets.get(i as usize)),
+        _ => sheets.first(),
+    }
+    .ok_or_else(|| anyhow!("sheet not found"))?;
+    let empty: Vec<Value> = Vec::new();
+    let rows = sheet["rows"].as_array().unwrap_or(&empty);
+    let cols = rows
+        .iter()
+        .map(|r| r.as_array().map_or(0, |a| a.len()))
+        .max()
+        .unwrap_or(0);
+    Ok(json!({
+        "name": sheet["name"].as_str().unwrap_or(""),
+        "rows": rows.len(),
+        "cols": cols,
+    }))
+}
+
+/// Replace empty / null cells with a fill value, then write the sheet out.
+/// opts: path, output (default in place), value => fill (default ""), sheet =>
+/// name/index, format. A cell is "empty" when it is JSON null or an
+/// all-whitespace string. Returns `{ ok, path, filled }` (cells changed).
+fn op_sheet_fillna(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let fill = opts
+        .get("value")
+        .cloned()
+        .unwrap_or(Value::String(String::new()));
+    let mut rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let mut filled = 0u64;
+    for row in &mut rows {
+        if let Some(cells) = row.as_array_mut() {
+            for cell in cells.iter_mut() {
+                let empty = match cell {
+                    Value::Null => true,
+                    Value::String(s) => s.trim().is_empty(),
+                    _ => false,
+                };
+                if empty {
+                    *cell = fill.clone();
+                    filled += 1;
+                }
+            }
+        }
+    }
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Sheet1", "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "filled": filled }))
+}
+
+/// Trim leading/trailing whitespace from every string cell, then write out.
+/// opts: path, output (default in place), sheet => name/index, format. Returns
+/// `{ ok, path, trimmed }` (string cells whose value changed).
+fn op_sheet_clean(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    let mut rows = select_sheet_rows(path, opts.get("sheet"))?;
+    let mut trimmed = 0u64;
+    for row in &mut rows {
+        if let Some(cells) = row.as_array_mut() {
+            for cell in cells.iter_mut() {
+                if let Value::String(s) = cell {
+                    let t = s.trim();
+                    if t.len() != s.len() {
+                        *cell = Value::String(t.to_string());
+                        trimmed += 1;
+                    }
+                }
+            }
+        }
+    }
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": "Sheet1", "rows": rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "trimmed": trimmed }))
+}
+
+/// Vertically concatenate several sheet files into one. opts: paths => [file,
+/// …] (required), output (required), header => the first row of every file is a
+/// header; keep only the first file's header (default true), sheet => selector
+/// applied to every input (default first), name => output sheet name
+/// (default "Sheet1"), format. Returns `{ ok, path, files, rows }`.
+fn op_sheet_concat(opts: Value) -> Result<Value> {
+    let paths = opts
+        .get("paths")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing paths (expected array of files)"))?;
+    let output = req_str(&opts, "output")?.to_string();
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let name = opts.get("name").and_then(Value::as_str).unwrap_or("Sheet1");
+
+    let mut out_rows: Vec<Value> = Vec::new();
+    for (i, p) in paths.iter().enumerate() {
+        let path = p.as_str().ok_or_else(|| anyhow!("paths must be strings"))?;
+        let rows = select_sheet_rows(path, opts.get("sheet"))?;
+        let data = if header && i > 0 && !rows.is_empty() {
+            &rows[1..]
+        } else {
+            &rows[..]
+        };
+        out_rows.extend(data.iter().cloned());
+    }
+
+    let mut wopts = json!({ "path": output, "sheets": [{ "name": name, "rows": out_rows }] });
+    if let Some(f) = opts.get("format") {
+        wopts["format"] = f.clone();
+    }
+    op_sheet_write(wopts)?;
+    Ok(json!({ "ok": true, "path": output, "files": paths.len(), "rows": out_rows.len() }))
+}
+
+/// Frequency of each distinct value in one column (pandas `value_counts`).
+/// opts: path, column => header name or 0-based index (required), sheet =>
+/// name/index, header => first row is a header (default true), ignore_case =>
+/// fold string case (default false). Returns `{ column, total, unique,
+/// counts: [{ value, count }] }` sorted by count desc then value asc.
+fn op_sheet_value_counts(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let header = opts.get("header").and_then(flag_of).unwrap_or(true);
+    let ignore_case = opts.get("ignore_case").and_then(flag_of).unwrap_or(false);
+    let rows = select_sheet_rows(path, opts.get("sheet"))?;
+
+    let header_row = if header { rows.first() } else { None };
+    let col = match opts.get("column") {
+        Some(Value::Number(n)) => n.as_u64().map(|i| i as usize),
+        Some(Value::String(name)) => header_row
+            .and_then(Value::as_array)
+            .and_then(|h| h.iter().position(|c| c.as_str() == Some(name.as_str()))),
+        _ => return Err(anyhow!("missing column (name or 0-based index)")),
+    }
+    .ok_or_else(|| anyhow!("column not found"))?;
+
+    let data = if header && !rows.is_empty() {
+        &rows[1..]
+    } else {
+        &rows[..]
+    };
+    // Preserve a display form per key while counting by a (possibly folded) key.
+    let mut order: Vec<String> = Vec::new();
+    let mut counts: std::collections::HashMap<String, (String, u64)> =
+        std::collections::HashMap::new();
+    let mut total = 0u64;
+    for row in data {
+        let Some(cell) = row.as_array().and_then(|a| a.get(col)) else {
+            continue;
+        };
+        let display = cell_to_string(cell);
+        let key = if ignore_case {
+            display.to_lowercase()
+        } else {
+            display.clone()
+        };
+        total += 1;
+        let e = counts.entry(key.clone()).or_insert_with(|| {
+            order.push(key.clone());
+            (display, 0)
+        });
+        e.1 += 1;
+    }
+    let mut pairs: Vec<(String, u64)> = order
+        .into_iter()
+        .map(|k| {
+            let (disp, c) = counts.get(&k).cloned().unwrap_or((k, 0));
+            (disp, c)
+        })
+        .collect();
+    pairs.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let unique = pairs.len();
+    let counts: Vec<Value> = pairs
+        .into_iter()
+        .map(|(value, count)| json!({ "value": value, "count": count }))
+        .collect();
+    Ok(json!({ "column": col, "total": total, "unique": unique, "counts": counts }))
+}
+
+/// Convenience: import a CSV file into an `.xlsx` workbook. opts: input =>
+/// .csv file or csv => CSV text (one required), output => .xlsx path
+/// (required; must end in .xlsx), delimiter, numeric (default true), name =>
+/// sheet name. Returns `{ ok, path, rows, cols }`.
+fn op_csv_to_xlsx(opts: Value) -> Result<Value> {
+    let output = req_str(&opts, "output")?;
+    if ext_of(output) != "xlsx" {
+        return Err(anyhow!("output must be an .xlsx file"));
+    }
+    let mut o = opts.clone();
+    o["format"] = json!("xlsx");
+    op_csv_to_sheet(o)
+}
+
+/// Convenience: export a spreadsheet (xlsx/ods/xls) to a `.csv` file. opts:
+/// path (required), output => .csv path (required; must end in .csv),
+/// delimiter, sheet => name/index (default first). Returns `{ ok, rows, csv,
+/// path }`.
+fn op_xlsx_to_csv(opts: Value) -> Result<Value> {
+    let output = req_str(&opts, "output")?;
+    if ext_of(output) != "csv" {
+        return Err(anyhow!("output must be a .csv file"));
+    }
+    op_sheet_to_csv(opts)
+}
+
+/// Non-empty, whitespace-trimmed paragraphs of a document, each with its index.
+/// opts: path. Returns `{ count, paragraphs: [{ index, text }] }`. (Distinct
+/// from `doc_read`, which returns every paragraph string including blanks.)
+fn op_doc_paragraphs(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_doc_read(json!({ "path": path }))?;
+    let mut out: Vec<Value> = Vec::new();
+    if let Some(arr) = read.get("paragraphs").and_then(Value::as_array) {
+        for p in arr {
+            let t = p.as_str().unwrap_or("").trim();
+            if !t.is_empty() {
+                out.push(json!({ "index": out.len(), "text": t }));
+            }
+        }
+    }
+    Ok(json!({ "count": out.len(), "paragraphs": out }))
+}
+
+/// Lines of a document's full extracted text, each with its index. opts: path.
+/// Returns `{ count, lines: [{ index, text }] }`. Works on every readable
+/// format (incl. pdf), unlike `doc_paragraphs` which is structure-based.
+fn op_doc_lines(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let text = doc_full_text(path)?;
+    let lines: Vec<Value> = text
+        .lines()
+        .enumerate()
+        .map(|(i, l)| json!({ "index": i, "text": l }))
+        .collect();
+    Ok(json!({ "count": lines.len(), "lines": lines }))
+}
+
+/// Convenience: extract a document's tables into a CSV file. opts: path
+/// (docx/odt), output => .csv path (required), index/name => which table,
+/// delimiter, sheet selector for the intermediate. Returns `{ ok, path, rows }`.
+fn op_doc_to_csv(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = req_str(&opts, "output")?.to_string();
+    if ext_of(&output) != "csv" {
+        return Err(anyhow!("output must be a .csv file"));
+    }
+    // Stage the doc tables into a temp xlsx, then serialize that to CSV.
+    let stage = format!("{output}.stage.xlsx");
+    let mut sopts = json!({ "path": path, "output": stage });
+    for k in ["index", "name"] {
+        if let Some(v) = opts.get(k) {
+            sopts[k] = v.clone();
+        }
+    }
+    let staged = op_doc_table_to_sheet(sopts);
+    let r = match staged {
+        Ok(_) => {
+            let mut copts = json!({ "path": stage, "output": output });
+            if let Some(d) = opts.get("delimiter") {
+                copts["delimiter"] = d.clone();
+            }
+            op_sheet_to_csv(copts)
+        }
+        Err(e) => Err(e),
+    };
+    std::fs::remove_file(&stage).ok();
+    let mut out = r?;
+    out["path"] = json!(output);
+    Ok(out)
+}
+
+/// Number of slides in a presentation. opts: path (pptx/odp). Returns
+/// `{ count }`.
+fn op_slides_count(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_slides_read(json!({ "path": path }))?;
+    let count = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    Ok(json!({ "count": count }))
+}
+
+/// Title of each slide (its first non-empty text line, or "" if none). opts:
+/// path (pptx/odp). Returns `{ count, names: [str] }`.
+fn op_slides_names(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_slides_read(json!({ "path": path }))?;
+    let names: Vec<Value> = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .map(|slides| {
+            slides
+                .iter()
+                .map(|s| {
+                    let title = s
+                        .get("text")
+                        .and_then(Value::as_array)
+                        .and_then(|t| {
+                            t.iter()
+                                .filter_map(Value::as_str)
+                                .find(|l| !l.trim().is_empty())
+                        })
+                        .unwrap_or("")
+                        .trim();
+                    json!(title)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(json!({ "count": names.len(), "names": names }))
+}
+
+/// All slide text concatenated into one string (one line per text run, a blank
+/// line between slides). opts: path (pptx/odp), output => write to file
+/// (optional). Returns `{ slides, chars, text, path? }`.
+fn op_slides_text_all(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let read = op_slides_read(json!({ "path": path }))?;
+    let slides = read
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let blocks: Vec<String> = slides
+        .iter()
+        .map(|s| {
+            s.get("text")
+                .and_then(Value::as_array)
+                .map(|t| {
+                    t.iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+    let text = blocks.join("\n\n");
+    let mut out = json!({ "slides": slides.len(), "chars": text.chars().count(), "text": text });
+    if let Some(output) = opts.get("output").and_then(Value::as_str) {
+        std::fs::write(output, out["text"].as_str().unwrap_or(""))?;
+        out["path"] = json!(output);
+    }
+    Ok(out)
+}
+
+/// Strip all known document metadata (blank every core/app/Info property).
+/// opts: path (ooxml/odf/pdf), output (default in place). Returns
+/// `{ ok, path, cleared }` (the metadata keys blanked). Implemented by writing
+/// empty values for every canonical property via `meta_write`.
+fn op_meta_strip(opts: Value) -> Result<Value> {
+    let path = req_str(&opts, "path")?;
+    let output = opts
+        .get("output")
+        .and_then(Value::as_str)
+        .unwrap_or(path)
+        .to_string();
+    // Union of every canonical key meta_write understands across formats.
+    const KEYS: &[&str] = &[
+        "title",
+        "subject",
+        "author",
+        "keywords",
+        "description",
+        "category",
+        "last_modified_by",
+        "app",
+        "company",
+        "producer",
+        "created",
+        "modified",
+    ];
+    let props: serde_json::Map<String, Value> = KEYS
+        .iter()
+        .map(|k| ((*k).to_string(), Value::String(String::new())))
+        .collect();
+    let wopts = json!({ "path": path, "output": output, "props": props });
+    let r = op_meta_write(wopts)?;
+    Ok(json!({
+        "ok": true,
+        "path": output,
+        "cleared": r.get("set").cloned().unwrap_or_else(|| json!([])),
+    }))
+}
+
+export!(office__sheet_names, op_sheet_names);
+export!(office__sheet_dims, op_sheet_dims);
+export!(office__sheet_fillna, op_sheet_fillna);
+export!(office__sheet_clean, op_sheet_clean);
+export!(office__sheet_concat, op_sheet_concat);
+export!(office__sheet_value_counts, op_sheet_value_counts);
+export!(office__csv_to_xlsx, op_csv_to_xlsx);
+export!(office__xlsx_to_csv, op_xlsx_to_csv);
+export!(office__doc_paragraphs, op_doc_paragraphs);
+export!(office__doc_lines, op_doc_lines);
+export!(office__doc_to_csv, op_doc_to_csv);
+export!(office__slides_count, op_slides_count);
+export!(office__slides_names, op_slides_names);
+export!(office__slides_text_all, op_slides_text_all);
+export!(office__meta_strip, op_meta_strip);
+
 export!(office__parse_a1, op_parse_a1);
 export!(office__parse_a1_abs, op_parse_a1_abs);
 export!(office__a1_to_r1c1, op_a1_to_r1c1);

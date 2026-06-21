@@ -455,6 +455,21 @@ exports = [
     "office__range_offset",
     "office__range_to_absolute",
     "office__range_to_relative",
+    "office__sheet_names",
+    "office__sheet_dims",
+    "office__sheet_fillna",
+    "office__sheet_clean",
+    "office__sheet_concat",
+    "office__sheet_value_counts",
+    "office__csv_to_xlsx",
+    "office__xlsx_to_csv",
+    "office__doc_paragraphs",
+    "office__doc_lines",
+    "office__doc_to_csv",
+    "office__slides_count",
+    "office__slides_names",
+    "office__slides_text_all",
+    "office__meta_strip",
 ]
 
 [scripts]

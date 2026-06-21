@@ -15283,3 +15283,321 @@ fn range_contains_cell_and_subrange() {
     ))
     .contains("invalid A1"));
 }
+
+// ── new ops: sheet_names / dims / fillna / clean / concat / value_counts ──────
+
+#[test]
+fn sheet_names_lists_in_order() {
+    let path = tmp("names.xlsx");
+    let w = call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"Alpha","rows":[["x"]]}},{{"name":"Beta","rows":[["y"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "{w}");
+    let r = call(office__sheet_names, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "{r}");
+    assert_eq!(r["names"][0], "Alpha");
+    assert_eq!(r["names"][1], "Beta");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn sheet_dims_widest_row() {
+    let path = tmp("dims.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"D","rows":[["a","b","c"],[1,2]]}}]}}"#),
+    );
+    let r = call(office__sheet_dims, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["name"], "D", "{r}");
+    assert_eq!(r["rows"], 2, "{r}");
+    assert_eq!(r["cols"], 3, "widest row: {r}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn sheet_fillna_replaces_blanks() {
+    let path = tmp("fillna.xlsx");
+    // Whitespace cell at [0][1]; the short second row is padded to 3 cols on
+    // write, so its trailing null at [1][2] is also empty -> two fills total.
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["a","  ",10],["b","keep"]]}}]}}"#
+        ),
+    );
+    let out = tmp("fillna_out.xlsx");
+    let r = call(
+        office__sheet_fillna,
+        &format!(r#"{{"path":"{path}","output":"{out}","value":"NA"}}"#),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(
+        r["filled"], 2,
+        "whitespace + padded trailing null filled: {r}"
+    );
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(s["sheets"][0]["rows"][0][1], "NA", "blank -> NA: {s}");
+    assert_eq!(s["sheets"][0]["rows"][0][2], 10.0, "numeric untouched: {s}");
+    assert_eq!(
+        s["sheets"][0]["rows"][1][1], "keep",
+        "non-blank untouched: {s}"
+    );
+    assert_eq!(s["sheets"][0]["rows"][1][2], "NA", "padded null -> NA: {s}");
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn sheet_clean_trims_strings() {
+    let path = tmp("clean.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["  pad  ","tight"],["x",5]]}}]}}"#
+        ),
+    );
+    let out = tmp("clean_out.xlsx");
+    let r = call(
+        office__sheet_clean,
+        &format!(r#"{{"path":"{path}","output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["trimmed"], 1, "one padded cell trimmed: {r}");
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    assert_eq!(s["sheets"][0]["rows"][0][0], "pad", "trimmed: {s}");
+    assert_eq!(s["sheets"][0]["rows"][0][1], "tight", "untouched: {s}");
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn sheet_concat_stacks_files_dropping_repeat_headers() {
+    let a = tmp("cat_a.xlsx");
+    let b = tmp("cat_b.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{a}","sheets":[{{"name":"S","rows":[["id","v"],[1,10]]}}]}}"#),
+    );
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{b}","sheets":[{{"name":"S","rows":[["id","v"],[2,20]]}}]}}"#),
+    );
+    let out = tmp("cat_out.xlsx");
+    let r = call(
+        office__sheet_concat,
+        &format!(r#"{{"paths":["{a}","{b}"],"output":"{out}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["files"], 2, "{r}");
+    // header + 2 data rows (the second file's header is dropped).
+    assert_eq!(r["rows"], 3, "{r}");
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{out}"}}"#));
+    let rows = &s["sheets"][0]["rows"];
+    assert_eq!(rows[0][0], "id", "header kept once: {s}");
+    assert_eq!(rows[1][0], 1.0, "first file row: {s}");
+    assert_eq!(rows[2][0], 2.0, "second file row: {s}");
+    std::fs::remove_file(&a).ok();
+    std::fs::remove_file(&b).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn sheet_value_counts_by_header_name() {
+    let path = tmp("vc.xlsx");
+    call(
+        office__sheet_write,
+        &format!(
+            r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["color"],["red"],["blue"],["red"],["red"]]}}]}}"#
+        ),
+    );
+    let r = call(
+        office__sheet_value_counts,
+        &format!(r#"{{"path":"{path}","column":"color"}}"#),
+    );
+    assert_eq!(r["total"], 4, "{r}");
+    assert_eq!(r["unique"], 2, "{r}");
+    assert_eq!(r["counts"][0]["value"], "red", "most frequent first: {r}");
+    assert_eq!(r["counts"][0]["count"], 3, "{r}");
+    assert_eq!(r["counts"][1]["value"], "blue", "{r}");
+    std::fs::remove_file(&path).ok();
+}
+
+// ── new ops: csv_to_xlsx / xlsx_to_csv ───────────────────────────────────────
+
+#[test]
+fn csv_to_xlsx_and_back() {
+    let xlsx = tmp("c2x.xlsx");
+    let r = call(
+        office__csv_to_xlsx,
+        &format!(r#"{{"output":"{xlsx}","csv":"name,qty\nwidget,3\n"}}"#),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["rows"], 2, "{r}");
+    let s = call(office__sheet_read, &format!(r#"{{"path":"{xlsx}"}}"#));
+    assert_eq!(s["sheets"][0]["rows"][1][1], 3.0, "numeric coerced: {s}");
+
+    let csv = tmp("x2c.csv");
+    let x = call(
+        office__xlsx_to_csv,
+        &format!(r#"{{"path":"{xlsx}","output":"{csv}"}}"#),
+    );
+    assert_eq!(x["ok"], true, "{x}");
+    let text = std::fs::read_to_string(&csv).expect("csv written");
+    assert!(text.contains("widget,3"), "csv has data: {text:?}");
+    std::fs::remove_file(&xlsx).ok();
+    std::fs::remove_file(&csv).ok();
+}
+
+#[test]
+fn csv_to_xlsx_rejects_wrong_extension() {
+    let bad = tmp("c2x.ods");
+    let r = call(
+        office__csv_to_xlsx,
+        &format!(r#"{{"output":"{bad}","csv":"a,b\n"}}"#),
+    );
+    assert!(err_of(&r).contains(".xlsx"), "rejects non-xlsx: {r}");
+}
+
+// ── new ops: doc_paragraphs / doc_lines / doc_to_csv ─────────────────────────
+
+#[test]
+fn doc_paragraphs_skips_blanks() {
+    let path = tmp("paras.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[{{"kind":"para","text":"First"}},{{"kind":"para","text":"   "}},{{"kind":"para","text":"Second"}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "{w}");
+    let r = call(office__doc_paragraphs, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "blank paragraph skipped: {r}");
+    assert_eq!(r["paragraphs"][0]["text"], "First", "{r}");
+    assert_eq!(r["paragraphs"][1]["text"], "Second", "{r}");
+    assert_eq!(r["paragraphs"][1]["index"], 1, "reindexed: {r}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn doc_lines_indexes_full_text() {
+    let path = tmp("lines.docx");
+    call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[{{"kind":"para","text":"alpha"}},{{"kind":"para","text":"beta"}}]}}"#
+        ),
+    );
+    let r = call(office__doc_lines, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["count"], 2, "{r}");
+    assert_eq!(r["lines"][0]["text"], "alpha", "{r}");
+    assert_eq!(r["lines"][1]["index"], 1, "{r}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn doc_to_csv_extracts_table() {
+    let path = tmp("tbl.docx");
+    let w = call(
+        office__doc_write,
+        &format!(
+            r#"{{"path":"{path}","blocks":[{{"kind":"table","rows":[["h1","h2"],["a","b"]]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "{w}");
+    let csv = tmp("tbl.csv");
+    let r = call(
+        office__doc_to_csv,
+        &format!(r#"{{"path":"{path}","output":"{csv}"}}"#),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    let text = std::fs::read_to_string(&csv).expect("csv written");
+    assert!(text.contains("h1,h2"), "header row: {text:?}");
+    assert!(text.contains("a,b"), "data row: {text:?}");
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&csv).ok();
+}
+
+// ── new ops: slides_count / slides_names / slides_text_all ────────────────────
+
+#[test]
+fn slides_count_and_names() {
+    let path = tmp("deck.pptx");
+    let w = call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{path}","slides":[{{"title":"Intro","body":["one"]}},{{"title":"Body","body":["two"]}}]}}"#
+        ),
+    );
+    assert_eq!(w["ok"], true, "{w}");
+    let c = call(office__slides_count, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(c["count"], 2, "{c}");
+    let n = call(office__slides_names, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(n["count"], 2, "{n}");
+    assert_eq!(n["names"][0], "Intro", "{n}");
+    assert_eq!(n["names"][1], "Body", "{n}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn slides_text_all_concatenates() {
+    let path = tmp("deck2.pptx");
+    call(
+        office__slides_write,
+        &format!(
+            r#"{{"path":"{path}","slides":[{{"title":"S1","body":["alpha"]}},{{"title":"S2","body":["beta"]}}]}}"#
+        ),
+    );
+    let r = call(office__slides_text_all, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["slides"], 2, "{r}");
+    let text = r["text"].as_str().unwrap_or("");
+    assert!(text.contains("alpha"), "slide 1 text: {text:?}");
+    assert!(text.contains("beta"), "slide 2 text: {text:?}");
+    assert!(r["chars"].as_u64().unwrap_or(0) > 0, "char count: {r}");
+    std::fs::remove_file(&path).ok();
+}
+
+// ── new op: meta_strip ───────────────────────────────────────────────────────
+
+#[test]
+fn meta_strip_clears_properties() {
+    let path = tmp("strip.xlsx");
+    call(
+        office__sheet_write,
+        &format!(r#"{{"path":"{path}","sheets":[{{"name":"S","rows":[["a",1]]}}]}}"#),
+    );
+    let m = call(
+        office__meta_write,
+        &format!(r#"{{"path":"{path}","props":{{"title":"Secret","author":"Jane"}}}}"#),
+    );
+    assert_eq!(m["ok"], true, "{m}");
+    let before = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(before["title"], "Secret", "set: {before}");
+
+    let s = call(office__meta_strip, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(s["ok"], true, "{s}");
+    let after = call(office__meta_read, &format!(r#"{{"path":"{path}"}}"#));
+    // meta_read omits empty values, so a stripped title is simply absent/empty.
+    assert!(
+        after
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .is_empty(),
+        "title cleared: {after}"
+    );
+    assert!(
+        after
+            .get("author")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .is_empty(),
+        "author cleared: {after}"
+    );
+    // file still a readable workbook
+    let r = call(office__sheet_read, &format!(r#"{{"path":"{path}"}}"#));
+    assert_eq!(r["sheets"][0]["rows"][0][1], 1.0, "data intact: {r}");
+    std::fs::remove_file(&path).ok();
+}

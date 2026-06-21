@@ -1030,6 +1030,65 @@ fn Office::sheet_info ($path) {
     Office::_decode("sheet_info", office__sheet_info(to_json({ path => $path })))
 }
 
+## Flat list of every sheet name in a workbook, in order. Returns an arrayref
+## of name strings (use sheet_info for per-sheet dimensions).
+fn Office::sheet_names ($path) {
+    Office::_decode("sheet_names", office__sheet_names(to_json({ path => $path })))->{names}
+}
+
+## Dimensions of a single sheet. opts: sheet => name/index (default first).
+## Returns { name, rows, cols } where cols is the widest row.
+fn Office::sheet_dims ($path, %opts) {
+    Office::_decode("sheet_dims",
+        office__sheet_dims(to_json({ path => $path, sheet => $opts{sheet} })))
+}
+
+## Replace empty/null cells with a fill value. opts: value (default ""),
+## output (default in place), sheet, format. Returns { ok, path, filled }.
+fn Office::sheet_fillna ($path, %opts) {
+    Office::_decode("sheet_fillna",
+        office__sheet_fillna(to_json({ path => $path, value => $opts{value}, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
+## Trim leading/trailing whitespace from every string cell. opts: output
+## (default in place), sheet, format. Returns { ok, path, trimmed }.
+fn Office::sheet_clean ($path, %opts) {
+    Office::_decode("sheet_clean",
+        office__sheet_clean(to_json({ path => $path, output => $opts{output}, sheet => $opts{sheet}, format => $opts{format} })))
+}
+
+## Vertically concatenate several sheet files into one. $paths is an arrayref
+## of input files; $output is the destination. opts: header => keep only the
+## first file's header (default 1), sheet => selector for every input, name =>
+## output sheet name, format. Returns { ok, path, files, rows }.
+fn Office::sheet_concat ($paths, $output, %opts) {
+    Office::_decode("sheet_concat",
+        office__sheet_concat(to_json({ paths => $paths, output => $output, header => $opts{header}, sheet => $opts{sheet}, name => $opts{name}, format => $opts{format} })))
+}
+
+## Frequency of each distinct value in one column (pandas value_counts).
+## $column is a header name or 0-based index. opts: sheet, header (default 1),
+## ignore_case. Returns { column, total, unique, counts => [{ value, count }] }.
+fn Office::sheet_value_counts ($path, $column, %opts) {
+    Office::_decode("sheet_value_counts",
+        office__sheet_value_counts(to_json({ path => $path, column => $column, sheet => $opts{sheet}, header => $opts{header}, ignore_case => $opts{ignore_case} })))
+}
+
+## Import a CSV file into an .xlsx workbook. opts: input => .csv file or csv =>
+## CSV text (one required), delimiter, numeric (default 1), name => sheet name.
+## $output must end in .xlsx. Returns { ok, path, rows, cols }.
+fn Office::csv_to_xlsx ($output, %opts) {
+    Office::_decode("csv_to_xlsx",
+        office__csv_to_xlsx(to_json({ output => $output, input => $opts{input}, csv => $opts{csv}, delimiter => $opts{delimiter}, numeric => $opts{numeric}, name => $opts{name} })))
+}
+
+## Export a spreadsheet to a .csv file. opts: sheet => name/index (default
+## first), delimiter. $output must end in .csv. Returns { ok, rows, csv, path }.
+fn Office::xlsx_to_csv ($path, $output, %opts) {
+    Office::_decode("xlsx_to_csv",
+        office__xlsx_to_csv(to_json({ path => $path, output => $output, sheet => $opts{sheet}, delimiter => $opts{delimiter} })))
+}
+
 ## Compare two sheets cell by cell. opts: sheet => selector for both, left_sheet
 ## / right_sheet => per-side override. Returns { count, changed => [{ ref, row,
 ## col, left, right }], left_rows, right_rows } for cells that differ.
@@ -1439,6 +1498,25 @@ fn Office::doc_read ($path) {
     @{ $o->{paragraphs} }
 }
 
+## Non-empty, trimmed paragraphs of a document, each with its index. Returns
+## { count, paragraphs => [{ index, text }] } (doc_read keeps blank paragraphs).
+fn Office::doc_paragraphs ($path) {
+    Office::_decode("doc_paragraphs", office__doc_paragraphs(to_json({ path => $path })))
+}
+
+## Lines of a document's full extracted text, each with its index. Works on
+## every readable format incl. pdf. Returns { count, lines => [{ index, text }] }.
+fn Office::doc_lines ($path) {
+    Office::_decode("doc_lines", office__doc_lines(to_json({ path => $path })))
+}
+
+## Extract a document's table into a .csv file. opts: index (0-based, default 0),
+## name, delimiter. $output must end in .csv. Returns { ok, path, rows }.
+fn Office::doc_to_csv ($path, $output, %opts) {
+    Office::_decode("doc_to_csv",
+        office__doc_to_csv(to_json({ path => $path, output => $output, index => $opts{index}, name => $opts{name}, delimiter => $opts{delimiter} })))
+}
+
 ## Extract every table from a docx/odt as row-major string grids. Returns
 ## { tables => [{ rows => [[cell, ...], ...] }, ...], count }. The read-side
 ## mirror of doc_write's "table" block.
@@ -1787,6 +1865,24 @@ fn Office::doc_write ($path, $blocks, %opts) {
 ## notes => [...] } per slide — `notes` holds the speaker notes.
 fn Office::slides_read ($path) {
     Office::_decode("slides_read", office__slides_read(to_json({ path => $path })))->{slides}
+}
+
+## Number of slides in a presentation (pptx/odp). Returns { count }.
+fn Office::slides_count ($path) {
+    Office::_decode("slides_count", office__slides_count(to_json({ path => $path })))->{count}
+}
+
+## Title of each slide (its first non-empty text line, or ""). Returns an
+## arrayref of title strings.
+fn Office::slides_names ($path) {
+    Office::_decode("slides_names", office__slides_names(to_json({ path => $path })))->{names}
+}
+
+## All slide text concatenated (one line per run, a blank line between slides).
+## opts: output => write to file. Returns { slides, chars, text, path? }.
+fn Office::slides_text_all ($path, %opts) {
+    Office::_decode("slides_text_all",
+        office__slides_text_all(to_json({ path => $path, output => $opts{output} })))
 }
 
 ## Write a presentation. $slides is an arrayref of
@@ -2267,6 +2363,14 @@ fn Office::meta_read ($path) {
 fn Office::meta_write ($path, $props, %opts) {
     Office::_decode("meta_write",
         office__meta_write(to_json({ path => $path, props => $props, output => $opts{output} })))
+}
+
+## Strip all known document metadata (blank every core/app/Info property).
+## opts: output (default in place). Works for OOXML, ODF, and PDF. Returns
+## { ok, path, cleared } where cleared lists the keys blanked.
+fn Office::meta_strip ($path, %opts) {
+    Office::_decode("meta_strip",
+        office__meta_strip(to_json({ path => $path, output => $opts{output} })))
 }
 
 ## Extract embedded raster media from an office container (xlsx/docx/pptx,

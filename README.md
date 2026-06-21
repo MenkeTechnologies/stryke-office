@@ -270,10 +270,21 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::sheet_reorder($path, $order, %opts)` | `{sheets}` | reorder/subset workbook sheets by an `order` list |
 | `Office::info($path)` | `{type, format, …}` | universal inspector: identify any office/image file + type summary |
 | `Office::sheet_info($path)` | `{count, sheets:[{name,rows,cols}]}` | workbook overview: sheet names + dimensions |
+| `Office::sheet_names($path)` | arrayref of name strings | flat list of every sheet name, in workbook order |
+| `Office::sheet_dims($path, %opts)` | `{name, rows, cols}` | dimensions of one sheet (cols = widest row); `sheet` opt |
+| `Office::sheet_fillna($path, %opts)` | `{ok, path, filled}` | replace empty/null cells with a fill value; `value`/`output`/`sheet` opts |
+| `Office::sheet_clean($path, %opts)` | `{ok, path, trimmed}` | trim whitespace from every string cell; `output`/`sheet` opts |
+| `Office::sheet_concat($paths, $output, %opts)` | `{ok, path, files, rows}` | vertically stack several sheet files (drops repeat headers); `header`/`sheet`/`name` opts |
+| `Office::sheet_value_counts($path, $column, %opts)` | `{column, total, unique, counts:[{value,count}]}` | frequency of each distinct value in one column (pandas `value_counts`); `header`/`ignore_case` opts |
+| `Office::csv_to_xlsx($output, %opts)` | `{ok, path, rows, cols}` | import CSV text/file into an `.xlsx` workbook; `input`/`csv`/`delimiter`/`numeric`/`name` opts |
+| `Office::xlsx_to_csv($path, $output, %opts)` | `{ok, rows, csv, path}` | export a spreadsheet to a `.csv` file; `sheet`/`delimiter` opts |
 | `Office::sheet_diff($left, $right, %opts)` | `{count, changed:[{ref,row,col,left,right}], left_rows, right_rows}` | cell-by-cell diff of two sheets |
 | `Office::sheet_to_slides($path, $output, %opts)` | `{slides}` | one slide per row; `title_field` titles each, other fields → body lines |
 | `Office::sheet_validate($path, $rules, %opts)` | `{valid, count, violations:[{ref,column,rule,value}]}` | per-column rules: type/min/max/allowed/nonempty |
 | `Office::doc_read($path)` | list of paragraph strings | docx/odt |
+| `Office::doc_paragraphs($path)` | `{count, paragraphs:[{index,text}]}` | non-empty, trimmed paragraphs with index (docx/odt) |
+| `Office::doc_lines($path)` | `{count, lines:[{index,text}]}` | lines of the full extracted text, with index (any readable format incl. pdf) |
+| `Office::doc_to_csv($path, $output, %opts)` | `{ok, path, rows}` | extract a document table into a `.csv` file; `index`/`name`/`delimiter` opts |
 | `Office::doc_tables($path)` | `{tables:[{rows:[[cell,…]]}], count}` | extract every table as a string grid (docx/odt) |
 | `Office::doc_table_to_sheet($path, $output, %opts)` | `{ok, path, rows, cols}` | extract one doc table into a spreadsheet file (xlsx/ods/csv); `index`/`name` opts |
 | `Office::doc_to_sheet($path, $output, %opts)` | `{ok, path, rows}` | extract a document into a spreadsheet (one row per block: level, text) |
@@ -388,6 +399,9 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 | `Office::slides_find($path, $query, %opts)` | `{count, matches:[{slide,where,value}]}` | search slide text + speaker notes (pptx/odp) |
 | `Office::doc_write($path, $blocks, %opts)` | hashref | block: `{kind => "para"\|"heading", level, text}`; opts `header`/`footer`/`page_numbers`/`page_size` |
 | `Office::slides_read($path)` | arrayref of `{text => [...], notes => [...]}` | pptx/odp; `notes` = speaker notes |
+| `Office::slides_count($path)` | integer | number of slides (pptx/odp) |
+| `Office::slides_names($path)` | arrayref of title strings | first non-empty text line of each slide (pptx/odp) |
+| `Office::slides_text_all($path, %opts)` | `{slides, chars, text, path?}` | all slide text concatenated (blank line between slides); `output` opt |
 | `Office::slides_write($path, $slides, %opts)` | hashref | slide: `{title, body => [...]}` |
 | `Office::slides_add_image($path, $image, %opts)` | `{ok, path, slide, image}` | embed a picture onto a pptx slide; `slide`/`x`/`y`/`width`/`height` (px) opts |
 | `Office::slides_add_text($path, $text, %opts)` | `{ok, path, slide}` | add a text box to a pptx slide; `slide`/`x`/`y`/`width`/`height`/`size` opts |
@@ -617,6 +631,17 @@ Canonical keys: `title`, `author`, `subject`, `keywords`, `description`,
 `category`, `last_modified_by`, `app`, `producer`, `company`, `created`,
 `modified`. Each maps onto the right element/dict-key per format; keys a format
 doesn't support are ignored.
+
+`meta_strip` blanks every canonical property in one call — useful before sharing
+a file. It writes empty values for all keys (the rest of the file is left
+intact) and returns `{ ok, path, cleared }`.
+
+```perl
+# remove all author/title/etc. metadata, edit in place
+Office::meta_strip("report.xlsx");
+# or write the scrubbed copy elsewhere
+Office::meta_strip("in.pdf", output => "clean.pdf");
+```
 
 ### Embedded media extraction (document → image handles)
 
