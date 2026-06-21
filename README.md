@@ -713,8 +713,8 @@ then render its data as many charts in any format:
 ```stryke
 val $sheets = Office::sheet_read("sales.xlsx")
 val @rows   = @{ $sheets->[0]{rows} }
-val @cats   = map { $_->[0] } @rows[1:$#rows]
-val @sales  = map { $_->[1] } @rows[1:$#rows]
+val @cats   = map { _->[0] } @rows[1:$#rows]
+val @sales  = map { _->[1] } @rows[1:$#rows]
 
 for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
     val ($type, $fmt) = @$spec
@@ -802,7 +802,8 @@ Office::chart_save("pie",  "out.png", series => $s)                       # rast
 Office::chart_save("sankey", "flow.svg",
     nodes => [{name=>"A"},{name=>"B"},{name=>"X"}],
     links => [{source=>0,target=>2,value=>5},{source=>1,target=>2,value=>3}])
-``` Rendered natively with `imageproc` + the vendored font — no plotters,
+```
+Rendered natively with `imageproc` + the vendored font — no plotters,
 no system fonts, no external binaries. (The stryke core also has `*_svg` chart
 builtins for quick inline SVG; this renders raster charts you can save/embed
 in any format.)
