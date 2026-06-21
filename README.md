@@ -460,7 +460,7 @@ operate on pixel data; this package adds the file I/O and manipulation surface.
 
 ```perl
 # inspect a form, then fill it
-my $f = Office::pdf_form_fields("application.pdf");   # name/type/value per field
+val $f = Office::pdf_form_fields("application.pdf");   # name/type/value per field
 Office::pdf_fill_form("application.pdf", {
     "applicant_name" => "Jane Doe",
     "date"           => "2026-06-13",
@@ -506,7 +506,7 @@ Office::pdf_set_outline("report.pdf", [
         { title => "Q2", page => 4 },
     ]},
 ]);
-my $toc = Office::pdf_outline("report.pdf");   # nested { title, page, children }
+val $toc = Office::pdf_outline("report.pdf");   # nested { title, page, children }
 ```
 
 Page numbers are 1-based and resolved to page destinations; nodes nest via
@@ -610,7 +610,7 @@ containers, in-place Info-dict edit for PDF). Works on **xlsx/docx/pptx**,
 
 ```perl
 # read whatever the file carries
-my $m = Office::meta_read("report.xlsx");
+val $m = Office::meta_read("report.xlsx");
 # $m->{title}, $m->{author}, $m->{company}, $m->{created}, ...
 
 # set some keys, edit in place; existing properties are merged, not clobbered
@@ -654,8 +654,8 @@ lifted verbatim; raw device-RGB/Gray bitmaps are reconstructed.
 ```perl
 # pull every picture out of a deck, write the originals to ./out, and make
 # a 128px thumbnail of each
-my $r = Office::extract_images("deck.pptx", dir => "out");
-for my $im (@{ $r->{images} }) {
+val $r = Office::extract_images("deck.pptx", dir => "out");
+for val $im (@{ $r->{images} }) {
     Office::img_thumbnail($im->{handle}, 128);
     Office::img_save($im->{handle}, "out/thumb-$im->{name}");
 }
@@ -683,7 +683,7 @@ Office::replace_text("invoice.docx", {
 });
 
 # or render to a new file
-my $r = Office::replace_text("deck.pptx", { "{{quarter}}" => "Q2" },
+val $r = Office::replace_text("deck.pptx", { "{{quarter}}" => "Q2" },
     output => "deck-q2.pptx");
 # $r->{replaced} == number of substitutions made
 ```
@@ -713,8 +713,8 @@ then render its data as many charts in any format:
 ```stryke
 val $sheets = Office::sheet_read("sales.xlsx")
 val @rows   = @{ $sheets->[0]{rows} }
-val @cats   = map { $_->[0] } @rows[1..$#rows]
-val @sales  = map { $_->[1] } @rows[1..$#rows]
+val @cats   = map { $_->[0] } @rows[1:$#rows]
+val @sales  = map { $_->[1] } @rows[1:$#rows]
 
 for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
     val ($type, $fmt) = @$spec
@@ -934,11 +934,11 @@ Supported `symbology` values: `code128`, `code39`, `code93`, `code11`,
 
 ```perl
 # QR for a URL, saved as PNG
-my $qr = Office::barcode_qr(data => "https://example.com", ec => "H", scale => 8);
+val $qr = Office::barcode_qr(data => "https://example.com", ec => "H", scale => 8);
 Office::img_save($qr->{handle}, path => "qr.png");
 
 # Code128 label embedded straight into a PDF
-my $bc = Office::barcode_1d(symbology => "code128", data => "SKU-00421", height => 90);
+val $bc = Office::barcode_1d(symbology => "code128", data => "SKU-00421", height => 90);
 Office::pdf_build(path => "label.pdf", pages => [{ elements => [
   { image => $bc->{handle}, x => 40, y => 60 },
 ] }]);
