@@ -151,29 +151,242 @@ Office::pdf_write("out.pdf", ["Line one", "Line two"])</pre>
         <h2>Format matrix</h2>
         <table class="example-tbl">
           <tbody>
-            <tr><td>Spreadsheet</td><td>read xlsx / ods / xls / csv &middot; write <code>xlsx</code>, <code>ods</code></td></tr>
-            <tr><td>Document</td><td>read + write <code>docx</code>, <code>odt</code></td></tr>
+            <tr><td>Spreadsheet</td><td>read xlsx / ods / xls / csv / tsv &middot; write <code>xlsx</code>, <code>ods</code>, <code>csv</code>, <code>tsv</code>, <code>html</code>, <code>md</code></td></tr>
+            <tr><td>Document</td><td>read docx / odt / html / md / rtf / txt &middot; write <code>docx</code>, <code>odt</code>, <code>html</code>, <code>md</code>, <code>rtf</code>, <code>txt</code>, <code>pdf</code></td></tr>
             <tr><td>Presentation</td><td>read + write <code>pptx</code>, <code>odp</code></td></tr>
-            <tr><td>PDF</td><td>read text + pages &middot; write text (A4)</td></tr>
-            <tr><td>Image</td><td>read + write png/jpeg/gif/bmp/webp/tiff &middot; resize/crop/rotate/convert/paste &middot; draw rect/line/circle/text (PIL-style)</td></tr>
+            <tr><td>PDF</td><td>read text + pages &middot; write text (A4) &middot; merge/split/rotate/encrypt/forms/outline</td></tr>
+            <tr><td>Image</td><td>read + write png/jpeg/gif/bmp/webp/tiff/avif/ico/tga/qoi/pnm/dds/hdr/exr/ff &middot; resize/crop/rotate/convert/paste &middot; draw rect/line/circle/text &middot; filters / color science / distortions (PIL-complete)</td></tr>
           </tbody>
         </table>
-        <p>Output format comes from the path extension; override with <code>format =&gt; "..."</code>.</p>
+        <p>Output format comes from the path extension; override with <code>format =&gt; "..."</code>. Every raster codec the <code>image</code> crate ships is enabled, so read and write cover the full image list above.</p>
       </section>
 
       <section class="tutorial-section">
-        <h2>API</h2>
+        <h2>Surface at a glance</h2>
+        <p>The <code>Office</code> namespace exposes <strong>465 public functions</strong> across these families. The full reference for each is in the tables below.</p>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>sheet_* &mdash; 175</td><td>read/write + dataframe analytics (group-by, pivot, join, stats, time-series, finance, sampling, export)</td></tr>
+            <tr><td>img_* &mdash; 111</td><td>PIL-complete handle-based image surface</td></tr>
+            <tr><td>pdf_* &mdash; 47</td><td>build/merge/split/encrypt/forms/outline/annotations/attachments</td></tr>
+            <tr><td>doc_* &mdash; 30</td><td>read/write, structure, stats, summary, diff, convert</td></tr>
+            <tr><td>slides_* &mdash; 26</td><td>read/write, reorder, merge, stats, convert</td></tr>
+            <tr><td>text_* &mdash; 20</td><td>plain-text toolkit (grep/sort/uniq/sed/cut/&hellip;)</td></tr>
+            <tr><td>range/a1/r1c1 &mdash; 20</td><td>A1 / R1C1 / range math (no workbook opened)</td></tr>
+            <tr><td>chart_* &mdash; 5</td><td>60+ chart types, raster + SVG + PDF</td></tr>
+            <tr><td>barcode_* &mdash; 4</td><td>QR + 1D &rarr; image handle</td></tr>
+            <tr><td>converters &amp; misc &mdash; ~27</td><td>csv/md/html/xml/json/ndjson &harr; sheets, metadata, color, media extraction, mail-merge</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Core I/O</h2>
         <table class="example-tbl">
           <tbody>
             <tr><td>Office::version()</td><td>package version string</td></tr>
-            <tr><td>Office::sheet_read($path)</td><td>arrayref of { name, rows } — numbers stay numeric</td></tr>
-            <tr><td>Office::sheet_write($path, $sheets, %opts)</td><td>$sheets: [{ name, rows =&gt; [[...]] }]</td></tr>
+            <tr><td>Office::info($path)</td><td>universal inspector — identify any office/image file + type summary</td></tr>
+            <tr><td>Office::sheet_read($path, %opts)</td><td>arrayref of { name, rows } — numbers stay numeric, empty cells undef; <code>formulas =&gt; 1</code> attaches formula strings; <code>delimiter</code> for csv/tsv</td></tr>
+            <tr><td>Office::sheet_write($path, $sheets, %opts)</td><td>$sheets: [{ name, rows =&gt; [[...]] }]; writes xlsx/ods/csv/tsv + html/md tables; <code>format</code> / <code>defined_names</code> / <code>properties</code> opts</td></tr>
             <tr><td>Office::doc_read($path)</td><td>list of paragraph strings (docx/odt)</td></tr>
-            <tr><td>Office::doc_write($path, $blocks, %opts)</td><td>block: { kind, level, text }</td></tr>
-            <tr><td>Office::slides_read($path)</td><td>arrayref of { text =&gt; [...] } (pptx/odp)</td></tr>
+            <tr><td>Office::doc_write($path, $blocks, %opts)</td><td>block: { kind =&gt; "para"|"heading"|"list"|"link"|"table"|"image"|"pagebreak", &hellip; }; <code>header</code>/<code>footer</code>/<code>page_numbers</code>/<code>page_size</code></td></tr>
+            <tr><td>Office::slides_read($path)</td><td>arrayref of { text =&gt; [...], notes =&gt; [...] } (pptx/odp)</td></tr>
             <tr><td>Office::slides_write($path, $slides, %opts)</td><td>slide: { title, body =&gt; [...] }</td></tr>
             <tr><td>Office::pdf_read($path)</td><td>{ pages =&gt; [...], text }</td></tr>
-            <tr><td>Office::pdf_write($path, $lines)</td><td>$lines: arrayref of strings</td></tr>
+            <tr><td>Office::pdf_write($path, $lines)</td><td>$lines: arrayref of strings (A4)</td></tr>
+            <tr><td>Office::pdf_build($path, $elements, %opts)</td><td>multi-page: heading/paragraph/text/image/rect/line/table/pagebreak; <code>page_size</code>/<code>margin</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Spreadsheet analytics (sheet_*)</h2>
+        <p>175 functions turn a spreadsheet path into a dataframe-style toolkit. Each opens the file, applies the operation, and (when an <code>$output</code> is given) writes the result; the target format is taken from the output extension. A few representative groups:</p>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>Inspect</td><td><code>sheet_info</code>, <code>sheet_names</code>, <code>sheet_dims</code>, <code>sheet_stats</code>, <code>sheet_describe</code>, <code>sheet_profile</code>, <code>sheet_dtypes</code>, <code>sheet_count</code>, <code>sheet_nunique</code>, <code>sheet_mode</code>, <code>sheet_duplicates</code></td></tr>
+            <tr><td>Stats</td><td><code>sheet_quantile</code>, <code>sheet_corr</code>, <code>sheet_cov</code>, <code>sheet_regress</code>, <code>sheet_forecast</code>, <code>sheet_ttest</code>, <code>sheet_anova</code>, <code>sheet_chisq</code>, <code>sheet_moments</code>, <code>sheet_means</code>, <code>sheet_mad</code>, <code>sheet_entropy</code>, <code>sheet_gini</code>, <code>sheet_histogram</code>, <code>sheet_outliers</code></td></tr>
+            <tr><td>Finance</td><td><code>sheet_npv</code>, <code>sheet_irr</code>, <code>sheet_cagr</code>, <code>sheet_drawdown</code>, <code>sheet_amortize</code>, <code>sheet_returns</code>, <code>sheet_bollinger</code>, <code>sheet_sumproduct</code>, <code>sheet_autocorr</code></td></tr>
+            <tr><td>Reshape</td><td><code>sheet_pivot</code>, <code>sheet_unpivot</code>, <code>sheet_join</code>, <code>sheet_union</code>, <code>sheet_merge</code>, <code>sheet_hstack</code>, <code>sheet_cross</code>, <code>sheet_transpose</code>, <code>sheet_explode</code>, <code>sheet_split_column</code>, <code>sheet_concat_columns</code>, <code>sheet_aggregate</code>, <code>sheet_group_concat</code></td></tr>
+            <tr><td>Filter / select</td><td><code>sheet_filter</code>, <code>sheet_where</code>, <code>sheet_grep</code>, <code>sheet_select</code>, <code>sheet_drop</code>, <code>sheet_sort</code>, <code>sheet_multisort</code>, <code>sheet_top</code>, <code>sheet_head</code>, <code>sheet_dedupe</code>, <code>sheet_sample</code>, <code>sheet_train_test_split</code></td></tr>
+            <tr><td>Clean / transform</td><td><code>sheet_cast</code>, <code>sheet_clean</code>, <code>sheet_strip</code>, <code>sheet_fillna</code>, <code>sheet_impute</code>, <code>sheet_interpolate</code>, <code>sheet_dropna</code>, <code>sheet_recode</code>, <code>sheet_map</code>, <code>sheet_normalize</code>, <code>sheet_standardize</code>, <code>sheet_clamp</code>, <code>sheet_winsorize</code>, <code>sheet_round</code></td></tr>
+            <tr><td>Time-series</td><td><code>sheet_movavg</code>, <code>sheet_rolling</code>, <code>sheet_ewm</code>, <code>sheet_cumsum</code>, <code>sheet_pct_change</code>, <code>sheet_delta</code>, <code>sheet_shift</code>, <code>sheet_resample</code>, <code>sheet_date_part</code>, <code>sheet_date_diff</code>, <code>sheet_date_add</code>, <code>sheet_networkdays</code>, <code>sheet_weekday</code></td></tr>
+            <tr><td>Cells / structure</td><td><code>sheet_get_cell</code>, <code>sheet_set_cell</code>, <code>sheet_get_range</code>, <code>sheet_set_range</code>, <code>sheet_insert_rows</code>, <code>sheet_delete_rows</code>, <code>sheet_freeze</code>, <code>sheet_autofilter</code>, <code>sheet_merge_cells</code>, <code>sheet_autosize</code>, <code>sheet_protect</code>, <code>sheet_add</code>, <code>sheet_copy</code>, <code>sheet_remove</code>, <code>sheet_reorder</code></td></tr>
+            <tr><td>Excel-style</td><td><code>sheet_lookup</code> (VLOOKUP), <code>sheet_countif</code>, <code>sheet_sumif</code>, <code>sheet_sumifs</code>, <code>sheet_rank</code>, <code>sheet_subtotal</code>, <code>sheet_totals</code>, <code>sheet_pct</code>, <code>sheet_calc</code>, <code>sheet_row_stats</code></td></tr>
+            <tr><td>Export</td><td><code>sheet_to_csv</code>, <code>sheet_to_json</code>, <code>sheet_to_ndjson</code>, <code>sheet_to_xml</code>, <code>sheet_to_sql</code>, <code>sheet_to_md</code>, <code>sheet_to_html</code>, <code>sheet_to_latex</code>, <code>sheet_to_text</code>, <code>sheet_to_pdf</code>, <code>sheet_to_doc</code>, <code>sheet_to_slides</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Rich formatting</h2>
+        <p>Spreadsheet cells and document runs accept styling, not just scalars. A cell can be a scalar or a rich object; a docx block can carry styled runs.</p>
+<pre>Office::sheet_write("r.xlsx", [{ name =&gt; "S", rows =&gt; [
+    [{ v =&gt; "Header", bold =&gt; 1, color =&gt; "#FF0000", bg =&gt; "#FFFF00", align =&gt; "center" }],
+    [{ v =&gt; 42, num_format =&gt; "0.00", italic =&gt; 1 }],
+    [{ f =&gt; "=A2*2" }],                       # formula cell
+] }])
+# cell keys: v|value, f|formula, bold, italic, underline, font, size,
+#            color, bg, align (left/center/right), num_format, border
+
+Office::doc_write("r.docx", [
+    { kind =&gt; "para", align =&gt; "center", runs =&gt; [
+        { text =&gt; "Bold ", bold =&gt; 1, color =&gt; "#0000FF", size =&gt; 18 },
+        { text =&gt; "and italic", italic =&gt; 1 },
+    ] },
+])</pre>
+        <p>Sheet-level structure (xlsx) also supports merges, frozen panes, autofilter, worksheet tables, conditional formatting, data-validation dropdowns, sparklines, notes, embedded images, outline grouping, page setup, defined names, and workbook properties. ODF (ods/odt) and PDF are written unstyled — the <code>lo_odf</code>/<code>lo_core</code> serializers do not expose per-run styling (a documented crate limitation, not faked).</p>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Documents (doc_*) &amp; presentations (slides_*)</h2>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>doc_read / doc_paragraphs / doc_lines</td><td>paragraph + line text (docx/odt; lines also pdf)</td></tr>
+            <tr><td>doc_blocks / doc_outline / doc_tables / doc_links</td><td>ordered structural read, heading outline, table grids, hyperlinks</td></tr>
+            <tr><td>doc_stats / doc_wordfreq / doc_readability</td><td>Word-style counts, word-frequency ranking, Flesch / Flesch&ndash;Kincaid</td></tr>
+            <tr><td>doc_sentences / doc_summary / doc_extract / doc_diff</td><td>sentence split, extractive summary, regex extraction, LCS paragraph diff</td></tr>
+            <tr><td>doc_comments / doc_footnotes / doc_add_toc</td><td>review comments, footnotes/endnotes, generated Table of Contents</td></tr>
+            <tr><td>doc_merge / doc_append / doc_split</td><td>concatenate, append blocks, split at headings</td></tr>
+            <tr><td>doc_to_md / _html / _text / _pdf / _csv / _sheet / _slides</td><td>convert a docx/odt out to any of these (and md/html/pdf back in via <code>md_to_doc</code> / <code>html_to_doc</code>)</td></tr>
+            <tr><td>slides_read / slides_count / slides_names / slides_outline</td><td>read text + notes, count, titles, outline</td></tr>
+            <tr><td>slides_add_image / slides_add_text / slides_set_notes</td><td>embed a picture / text box / speaker notes onto a pptx slide</td></tr>
+            <tr><td>slides_insert / _delete / _reorder / _reverse / _merge / _append</td><td>edit a deck in place</td></tr>
+            <tr><td>slides_to_doc / _pdf / _md / _html / _text / _sheet</td><td>convert a deck out; <code>md_to_slides</code> builds one from a Markdown outline</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>PDF (pdf_*)</h2>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>pdf_build / pdf_blank / images_to_pdf / sheet_to_pdf</td><td>generate from a content model, blank pages, image-per-page, bordered table</td></tr>
+            <tr><td>pdf_merge / _split / _extract / _delete / _reorder / _reverse</td><td>page-level surgery (1-based; <code>pdf_extract</code> takes <code>"1-3,5,8-10"</code> range specs)</td></tr>
+            <tr><td>pdf_burst / _chunk / _split_ranges / _split_bookmarks</td><td>split into many files (per page, fixed chunks, ranges, chapter bookmarks)</td></tr>
+            <tr><td>pdf_rotate / _crop / _compress / _remove_blank</td><td>rotate 90° multiples, set crop box, prune+deflate, drop empty pages</td></tr>
+            <tr><td>pdf_encrypt / _decrypt</td><td>AES-128 or RC4 standard security handler with per-op permission grants</td></tr>
+            <tr><td>pdf_form_fields / _fill_form</td><td>list + fill AcroForm fields (checkbox takes a bool; sets <code>/NeedAppearances</code>)</td></tr>
+            <tr><td>pdf_outline / _set_outline</td><td>read + write the bookmark navigation tree (nested via <code>children</code>)</td></tr>
+            <tr><td>pdf_add_link / _links / _highlight / _annotations / _remove_annotations</td><td>URI links, highlights, annotation listing + stripping</td></tr>
+            <tr><td>pdf_attach / _attachments</td><td>embed (EmbeddedFiles name tree) + list/extract attachments</td></tr>
+            <tr><td>pdf_watermark / _stamp_image / _page_numbers / _add_text / _draw_rect / _draw_line</td><td>overlays + stamps on existing pages</td></tr>
+            <tr><td>pdf_info / _page_sizes / _stats / _search</td><td>geometry + metadata, per-page sizes, word/char stats, full-text search</td></tr>
+            <tr><td>pdf_to_doc / _to_slides / _to_sheet / _to_text</td><td>convert a PDF's text out (page breaks preserved)</td></tr>
+          </tbody>
+        </table>
+<pre># inspect a form, then fill it (checkbox takes a bool)
+val $f = Office::pdf_form_fields("application.pdf")
+Office::pdf_fill_form("application.pdf", {
+    "applicant_name" =&gt; "Jane Doe",
+    "agree_terms"    =&gt; \1,
+}, output =&gt; "application-filled.pdf")
+
+# password-protect with AES-128, allow printing only, then strip it back off
+Office::pdf_encrypt("report.pdf", "report-locked.pdf",
+    owner_password =&gt; "admin", user_password =&gt; "view",
+    aes =&gt; \1, permissions =&gt; ["print"])
+Office::pdf_decrypt("report-locked.pdf", "report-open.pdf", password =&gt; "admin")</pre>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Images (img_*) — handle-based, like a PIL Image</h2>
+        <p>Image ops return a numeric <code>handle</code>: open once, transform many times, then <code>img_save</code> / <code>img_close</code>. Geometry-changing ops return a new <code>{handle, width, height, mode}</code>; in-place filters mutate the handle.</p>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>I/O</td><td><code>img_open</code>, <code>img_new</code>, <code>img_save</code>, <code>img_info</code>, <code>img_convert</code>, <code>img_close</code>, <code>img_to_base64</code>, <code>img_from_base64</code>, <code>img_data_uri</code>, <code>img_resize_file</code></td></tr>
+            <tr><td>Geometry</td><td><code>img_resize</code>, <code>img_thumbnail</code>, <code>img_scale</code>, <code>img_fit</code>, <code>img_crop</code>, <code>img_crop_aspect</code>, <code>img_rotate</code>, <code>img_flip</code>, <code>img_transpose</code>, <code>img_transverse</code>, <code>img_canvas</code>, <code>img_trim</code>, <code>img_warp</code></td></tr>
+            <tr><td>Compose</td><td><code>img_paste</code>, <code>img_blend</code>, <code>img_blend_mode</code>, <code>img_composite</code>, <code>img_montage</code>, <code>img_concat</code>, <code>img_border</code>, <code>img_watermark</code>, <code>img_drop_shadow</code>, <code>img_caption</code></td></tr>
+            <tr><td>Draw</td><td><code>img_draw_rect</code>, <code>img_draw_rounded_rect</code>, <code>img_draw_line</code>, <code>img_draw_circle</code>, <code>img_draw_ellipse</code>, <code>img_draw_arc</code>, <code>img_draw_polygon</code>, <code>img_draw_polyline</code>, <code>img_draw_text</code>, <code>img_draw_text_multiline</code>, <code>img_flood_fill</code></td></tr>
+            <tr><td>Filters</td><td><code>img_blur</code>, <code>img_box_blur</code>, <code>img_median</code>, <code>img_sharpen</code>, <code>img_edges</code>, <code>img_emboss</code>, <code>img_convolve</code>, <code>img_brighten</code>, <code>img_contrast</code>, <code>img_gamma</code>, <code>img_invert</code>, <code>img_grayscale</code>, <code>img_sepia</code>, <code>img_tint</code>, <code>img_posterize</code>, <code>img_threshold</code>, <code>img_solarize</code>, <code>img_autocontrast</code>, <code>img_equalize</code>, <code>img_pixelate</code>, <code>img_vignette</code>, <code>img_noise</code>, <code>img_dilate</code>, <code>img_erode</code></td></tr>
+            <tr><td>Color science</td><td><code>img_levels</code>, <code>img_curves</code>, <code>img_hsl</code>, <code>img_huerotate</code>, <code>img_temperature</code>, <code>img_channel_mixer</code>, <code>img_point</code>, <code>img_colorize</code>, <code>img_gradient</code>, <code>img_replace_color</code>, <code>img_swap_channels</code>, <code>img_dither</code>, <code>img_quantize</code></td></tr>
+            <tr><td>Distortions</td><td><code>img_swirl</code>, <code>img_wave</code>, <code>img_fisheye</code>, <code>img_kaleidoscope</code>, <code>img_seam_carve</code></td></tr>
+            <tr><td>Analysis</td><td><code>img_histogram</code>, <code>img_extrema</code>, <code>img_entropy</code>, <code>img_count_colors</code>, <code>img_dominant_colors</code>, <code>img_average_color</code>, <code>img_brightness</code>, <code>img_bbox</code>, <code>img_compare</code>, <code>img_phash</code>, <code>img_get_pixel</code></td></tr>
+            <tr><td>Animation / batch</td><td><code>img_open_frames</code>, <code>img_save_animated</code>, <code>img_spritesheet</code>, <code>img_split</code>, <code>img_merge</code>, <code>img_reduce</code>, <code>img_favicon</code>, <code>contact_sheet</code></td></tr>
+          </tbody>
+        </table>
+<pre>val $im = Office::img_open("photo.jpg")
+Office::img_resize($im-&gt;{handle}, 800, 600, filter =&gt; "lanczos3")
+Office::img_grayscale($im-&gt;{handle})
+Office::img_save($im-&gt;{handle}, "out.png")   # transcode by extension
+Office::img_close($im-&gt;{handle})</pre>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Charting (chart_*)</h2>
+        <p>Render charts natively (<code>imageproc</code> + the vendored font — no plotters, no system fonts). 60+ types render identically in raster <strong>and</strong> SVG.</p>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>Office::chart_render($type, $series, %opts)</td><td>&rarr; raster image handle (then <code>img_save</code> to any format)</td></tr>
+            <tr><td>Office::chart_svg($type, $series, %opts)</td><td>&rarr; vector SVG markup (or write to <code>path =&gt;</code>)</td></tr>
+            <tr><td>Office::chart_save($type, $path, %opts)</td><td>write straight to a file, format by extension: <code>.svg</code>, <code>.pdf</code>, or any raster</td></tr>
+            <tr><td>Office::chart_from_sheet($path, $output, %opts)</td><td>read a spreadsheet's columns and render in one call</td></tr>
+            <tr><td>Office::chart_grid($charts, %opts)</td><td>tile many specs into one dashboard image / pdf</td></tr>
+          </tbody>
+        </table>
+        <p>Types include bar/column/stacked, line/area/step/combo, scatter/bubble, pie/donut, histogram, radar, sankey, waterfall, ohlc/candlestick, boxplot, funnel, gauge, heatmap, treemap, sunburst, calendar, plus a ggplot2-style set (density, violin, ecdf, qq, ribbon, jitter, rug, beeswarm, contour, ridgeline, smooth/loess, bin2d, pairs, dendrogram).</p>
+<pre>for val $spec ([["bar","png"], ["line","jpg"], ["pie","webp"]]) {
+    val ($type, $fmt) = @$spec
+    val $c = Office::chart_render($type, [{ name =&gt; "Sales", data =&gt; \@sales }],
+                                  title =&gt; "Q sales", categories =&gt; \@cats)
+    Office::img_save($c-&gt;{handle}, "out-$type.$fmt")
+    Office::img_close($c-&gt;{handle})
+}</pre>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Barcodes &amp; QR codes (barcode_*)</h2>
+        <p>Both produce an image handle, so the result composes with the entire image surface — save, paste onto a label canvas, or embed in a PDF/docx. Generated natively (<code>qrcode</code> + <code>barcoders</code>).</p>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>barcode_qr(%opts)</td><td>QR; <code>data</code>, <code>ec</code> (L/M/Q/H), <code>scale</code>, <code>quiet</code>, <code>fg</code>/<code>bg</code></td></tr>
+            <tr><td>barcode_1d(%opts)</td><td>1D; <code>symbology</code> code128/39/93/11, codabar, ean13/8, upca, itf, std2of5</td></tr>
+            <tr><td>barcode_save($data, $output, %opts)</td><td>generate straight to an image file</td></tr>
+            <tr><td>barcode_sheet($path, $column, $dir, %opts)</td><td>batch one barcode/QR per column value into a directory</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Metadata, media, templates, text &amp; converters</h2>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>meta_read / meta_write / meta_strip</td><td>read/set/blank document properties losslessly (xlsx/docx/pptx, ods/odt/odp, pdf)</td></tr>
+            <tr><td>extract_images($path, %opts)</td><td>pull every picture out as a live image handle (OOXML/ODF/PDF)</td></tr>
+            <tr><td>replace_text / mail_merge / text_template</td><td>fill <code>{{placeholder}}</code> templates (run-coalescing for OOXML); one document per record</td></tr>
+            <tr><td>text_* (20)</td><td>plain-text toolkit: <code>text_grep</code>, <code>text_sort</code>, <code>text_uniq</code>, <code>text_sed</code>, <code>text_cut</code>, <code>text_wrap</code>, <code>text_tr</code>, <code>text_paste</code>, <code>text_comm</code>, <code>text_join</code>, <code>text_shuf</code>, <code>text_base64</code>, <code>text_hash</code>, <code>text_redact</code>, <code>text_tac</code>, <code>text_head</code>, <code>text_stats</code>, &hellip;</td></tr>
+            <tr><td>csv_to_sheet / csv_to_xlsx / xlsx_to_csv</td><td>CSV &harr; spreadsheet (RFC-4180 quoting)</td></tr>
+            <tr><td>md_to_sheet / html_to_sheet / json_to_sheet / ndjson_to_sheet / xml_to_sheet</td><td>import structured formats into a sheet</td></tr>
+            <tr><td>color_info / color_contrast</td><td>full color breakdown (hex/rgb/hsl/luminance) + WCAG contrast ratio</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Cell-reference helpers (no workbook)</h2>
+        <p>Pure A1 / R1C1 / range math — no file is opened, so these run standalone.</p>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>parse_a1 / parse_a1_abs / a1_of / a1_abs_of</td><td>A1 &harr; 0-based row/col, with <code>$</code>-absolute support</td></tr>
+            <tr><td>a1_to_r1c1 / r1c1_to_a1</td><td>Excel R1C1 notation (absolute or anchor-relative)</td></tr>
+            <tr><td>offset_a1 / cell_delta</td><td>shift an A1 ref / the offset between two cells</td></tr>
+            <tr><td>col_to_letter / letter_to_col</td><td>column letters &harr; 0-based index</td></tr>
+            <tr><td>parse_range / range_of / expand_range / bounding_range</td><td>range parsing, building, enumeration, bounding box</td></tr>
+            <tr><td>range_intersection / range_union / range_contains / range_offset / range_to_absolute / range_to_relative</td><td>range set-ops and transforms</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Troubleshooting</h2>
+        <table class="example-tbl">
+          <tbody>
+            <tr><td>doc_read drops a table</td><td>By design — <code>doc_read</code> returns paragraph text. Use <code>doc_tables</code> for table grids or <code>doc_blocks</code> for ordered structure.</td></tr>
+            <tr><td>ODF / PDF output is unstyled</td><td>The <code>lo_odf</code> / <code>lo_core</code> serializers do not expose per-run styling. Rich formatting applies to xlsx + docx only.</td></tr>
+            <tr><td>Formulas read but don't evaluate</td><td><code>sheet_read(&hellip;, formulas =&gt; 1)</code> returns formula <em>strings</em>; values are whatever the writing app computed. There is no formula evaluator (Roadmap item).</td></tr>
+            <tr><td>No docx&rarr;pdf "laid out like Word"</td><td>Generic render-conversion needs a layout engine, which the no-external-binary rule excludes. <code>doc_to_pdf</code> renders from the content model, not a Word layout.</td></tr>
+            <tr><td>Leaked image handles</td><td>Every <code>img_open</code> / <code>img_new</code> / geometry op returns a handle into an in-process table; call <code>img_close</code> when done.</td></tr>
+            <tr><td>extract_images skipped a picture</td><td><code>$r-&gt;{skipped}</code> counts recognized-but-undecodable media (e.g. JPEG2000).</td></tr>
           </tbody>
         </table>
       </section>

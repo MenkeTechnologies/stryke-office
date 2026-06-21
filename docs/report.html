@@ -66,24 +66,54 @@
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-val">Office</div><div class="stat-label">use namespace</div></div>
         <div class="stat-card"><div class="stat-val cyan">opt-in</div><div class="stat-label">Tier 2</div></div>
-        <div class="stat-card"><div class="stat-val">7+img</div><div class="stat-label">formats read+write</div></div>
+        <div class="stat-card"><div class="stat-val">465</div><div class="stat-label">public functions</div></div>
+        <div class="stat-card"><div class="stat-val">5+img</div><div class="stat-label">document families</div></div>
         <div class="stat-card"><div class="stat-val green">0</div><div class="stat-label">external binaries</div></div>
+        <div class="stat-card"><div class="stat-val cyan">426</div><div class="stat-label">Rust tests</div></div>
+        <div class="stat-card"><div class="stat-val">21</div><div class="stat-label">doc / readme gates</div></div>
+        <div class="stat-card"><div class="stat-val green">v0.18.0</div><div class="stat-label">release</div></div>
       </div>
 
       <hr class="section-rule">
       <h2 class="tutorial-title"><span class="step-hash">~</span>FORMAT &rarr; CRATE</h2>
+      <p>Every format maps to a vendored, statically-linked Rust crate. There is no <code>soffice</code> / LibreOffice / pandoc / zint / ImageMagick subprocess anywhere in the chain.</p>
       <table class="arch-table">
         <thead><tr><th>Concern</th><th>Implementation</th></tr></thead>
         <tbody>
-          <tr><td>xlsx / xls read</td><td><code>calamine</code> (pure Rust)</td></tr>
-          <tr><td>ods read</td><td>native <code>zip</code> + <code>quick-xml</code> (calamine's ODS parser rejects pretty-printed content.xml)</td></tr>
+          <tr><td>spreadsheet read (xlsx / xls)</td><td><code>calamine</code> (pure Rust)</td></tr>
+          <tr><td>spreadsheet read (ods)</td><td>native <code>zip</code> + <code>quick-xml</code> (calamine's ODS parser rejects pretty-printed content.xml)</td></tr>
           <tr><td>xlsx write</td><td><code>rust_xlsxwriter</code></td></tr>
-          <tr><td>ods / odt / odp write</td><td><code>lo_odf</code> + <code>lo_core</code> (OpenDocument serializers)</td></tr>
+          <tr><td>ods / odt / odp write</td><td><code>lo_odf</code> (OpenDocument serializers)</td></tr>
           <tr><td>docx write</td><td><code>docx-rs</code></td></tr>
-          <tr><td>docx / odt / pptx / odp read</td><td>native <code>zip</code> + <code>quick-xml</code> paragraph extraction</td></tr>
+          <tr><td>docx / odt / pptx / odp read</td><td>native <code>zip</code> + <code>quick-xml</code> paragraph + structure extraction</td></tr>
           <tr><td>pptx write</td><td>native <code>zip</code> + hand-built OOXML part set</td></tr>
           <tr><td>pdf read + write</td><td><code>lo_core</code> (self-contained, no font files)</td></tr>
-          <tr><td>image read + write (png/jpeg/gif/bmp/webp/tiff)</td><td><code>image</code> + <code>imageproc</code> (draw) + <code>ab_glyph</code> + vendored DejaVu Sans (text)</td></tr>
+          <tr><td>pdf merge / split / rotate / info / encrypt / decrypt / compress</td><td><code>lopdf</code> (pure-Rust core, <code>default-features = false</code>)</td></tr>
+          <tr><td>image read + write (all formats)</td><td><code>image</code></td></tr>
+          <tr><td>image drawing (shapes)</td><td><code>imageproc</code></td></tr>
+          <tr><td>image text drawing</td><td><code>ab_glyph</code> + vendored <code>assets/DejaVuSans.ttf</code></td></tr>
+          <tr><td>QR-code generation</td><td><code>qrcode</code> (matrix only)</td></tr>
+          <tr><td>1D barcode generation</td><td><code>barcoders</code> (<code>default-features = false</code>, <code>std</code>)</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="section-rule">
+      <h2 class="tutorial-title"><span class="step-hash">@</span>FUNCTION FAMILIES</h2>
+      <p>The <code>Office</code> namespace exposes 465 public functions. Each maps to a JSON-in/JSON-out export in the cdylib; the stryke wrapper (<code>lib/Office.stk</code>) serializes arguments and decodes responses.</p>
+      <table class="arch-table">
+        <thead><tr><th>Family</th><th>Count</th><th>Surface</th></tr></thead>
+        <tbody>
+          <tr><td>sheet_*</td><td>175</td><td>read/write + a dataframe-style analytics layer (group-by, pivot, join, stats, time-series, finance, sampling, type-coercion, export to csv/json/sql/latex/html)</td></tr>
+          <tr><td>img_*</td><td>111</td><td>PIL-complete handle-based image surface — open/save/convert, resize/crop/rotate, draw, filters, color science, distortions, animation, byte I/O</td></tr>
+          <tr><td>pdf_*</td><td>47</td><td>build/merge/split/rotate, encrypt/decrypt, forms, outline/bookmarks, annotations, attachments, stamps, search, stats</td></tr>
+          <tr><td>doc_*</td><td>30</td><td>read/write, structured blocks, tables, links, stats, readability, summary, diff, convert (md/html/pdf/slides/sheet)</td></tr>
+          <tr><td>slides_*</td><td>26</td><td>read/write, add image/text/notes, reorder, merge, stats, convert (doc/pdf/md/html/sheet)</td></tr>
+          <tr><td>text_*</td><td>20</td><td>plain-text toolkit — grep/sort/uniq/sed/cut/wrap/tr/paste/comm/join/shuf/base64/hash/redact/template</td></tr>
+          <tr><td>range_* / a1_* / r1c1_* / parse_* / *_to_*</td><td>20</td><td>A1 / R1C1 / range math — no workbook opened</td></tr>
+          <tr><td>chart_*</td><td>5</td><td>render/svg/save/from_sheet/grid — 60+ chart types, raster + vector</td></tr>
+          <tr><td>barcode_*</td><td>4</td><td>QR + 1D (code128/39/93/11, codabar, ean13/8, upca, itf, std2of5) &rarr; image handle</td></tr>
+          <tr><td>md_* / html_* / csv_* / *_to_sheet</td><td>~15</td><td>cross-format converters between csv/md/html/xml/json/ndjson and sheets/docs</td></tr>
+          <tr><td>meta_* / color_* / extract_images / mail_merge / info</td><td>~10</td><td>document metadata read/write/strip, color science, media extraction, mail-merge, universal file inspector</td></tr>
         </tbody>
       </table>
 
@@ -92,18 +122,44 @@
       <table class="arch-table">
         <thead><tr><th>Layer</th><th>Detail</th></tr></thead>
         <tbody>
-          <tr><td>stryke library</td><td><code>lib/Office.stk</code> — serializes args to JSON, decodes responses, maps <code>{error}</code> to <code>die</code></td></tr>
-          <tr><td>cdylib</td><td><code>libstryke_office.{dylib,so}</code> — 9 <code>office__*</code> JSON-in/out exports, <code>catch_unwind</code> at the boundary</td></tr>
+          <tr><td>stryke library</td><td><code>lib/Office.stk</code> — 465 <code>Office::*</code> wrappers that serialize args to JSON, decode responses, map <code>{error}</code> to <code>die</code></td></tr>
+          <tr><td>cdylib</td><td><code>libstryke_office.{dylib,so}</code> — 465 <code>office__*</code> JSON-in/out exports, <code>catch_unwind</code> at the boundary, <code>stryke_free_cstring</code> for the return buffer</td></tr>
           <tr><td>dispatch</td><td>format chosen from the path extension (override via <code>format</code>); reader/writer selected per kind</td></tr>
+          <tr><td>image handles</td><td>image ops return a numeric <code>handle</code> into an in-process table — open once, transform many times, then <code>img_save</code> / <code>img_close</code> (PIL-style)</td></tr>
           <tr><td>build</td><td>Cargo cdylib, all deps pure Rust — no cmake, no system libraries, no soffice</td></tr>
-          <tr><td>tests</td><td>11 Rust round-trip + contract tests (write then read back over a temp file) + 9 stryke assertions + 21 docs/readme lint gates</td></tr>
+          <tr><td>tests</td><td>426 Rust round-trip + contract tests (write then read back over a temp file) + a stryke assertion suite in <code>t/</code> + 21 docs/readme lint gates in <code>tests/</code></td></tr>
           <tr><td>CI</td><td><code>.github/workflows/ci.yml</code> — fmt + clippy <code>-D warnings</code> + test on Linux/macOS, doc, release matrix</td></tr>
         </tbody>
       </table>
 
       <hr class="section-rule">
       <h2 class="tutorial-title"><span class="step-hash">/</span>SCOPE &amp; LIMITS</h2>
-      <p>v0.18.0 covers structured read + write for all seven formats plus PDF text generation. The deliberate limit of the no-external-binary rule: there is no generic render-conversion (docx&rarr;pdf laid out like Word, xlsx&rarr;pdf), which fundamentally requires a layout/render engine. Conversions are intra-model (e.g. xlsx&rarr;ods via the shared cell model) and PDF is generated from a content model, not rasterized from a Word document.</p>
+      <p>v0.18.0 covers structured read + write across the office document landscape plus PDF text generation, a dataframe-style spreadsheet analytics layer, a PIL-complete image surface, native chart rendering (raster + SVG), barcodes/QR, and cross-format conversion. The deliberate limit of the no-external-binary rule: there is no generic render-conversion (docx&rarr;pdf laid out like Word, xlsx&rarr;pdf), which fundamentally requires a layout/render engine. Conversions are intra-model (e.g. xlsx&rarr;ods via the shared cell model) and PDF is generated from a content model, not rasterized from a Word document.</p>
+      <p>Two further documented limitations — both crate limits, not faked: ODF (ods/odt) and PDF are written unstyled because the <code>lo_odf</code> / <code>lo_core</code> serializers do not expose per-run styling; and spreadsheet formula <em>strings</em> read back via <code>formulas =&gt; 1</code> but are not <em>evaluated</em> (values are whatever the writing app computed). See the project Roadmap for the in-flight items (PowerPoint speaker-notes write, ODF per-run styling, legacy xls write).</p>
+
+      <hr class="section-rule">
+      <h2 class="tutorial-title"><span class="step-hash">$</span>SOURCE MAP</h2>
+      <table class="arch-table">
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td>src/lib.rs</td><td><code>office__*</code> exports + spreadsheet / doc / slides / pdf handlers</td></tr>
+          <tr><td>src/tests.rs</td><td>426 Rust round-trip + contract tests</td></tr>
+          <tr><td>src/doc_formats.rs</td><td>csv/tsv + html/md/rtf/txt readers + writers</td></tr>
+          <tr><td>src/doc_struct.rs</td><td>structured document reads (tables, blocks, links, stats) + merge/convert</td></tr>
+          <tr><td>src/pptx_write.rs</td><td>minimal OOXML PowerPoint writer</td></tr>
+          <tr><td>src/image_ops.rs</td><td>PIL-complete image I/O + manipulation</td></tr>
+          <tr><td>src/chart_render.rs</td><td>raster chart renderer (all chart types)</td></tr>
+          <tr><td>src/chart_svg.rs</td><td>vector (SVG / PDF) chart renderer</td></tr>
+          <tr><td>src/barcode.rs</td><td>QR + 1D barcode generation</td></tr>
+          <tr><td>src/meta_ops.rs</td><td>document metadata read / write (OOXML / ODF / PDF)</td></tr>
+          <tr><td>src/extract.rs</td><td>embedded media extraction (&rarr; image handles)</td></tr>
+          <tr><td>src/textops.rs</td><td>template text search/replace (run-coalescing)</td></tr>
+          <tr><td>src/pdf_build.rs</td><td>multi-element paginated PDF document builder</td></tr>
+          <tr><td>src/pdf_ops.rs</td><td>PDF merge/split/rotate/info/encrypt/decrypt/compress (lopdf)</td></tr>
+          <tr><td>src/pdf_attach.rs / pdf_form.rs / pdf_outline.rs</td><td>PDF attachments, AcroForm fill, outline/bookmarks (lopdf)</td></tr>
+          <tr><td>lib/Office.stk</td><td>stryke wrapper (<code>use Office</code>) — 465 functions</td></tr>
+        </tbody>
+      </table>
 
       <hr class="section-rule">
       <h2 class="tutorial-title"><span class="step-hash">#</span>PROJECT METADATA</h2>
